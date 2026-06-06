@@ -233,3 +233,42 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-fstab -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (auto-trust): fstab-watchdog DOES auto-refresh baseline on suspicious-mount detection — sister-pattern with access-conf family" {
+    # CONTRAST with no-auto-trust family. fstab changes ARE common
+    # operator action (adding/removing storage). The watchdog flags
+    # the delta for THIS run; the baseline catches up on the next.
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/tmp/disk.img /mnt ext4 loop 0 0\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    cap | grep -q '"severity":"alert"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline refreshed
+    cap | grep -q '"event":"fstab_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (bind-mount shadowing /sbin → alert; full set of sensitive paths)" {
+    # Beyond /etc + /bin + /root/.ssh, /sbin shadow-mount is also a
+    # privilege-escalation vector (replaces login/sudo binaries).
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/data/fakesbin /sbin none bind 0 0\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented suspicious mount NOT flagged: # prefix filtered)" {
+    # /etc/fstab uses # for comments. Operator notes about hypothetical
+    # bad mounts must NOT trigger alert.
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%s# /tmp/disk.img /mnt ext4 loop 0 0\n' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    ! cap | grep -q '"event":"fstab_suspicious_mount"'
+    ! cap | grep -q '"severity":"alert"'
+}
