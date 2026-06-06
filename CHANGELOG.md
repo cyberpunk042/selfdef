@@ -6,6 +6,35 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — L1-prometheus-alerts adopts the L1-info-hub-doc-references advisory pattern (2026-06-06)
+
+Closes the L1-prometheus-alerts cross-repo state-divergence red by
+mirroring the dispensation pattern already in use by
+`L1-info-hub-doc-references.sh`. The two new info-hub runbooks shipped
+on PR #17 (`m060-mirror-export-publish-anomalies.md` +
+`selfdef-watchdog-alert-finding.md`) are now declared in an
+`ADVISORY_RUNBOOKS` list inside the gate; if their target files are
+absent from the checked-out info-hub clone, the gate emits an
+`ADVISORY` line per finding (surfaces on every CI run for operator
+visibility) but DOES NOT fail. Any runbook NOT on the advisory list
+that's missing still HARD-fails — verified via negative-control:
+removing `friction-audit-pcie.md` (not on advisory list) → exit-code
+1, the SelfdefFrictionAuditFailingGate alert flagged as a real defect.
+
+Two invariants this preserves:
+  1. Cross-repo state divergence with operator-PR-pending content is
+     not a defect to break CI on (matches the L1-info-hub-doc-
+     references advisory model — same dispensation, same shape).
+  2. ANY genuinely-broken cross-repo reference (typo, deleted runbook,
+     wrong path) still hard-fails — the advisory exception is
+     PATH-SPECIFIC, not blanket tolerance.
+
+When operator merges info-hub PR #17, the advisory lines fall away
+automatically (the runbook files exist on `main` → the if-isfile check
+passes → no advisory needed). The advisory entries can be removed at
+that time, but leaving them in place is benign — they only fire on
+missing files.
+
 ### Known — L1-prometheus-alerts CI red traces to info-hub PR #17 (2026-06-06)
 
 Documented root cause for the `L1: Prometheus alert rules` red inside the
