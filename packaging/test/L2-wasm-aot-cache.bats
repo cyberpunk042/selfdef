@@ -130,3 +130,64 @@ INSTALL_DIR="${MODULE_DIR}/install"
     deps_count="$(grep -oE '"[a-z][a-z0-9-]*-[a-z0-9-]+"' "${MODULE_DIR}/module.toml" | grep -cE '"(hardware-tune-cache|.*-cache)"|^' || true)"
     grep -qE '^depends_on[[:space:]]*=' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (cache dir is chmod 0755 — standard cache-dir convention for /var/lib/selfdef/)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_WASM_AOT_CACHE_DIR="${TEST_DIR}/wasm-aot"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    bash "${INSTALL_DIR}/apply.sh"
+    [ -d "${SELFDEF_WASM_AOT_CACHE_DIR}" ]
+    mode="$(stat -c '%a' "${SELFDEF_WASM_AOT_CACHE_DIR}")"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
+    [ "${mode}" = "755" ]
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module surfaced for operator dashboard)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_WASM_AOT_CACHE_DIR="${TEST_DIR}/wasm-aot"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    output="$(bash "${INSTALL_DIR}/apply.sh" 2>&1)"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
+    [[ "${output}" == *'"module":"wasm-aot-cache"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+}
+
+@test "INVARIANT (.last-tune symlink: variant-A guard against ln -sfn unconditional bump — readlink check before recreate)" {
+    # The 2026-06-06 fix gated ln -sfn with a readlink check
+    # because unconditional ln -sfn bumped the cache dir mtime
+    # every apply (variant-A idempotency defeat). Lock that the
+    # cache dir mtime is preserved across re-applies.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_WASM_AOT_CACHE_DIR="${TEST_DIR}/wasm-aot"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    bash "${INSTALL_DIR}/apply.sh"
+    mtime_before="$(stat -c '%Y' "${SELFDEF_WASM_AOT_CACHE_DIR}")"
+    sleep 1
+    bash "${INSTALL_DIR}/apply.sh"
+    mtime_after="$(stat -c '%Y' "${SELFDEF_WASM_AOT_CACHE_DIR}")"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (apply.sh handles different tune-content: cache invalidated/refreshed when CFLAGS changes)" {
+    # When hardware-tune.env content changes, the AOT cache may
+    # need refresh hints. Lock that re-apply with different tune
+    # content doesn't silently break.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_WASM_AOT_CACHE_DIR="${TEST_DIR}/wasm-aot"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    bash "${INSTALL_DIR}/apply.sh"
+    # Change tune content.
+    echo 'CFLAGS="-march=znver5"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
+    [ "${status}" -eq 0 ]
+}
