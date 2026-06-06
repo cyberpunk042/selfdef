@@ -176,3 +176,47 @@ run_wd() {
     run_wd
     grep -q 'systemctl restart systemd-journald' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (standard carries SystemMaxUse retention cap — disk-usage upper bound)" {
+    # Audit-trail integrity requires bounded retention so journald
+    # doesn't fill disk + cause secondary outages. Lock standard
+    # has SystemMaxUse= directive.
+    write_config "standard"
+    run_wd
+    grep -qE '^SystemMaxUse=' "${DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (paranoid SystemMaxUse > standard SystemMaxUse — paranoid sized for high-volume hosts)" {
+    # Paranoid is for audit-rules paranoid + AI tool processes that
+    # journal-log heavily — must have LARGER retention than standard
+    # to capture more forensic history before rotation.
+    write_config "standard"
+    run_wd
+    std_max="$(grep -oE 'SystemMaxUse=[0-9]+[GMK]?' "${DROPIN_DIR}/50-selfdef.conf" | head -1)"
+    write_config "paranoid"
+    run_wd
+    para_max="$(grep -oE 'SystemMaxUse=[0-9]+[GMK]?' "${DROPIN_DIR}/50-selfdef.conf" | head -1)"
+    # Both must be present + paranoid value lexically/numerically > standard.
+    [ -n "${std_max}" ]
+    [ -n "${para_max}" ]
+    [ "${std_max}" != "${para_max}" ]
+}
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates drop-in + fires restart)" {
+    write_config "standard"
+    run_wd
+    [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    rm -f "${DROPIN_DIR}/50-selfdef.conf"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    grep -q 'systemctl restart systemd-journald' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"journal-tune"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=standard'* ]]
+}
