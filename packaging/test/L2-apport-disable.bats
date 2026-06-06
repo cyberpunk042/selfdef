@@ -141,3 +141,64 @@ run_wd() {
     run_wd
     grep -q 'systemctl mask apport.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (apport-autoreport coverage): all 3 autoreport units acted on (.service + .path + .timer)" {
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask apport-autoreport.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask apport-autoreport.path' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask apport-autoreport.timer' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (whoopsie coverage): both whoopsie units acted on (.service + .path)" {
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask whoopsie.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask whoopsie.path' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (stop+sysctl composition): stop profile + apport-piped core_pattern → stop+disable + ALSO resets core_pattern" {
+    # Even in stop profile, the kernel core_pattern reset must
+    # fire if it pipes to apport — otherwise the kernel will
+    # still call apport on every crash regardless of unit state.
+    write_config "stop"
+    printf '|/usr/share/apport/apport %%p %%s\n' > "${COREPAT}"
+    run_wd
+    grep -q 'sysctl -w kernel.core_pattern=core' "${SCTL_LOG}"
+    grep -q 'systemctl stop apport.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent mask): re-applying mask fires the same systemctl set + sysctl reset" {
+    write_config "mask"
+    printf '|/usr/share/apport/apport %%p\n' > "${COREPAT}"
+    run_wd
+    first_sys="$(cat "${SYSEOF_LOG}")"
+    first_sctl="$(cat "${SCTL_LOG}")"
+    : > "${SYSEOF_LOG}"
+    : > "${SCTL_LOG}"
+    run_wd
+    second_sys="$(cat "${SYSEOF_LOG}")"
+    second_sctl="$(cat "${SCTL_LOG}")"
+    diff <(printf '%s\n' "${first_sys}") <(printf '%s\n' "${second_sys}") >/dev/null
+    diff <(printf '%s\n' "${first_sctl}") <(printf '%s\n' "${second_sctl}") >/dev/null
+}
+
+@test "INVARIANT (apport-not-present + apport-piped core_pattern): kernel-side reset STILL fires (even if no apport units present)" {
+    # If apport.service is masked/uninstalled but core_pattern
+    # was set up by an earlier apport install, the kernel reset
+    # must still fire — otherwise the kernel keeps trying to call
+    # the now-missing apport binary on every crash.
+    write_config "mask"
+    printf '|/usr/share/apport/apport %%p\n' > "${COREPAT}"
+    APPORT_PRESENT=0 run_wd
+    grep -q 'sysctl -w kernel.core_pattern=core' "${SCTL_LOG}"
+}
+
+@test "emit_status surfaces profile + result in JSON (operator observability)" {
+    write_config "mask"
+    printf 'core\n' > "${COREPAT}"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"apport-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
