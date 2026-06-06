@@ -182,3 +182,44 @@ run_wd() {
     run_wd
     grep -q 'profile=permissive' "${RULES_DST}"
 }
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves rules.conf mtime" {
+    write_config "permissive"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${RULES_DST}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${RULES_DST}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (profile downgrade strict → permissive): rewrites rules + restarts" {
+    write_config "strict"
+    printf '%s\n' 'allow id 1d6b:0002' > "${BASELINE_FILE}"
+    run_wd
+    grep -q 'profile=strict' "${RULES_DST}"
+    write_config "permissive"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'profile=permissive' "${RULES_DST}"
+    ! grep -q 'profile=strict' "${RULES_DST}"
+    grep -q 'systemctl restart usbguard' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (daemon drop-in is chmod 0644 — system-config convention)" {
+    write_config "permissive"
+    run_wd
+    [ "$(stat -c '%a' "${DAEMON_DROPIN_DIR}/50-selfdef.conf")" = "644" ]
+}
+
+@test "INVARIANT (no render-timestamp in rules.conf — defeats cmp -s idempotency)" {
+    write_config "permissive"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${RULES_DST}"
+}
+
+@test "INVARIANT (no render-timestamp in daemon drop-in — variant-A guard on secondary file)" {
+    write_config "permissive"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${DAEMON_DROPIN_DIR}/50-selfdef.conf"
+}
