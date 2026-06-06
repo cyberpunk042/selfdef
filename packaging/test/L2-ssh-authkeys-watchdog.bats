@@ -212,3 +212,57 @@ EOF
     cap | grep -q '"event":"authorized_key_added"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (added_sample carries user:file: with the SPECIFIC user for forensics)" {
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%s\n' "${KEY_EVIL}" >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    run_wd
+    # User name surfaces in the JSON sample (alice was the target).
+    cap | grep -q 'alice'
+}
+
+@test "INVARIANT (authorized_keys2 surface — legacy filename ALSO captured): backward-compat axis" {
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Attacker drops legacy authorized_keys2 file (old OpenSSH protocol).
+    printf '%s\n' "${KEY_EVIL}" > "${HOMES_ROOT}/alice/.ssh/authorized_keys2"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (compound delta — 1 added AND 1 removed → alert; the added wins)" {
+    # Realistic attacker rotation: add backdoor key + remove operator's
+    # legitimate key. The added-key signature must escalate to alert
+    # regardless of the simultaneous removal.
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -f "${HOMES_ROOT}/bob/.ssh/authorized_keys"
+    printf '%s\n' "${KEY_EVIL}" >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    run_wd
+    cap | grep -q '"event":"authorized_key_added"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (central directory: NEW central key dropped → alert)" {
+    # Distinct from per-user authorized_keys: a key dropped in central
+    # authorized_keys.d is also a persistence vector. Lock that the
+    # central axis fires the same alert path.
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%s\n' "${KEY_EVIL}" > "${CENTRAL_DIR}/attacker-shared"
+    run_wd
+    cap | grep -q '"event":"authorized_key_added"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    plant_baseline_keys
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-ssh-authkeys -- ')
+    [ "${main_count}" = "1" ]
+}
