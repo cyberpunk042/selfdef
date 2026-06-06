@@ -207,3 +207,41 @@ run_wd() {
     # Confirm the actual filename is 99-prefixed.
     ls "${RULES_D}/" | grep -qE '^99-selfdef-immutable\.rules$'
 }
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates rule file + fires augenrules)" {
+    write_config "audit"
+    run_wd
+    [ -f "${RULES_D}/99-selfdef-immutable.rules" ]
+    rm -f "${RULES_D}/99-selfdef-immutable.rules"
+    : > "${AUGEN_LOG}"
+    run_wd
+    [ -f "${RULES_D}/99-selfdef-immutable.rules" ]
+    grep -q 'augenrules --load' "${AUGEN_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "audit"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"auditd-immutable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=audit'* ]]
+}
+
+@test "INVARIANT (acknowledge_immutable=false on audit profile is benign — only enforce gates on the ack)" {
+    # Audit profile is observation-only; the refuse-to-brick guard
+    # is ONLY for enforce. Verify audit succeeds with ack=false.
+    write_config "audit" "false"
+    run_wd
+    [ -f "${RULES_D}/99-selfdef-immutable.rules" ]
+    # Audit profile content (no -e 2).
+    ! grep -qE '^-e[[:space:]]+2' "${RULES_D}/99-selfdef-immutable.rules"
+}
+
+@test "INVARIANT (acknowledge_immutable=true on audit profile is also benign — over-acknowledging doesn't fail)" {
+    # Operator may set ack=true defensively. Audit profile should
+    # accept it without quirky behavior.
+    write_config "audit" "true"
+    run_wd
+    [ -f "${RULES_D}/99-selfdef-immutable.rules" ]
+    ! grep -qE '^-e[[:space:]]+2' "${RULES_D}/99-selfdef-immutable.rules"
+}
