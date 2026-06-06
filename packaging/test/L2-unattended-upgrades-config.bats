@@ -136,3 +136,58 @@ run_wd() {
     [ -f "${APT_CONFD}/50selfdef-unattended-upgrades" ]
     ! [ -f "${APT_CONFD}/60selfdef-unattended-reboot" ]
 }
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves drop-in mtimes" {
+    write_config "security-only"
+    run_wd
+    mtime_50_before="$(stat -c '%Y' "${APT_CONFD}/50selfdef-unattended-upgrades")"
+    mtime_20_before="$(stat -c '%Y' "${APT_CONFD}/20selfdef-periodic")"
+    sleep 1
+    run_wd
+    mtime_50_after="$(stat -c '%Y' "${APT_CONFD}/50selfdef-unattended-upgrades")"
+    mtime_20_after="$(stat -c '%Y' "${APT_CONFD}/20selfdef-periodic")"
+    [ "${mtime_50_before}" = "${mtime_50_after}" ]
+    [ "${mtime_20_before}" = "${mtime_20_after}" ]
+}
+
+@test "INVARIANT (profile upgrade security-only → security-and-reboot): ADDS reboot override" {
+    write_config "security-only"
+    run_wd
+    ! [ -f "${APT_CONFD}/60selfdef-unattended-reboot" ]
+    write_config "security-and-reboot"
+    run_wd
+    [ -f "${APT_CONFD}/60selfdef-unattended-reboot" ]
+}
+
+@test "INVARIANT (50selfdef enables Unattended-Upgrade Origins-Pattern for security only — does NOT include proposed)" {
+    write_config "security-only"
+    run_wd
+    grep -qE 'Origins-Pattern|Allowed-Origins' "${APT_CONFD}/50selfdef-unattended-upgrades"
+    grep -qiE '[Ss]ecurity' "${APT_CONFD}/50selfdef-unattended-upgrades"
+    # Should NOT include the unstable/proposed origin.
+    ! grep -qE 'proposed' "${APT_CONFD}/50selfdef-unattended-upgrades"
+}
+
+@test "INVARIANT (20selfdef-periodic enables Update-Package-Lists + Unattended-Upgrade)" {
+    write_config "security-only"
+    run_wd
+    grep -qE 'Update-Package-Lists' "${APT_CONFD}/20selfdef-periodic"
+    grep -qE 'Unattended-Upgrade' "${APT_CONFD}/20selfdef-periodic"
+}
+
+@test "INVARIANT (60selfdef-unattended-reboot sets Automatic-Reboot 'true')" {
+    write_config "security-and-reboot"
+    run_wd
+    grep -qE 'Automatic-Reboot.*true' "${APT_CONFD}/60selfdef-unattended-reboot"
+}
+
+@test "INVARIANT (no render-timestamp in any drop-in): defeats cmp -s idempotency" {
+    write_config "security-and-reboot"
+    run_wd
+    for f in "${APT_CONFD}/50selfdef-unattended-upgrades" \
+             "${APT_CONFD}/20selfdef-periodic" \
+             "${APT_CONFD}/60selfdef-unattended-reboot"; do
+        ! grep -qE '^// Generated [0-9]{4}-' "$f"
+        ! grep -qE '^# Generated [0-9]{4}-' "$f"
+    done
+}
