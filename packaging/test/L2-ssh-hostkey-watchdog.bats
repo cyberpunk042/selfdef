@@ -214,3 +214,76 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run_wd
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (multi-key compound CHANGED: 2 key-types changed simultaneously → alert with changed:2)" {
+    # Operator rotation typically rotates ALL key types together. A mass
+    # change is the legit-rotate signature OR a re-image. Either way,
+    # severity should still alert (the operator needs to ack the rotation).
+    mk_key ed25519 "ssh-ed25519 ORIGINAL root@host"
+    mk_key rsa     "ssh-rsa     ORIGINAL root@host"
+    run_wd
+    mk_key ed25519 "ssh-ed25519 ROTATED root@host"
+    mk_key rsa     "ssh-rsa     ROTATED root@host"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"changed":2'
+}
+
+@test "INVARIANT (multiple key-types ADDED): warn-tier + reflects in added count" {
+    mk_key rsa "ssh-rsa BBBBBBBB root@host"
+    run_wd
+    mk_key ed25519 "ssh-ed25519 AAAAAAAA root@host"
+    mk_key ecdsa   "ssh-ecdsa   CCCCCCCC root@host"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"added":2'
+}
+
+@test "INVARIANT (zero-host-keys initial — baseline initially empty): handled gracefully (no key-dir bug)" {
+    # /etc/ssh might have no keys yet on a fresh host. Baseline initial
+    # should still complete without crash.
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"host_keys":0'
+}
+
+@test "INVARIANT (REPLACED key-type — different fingerprint format): retired DSA, added ED25519 → warn-tier set change" {
+    # Legit hardening migration: retire DSA (deprecated), add ed25519.
+    mk_key dsa "ssh-dss BBBBBBBB root@host"
+    run_wd
+    rm -f "${KEYDIR}/ssh_host_dsa_key.pub"
+    mk_key ed25519 "ssh-ed25519 AAAAAAAA root@host"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"removed":1'
+    cap | grep -qE '"added":1'
+}
+
+@test "INVARIANT (architectural: ssh-hostkey-watchdog auto-trusts after alert — sister of pci-device family)" {
+    # Architectural choice: hostkey-watchdog (like pci-device-watchdog)
+    # auto-refreshes the baseline after alerting. Sister-pattern contrast
+    # with dns-resolver-watchdog which is no-auto-trust. Hardware-class
+    # events fire ONCE, then operator-ack via natural state observation;
+    # dns-class events are persistent-alert because attackers can keep
+    # tampering.
+    mk_key ed25519 "ssh-ed25519 ORIGINAL root@host"
+    run_wd
+    mk_key ed25519 "ssh-ed25519 SWAPPED root@host"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                          # alerts the first time
+    cap | grep -q '"severity":"alert"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                          # third run — baseline refreshed → ok
+    cap | grep -q '"severity":"ok"'
+    cap | grep -q '"event":"hostkeys_intact"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    mk_key ed25519 "ssh-ed25519 AAAAAAAA root@host"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-ssh-hostkey -- ')
+    [ "${main_count}" = "1" ]
+}
