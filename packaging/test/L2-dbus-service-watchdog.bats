@@ -228,3 +228,48 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-dbus-service -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): dbus-service-watchdog does NOT refresh baseline on suspicious-Exec detection — alert STAYS until operator updates" {
+    # Client-trigger root-exec persistence — suspicious-Exec alert
+    # MUST persist across runs until operator explicitly re-baselines.
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    svc /tmp/evil > "${SVC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"dbus_service_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /usr/share/dbus-1/system-services + /usr/local/share + /etc/dbus-1 axes — new service in ANY → alert)" {
+    # dbus-daemon reads activation .service files from multiple dirs.
+    # Attacker may plant in any. Lock multi-dir axis.
+    DBUSD2="${TMP}/local-services"; mkdir -p "${DBUSD2}"
+    svc /usr/libexec/myservice > "${SVC}"
+    DIRS="${DBUSD} ${DBUSD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant new service in second dir.
+    cat > "${DBUSD2}/com.evil.attacker.service" <<EOF
+[D-BUS Service]
+Name=com.evil.attacker
+Exec=/usr/libexec/evil
+User=root
+EOF
+    DIRS="${DBUSD} ${DBUSD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (User=root + Exec under writable root: BOTH axes compound severity — alert wins)" {
+    # When User=root AND Exec is under writable root, this is the
+    # highest-risk pattern (root exec triggered by client). Lock
+    # that this compound case fires alert, not just warn.
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    svc /tmp/.attacker root > "${SVC}"      # explicit User=root + writable Exec
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"dbus_service_suspicious"'
+}
