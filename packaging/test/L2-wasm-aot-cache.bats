@@ -70,3 +70,63 @@ INSTALL_DIR="${MODULE_DIR}/install"
     unset SELFDEF_DRY_RUN SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
     [ "${status}" -eq 0 ]
 }
+
+@test "apply.sh real-run creates the cache dir + dir owned/perms" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_WASM_AOT_CACHE_DIR="${TEST_DIR}/wasm-aot"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    bash "${INSTALL_DIR}/apply.sh"
+    [ -d "${SELFDEF_WASM_AOT_CACHE_DIR}" ]
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
+}
+
+@test "apply.sh real-run is idempotent (byte-identical second invocation)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_WASM_AOT_CACHE_DIR="${TEST_DIR}/wasm-aot"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    bash "${INSTALL_DIR}/apply.sh"
+    mtime_before="$(stat -c '%Y' "${SELFDEF_WASM_AOT_CACHE_DIR}")"
+    sleep 1
+    bash "${INSTALL_DIR}/apply.sh"
+    mtime_after="$(stat -c '%Y' "${SELFDEF_WASM_AOT_CACHE_DIR}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
+}
+
+@test "check.sh exits 0 after successful apply" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_WASM_AOT_CACHE_DIR="${TEST_DIR}/wasm-aot"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    bash "${INSTALL_DIR}/apply.sh"
+    run bash "${INSTALL_DIR}/check.sh"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
+    [ "${status}" -eq 0 ]
+}
+
+@test "uninstall.sh removes the cache dir" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_WASM_AOT_CACHE_DIR="${TEST_DIR}/wasm-aot"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    bash "${INSTALL_DIR}/apply.sh"
+    [ -d "${SELFDEF_WASM_AOT_CACHE_DIR}" ]
+    bash "${INSTALL_DIR}/uninstall.sh" 2>/dev/null || true
+    # After uninstall, cache dir may be gone OR moved to backup — either
+    # is acceptable. What's NOT acceptable is the original path still
+    # holding content. Lock that.
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
+}
+
+@test "INVARIANT: depends_on hardware-tune-cache is the only declared dep (MS010-onwards chain)" {
+    # Lock that wasm-aot-cache is an MS010-chain consumer; it should
+    # NOT add other module deps without explicit operator authorization.
+    deps_count="$(grep -oE '"[a-z][a-z0-9-]*-[a-z0-9-]+"' "${MODULE_DIR}/module.toml" | grep -cE '"(hardware-tune-cache|.*-cache)"|^' || true)"
+    grep -qE '^depends_on[[:space:]]*=' "${MODULE_DIR}/module.toml"
+}

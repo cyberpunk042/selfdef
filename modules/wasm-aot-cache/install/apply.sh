@@ -38,8 +38,14 @@ chmod 0755 "${CACHE_DIR}" "${CACHE_DIR}/cwasm" "${CACHE_DIR}/meta"
 # `readlink ${CACHE_DIR}/.last-tune` to confirm which tune config the
 # cache was provisioned against — if the symlink target's mtime is
 # older than the actual env file, the cache is stale.
+#
+# Variant-A guard: only re-create the symlink when the target differs,
+# otherwise `ln -sfn` re-creates the symlink every run + bumps the
+# parent directory mtime, defeating idempotency.
 if [ -f "${TUNE_FILE}" ]; then
-    ln -sfn "${TUNE_FILE}" "${CACHE_DIR}/.last-tune"
+    if [ ! -L "${CACHE_DIR}/.last-tune" ] || [ "$(readlink "${CACHE_DIR}/.last-tune")" != "${TUNE_FILE}" ]; then
+        ln -sfn "${TUNE_FILE}" "${CACHE_DIR}/.last-tune"
+    fi
 fi
 
 emit_status "ok" "provisioned ${CACHE_DIR}"
