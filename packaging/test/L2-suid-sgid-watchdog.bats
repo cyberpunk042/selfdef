@@ -198,3 +198,64 @@ mk_suid() { printf 'ELF-%s' "$1" > "${ROOT}/$1"; chmod 4755 "${ROOT}/$1"; }
     cap | grep -qE '"event":"(suid_drift|bulk_delta)"'
     cap | grep -qE '"severity":"(warn|alert)"'
 }
+
+@test "INVARIANT (recursive scan: setuid binary in nested subdirectory surfaces)" {
+    # Attacker may hide setuid binary in deep path. Watchdog walks
+    # recursively.
+    mk_suid sudo
+    run_wd
+    mkdir -p "${ROOT}/sub/bin"
+    printf 'ELF-deep' > "${ROOT}/sub/bin/deep-suid"
+    chmod 4755 "${ROOT}/sub/bin/deep-suid"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q 'deep-suid'
+}
+
+@test "INVARIANT (suid+sgid combined: chmod 6755 → detected as both/either — caught by 4000|2000 OR mask)" {
+    # A binary with BOTH setuid AND setgid bits set (chmod 6755)
+    # is the highest-risk category. Must surface.
+    mk_suid sudo
+    run_wd
+    printf 'ELF-both' > "${ROOT}/double-priv"
+    chmod 6755 "${ROOT}/double-priv"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q 'double-priv'
+}
+
+@test "INVARIANT (severity precedence: 4+ adds combined with hash-change → alert; alert ladder dominates over warn)" {
+    # When BOTH bulk-add (4+ adds) AND hash-change occur in same
+    # scan, severity must be alert (bulk wins ladder). Locks the
+    # priority.
+    mk_suid sudo
+    run_wd
+    mk_suid a1; mk_suid a2; mk_suid a3; mk_suid a4
+    printf 'ELF-tampered' > "${ROOT}/sudo"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"bulk_delta"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (baseline TSV format: each line has at least 3 fields — path + perm + hash for diff replay)" {
+    # The baseline TSV is the downstream selfdef-suid-recap +
+    # forensics tooling input. Each line must have at least
+    # path/perm/hash for full diff replay capability.
+    mk_suid sudo
+    mk_suid passwd-binary
+    run_wd
+    [ -s "${BASELINE}" ]
+    awk -F'\t' 'NF<3{bad=1} END{exit bad?1:0}' "${BASELINE}"
+    grep -q 'sudo' "${BASELINE}"
+    grep -q 'passwd-binary' "${BASELINE}"
+}
+
+@test "INVARIANT (enforce + ok severity → exit 0): unchanged baseline passes even in enforce" {
+    mk_suid sudo
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PROFILE=enforce run run_wd
+    [ "${status}" = "0" ]
+    cap | grep -q '"severity":"ok"'
+}
