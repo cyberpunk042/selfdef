@@ -29,14 +29,27 @@ if ! python3 -c "import json; json.load(open('${TEMPLATE}'))" 2>/dev/null; then
 fi
 echo "  PASS JSON parses"
 
-# Gate 2: total panel count >= 20 (7 original + 1 row + 9 four-watchdog
-# + 1 row + 2 modules). Increased from 17 when MS006 module panels landed.
+# Gate 2: total panel count >= 30 (additive lock per operator's
+# "adding ≠ discarding" rule — each canonically-shipped panel RATCHETS
+# the floor forward so a regression that silently drops a panel lands red).
+#
+# Composition (empirically verified 2026-06-06 via JSON enumeration):
+#   - 3 row dividers (section headers)
+#   - 18 stat panels (single-value health: each 4-watchdog gauge + each
+#     module shipped/active count + the M060 mirror-export indicators
+#     + the SDD-062 watchdog-alert-finding stat)
+#   - 1 table panel (decision-finding stream)
+#   - 8 timeseries panels (per-watchdog time-windowed trends + M060
+#     mirror-export rate + the watchdog-alert-finding-by-rule trend)
+#   = 30 total.
+# Earlier floors: 17 (original) → 20 (MS006 modules added) → 30
+# (M060 + SDD-062 + IPS-authority surfaces added).
 panel_count="$(python3 -c "import json; print(len(json.load(open('${TEMPLATE}'))['panels']))")"
-if [[ "${panel_count}" -lt 20 ]]; then
-    echo "  FAIL panel count ${panel_count} < 20 (drift; the 4-watchdog OR module panels may have been removed)"
+if [[ "${panel_count}" -lt 30 ]]; then
+    echo "  FAIL panel count ${panel_count} < 30 (drift; 3 rows + 18 stat + 1 table + 8 timeseries expected)"
     exit 1
 fi
-echo "  PASS panel count = ${panel_count} (≥ 20)"
+echo "  PASS panel count = ${panel_count} (≥ 30)"
 
 # Gate 3: every four-watchdog metric series referenced by at least one
 # panel's expr field. Each row pairs a series with its source SDD.
