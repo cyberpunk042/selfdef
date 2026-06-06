@@ -22,10 +22,19 @@ set -u
 PROFILE="${SELFDEF_CRONALLOW_PROFILE:-report}"
 BASELINE="${SELFDEF_CRONALLOW_BASELINE:-/var/lib/selfdef/crontab-allow-baseline.tsv}"
 
+# Roster file list override: operator-test affordance + L2 testability.
+# Default is the canonical /etc/{cron,at}.{allow,deny}. SELFDEF_CRONALLOW_FILES
+# is a colon-separated list (PATH-style) the operator can point at a
+# captured roster snapshot to verify the classification without touching
+# the live host's cron config.
+DEFAULT_FILES="/etc/cron.allow:/etc/cron.deny:/etc/at.allow:/etc/at.deny"
+FILES_LIST="${SELFDEF_CRONALLOW_FILES:-$DEFAULT_FILES}"
+
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
 
-for f in /etc/cron.allow /etc/cron.deny /etc/at.allow /etc/at.deny; do
+IFS=':' read -ra _files <<< "$FILES_LIST"
+for f in "${_files[@]}"; do
     [[ -f "$f" && -r "$f" ]] || continue
     grep -vE '^\s*(#|$)' "$f" 2>/dev/null | sed 's/[[:space:]]//g' | while IFS= read -r u; do
         [[ -n "$u" ]] && printf '%s\t%s\n' "$f" "$u"
