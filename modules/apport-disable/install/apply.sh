@@ -47,8 +47,12 @@ done
 # Reset core_pattern if it currently pipes to apport. Without
 # this, the kernel still invokes the (now-masked-service)
 # apport binary as the core-dump handler on every crash.
-if [[ -r /proc/sys/kernel/core_pattern ]]; then
-    cp_now=$(cat /proc/sys/kernel/core_pattern 2>/dev/null || echo "")
+# Source override (SELFDEF_APPORT_COREPAT_SOURCE) enables L2 tests +
+# operator dry-verify against a captured fixture file. Live default
+# unchanged.
+COREPAT_SOURCE="${SELFDEF_APPORT_COREPAT_SOURCE:-/proc/sys/kernel/core_pattern}"
+if [[ -r "$COREPAT_SOURCE" ]]; then
+    cp_now=$(cat "$COREPAT_SOURCE" 2>/dev/null || echo "")
     if [[ "$cp_now" == *apport* ]]; then
         if [[ "$DRY_RUN" == "1" ]]; then
             log "DRY_RUN: would reset core_pattern (currently pipes to apport: $cp_now)"
