@@ -127,3 +127,58 @@ run_wd() {
     grep -q 'profile=baseline' "${MODPROBE_FILE}"
     ! grep -q 'blacklist squashfs' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (profile upgrade baseline → strict): adds strict-only modules + bumps profile metadata" {
+    write_config "baseline"
+    run_wd
+    ! grep -q 'blacklist squashfs' "${MODPROBE_FILE}"
+    write_config "strict"
+    run_wd
+    grep -q 'blacklist squashfs' "${MODPROBE_FILE}"
+    grep -q 'blacklist nfsd' "${MODPROBE_FILE}"
+    grep -q 'blacklist gfs2' "${MODPROBE_FILE}"
+    grep -q 'profile=strict' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (profile downgrade strict → baseline): REMOVES strict-only modules" {
+    # If profile downgrade leaves strict-only modules in the blacklist,
+    # the operator's intent (relax) is silently violated.
+    write_config "strict"
+    run_wd
+    grep -q 'blacklist squashfs' "${MODPROBE_FILE}"
+    write_config "baseline"
+    run_wd
+    ! grep -q 'blacklist squashfs' "${MODPROBE_FILE}"
+    ! grep -q 'blacklist nfsd' "${MODPROBE_FILE}"
+    ! grep -q 'blacklist gfs2' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (each blacklist line has 'install <mod> /bin/false' OR 'blacklist <mod>' shape)" {
+    # blacklist alone allows manual modprobe to still load; install
+    # /bin/false is the stricter shape that even root-modprobe blocks.
+    # At minimum the file must use one of these canonical shapes.
+    write_config "baseline"
+    run_wd
+    # Each baseline module appears as blacklist; install /bin/false may
+    # also appear for hardening.
+    for m in cramfs freevxfs jffs2; do
+        grep -qE "(blacklist|install) ${m}" "${MODPROBE_FILE}"
+    done
+}
+
+@test "INVARIANT (modprobe.d path convention): filename matches selfdef-* pattern (for tracking + uninstall)" {
+    write_config "baseline"
+    run_wd
+    case "${MODPROBE_FILE}" in
+        */selfdef-*.conf) : ;;
+        *) fail "modprobe blacklist filename must follow selfdef-*.conf pattern; got: ${MODPROBE_FILE}" ;;
+    esac
+}
+
+@test "INVARIANT (header-marker pin): file MUST carry the managed-by header (collateral-damage protection at uninstall)" {
+    # Without this header, uninstall can't safely identify selfdef-
+    # authored vs operator-authored blacklist content.
+    write_config "baseline"
+    run_wd
+    grep -qE '^#.*managed-by:.*selfdef' "${MODPROBE_FILE}"
+}
