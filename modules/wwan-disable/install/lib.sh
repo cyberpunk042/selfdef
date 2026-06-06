@@ -16,7 +16,7 @@ else
     exit 2
 fi
 
-MODPROBE_FILE="/etc/modprobe.d/selfdef-wwan-blacklist.conf"
+MODPROBE_FILE="${SELFDEF_WWAN_MODPROBE_FILE:-/etc/modprobe.d/selfdef-wwan-blacklist.conf}"
 HEADER_MARKER="# managed-by: selfdef wwan-disable"
 
 # USB / cellular WWAN modem driver stack (mask profile).
