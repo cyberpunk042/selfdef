@@ -149,3 +149,55 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — musl-ld-path inventory enumerates dynamic-linker hijack surface)" {
+    printf '/lib\n/usr/lib\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (preserved bare /var/tmp exact-match clause)" {
+    printf '/lib\n/var/tmp\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (preserved bare /dev/shm exact-match clause)" {
+    printf '/lib\n/dev/shm\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (preserved bare /home exact-match clause)" {
+    printf '/lib\n/home\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (path entry under /var/tmp/<subdir>): trailing-slash form" {
+    printf '/lib\n/var/tmp/attacker/lib\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (path entry under /home/<user>/lib): user-writable hijack coverage" {
+    printf '/lib\n/home/user/lib\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable path file → alert)" {
+    printf '/lib\n/usr/lib\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf '/lib\n/usr/lib\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-musl-ld-path -- ')
+    [ "${main_count}" = "1" ]
+}
