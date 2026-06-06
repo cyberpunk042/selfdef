@@ -16,7 +16,7 @@ else
     exit 2
 fi
 
-BACKUP_DIR="/var/lib/selfdef"
+BACKUP_DIR="${SELFDEF_HOMEPERMS_BACKUP_DIR:-/var/lib/selfdef}"
 BACKUP_FILE="${BACKUP_DIR}/home-perms.bak"
 
 # Enumerate real human home dirs under /home that belong to a
@@ -25,7 +25,14 @@ BACKUP_FILE="${BACKUP_DIR}/home-perms.bak"
 # Emits "path\tuid\towner\tmode" per eligible home.
 enumerate_homes() {
     local minuid="${SELFDEF_HOME_MINUID:-1000}"
-    awk -F: -v min="$minuid" '$3>=min && $6 ~ /^\/home\// {print $6 "\t" $3 "\t" $1}' /etc/passwd \
+    # Source overrides: operator-test affordance + L2 testability.
+    # Default /etc/passwd + /home/ prefix; SELFDEF_HOME_PASSWD lets
+    # the L2 suite feed a fixture passwd file; SELFDEF_HOME_PREFIX
+    # overrides the home-directory regex prefix (default /home/) so
+    # fixtures can place test homes under a tmpdir.
+    local passwd="${SELFDEF_HOME_PASSWD:-/etc/passwd}"
+    local prefix="${SELFDEF_HOME_PREFIX:-/home/}"
+    awk -F: -v min="$minuid" -v p="$prefix" '$3>=min && index($6, p)==1 {print $6 "\t" $3 "\t" $1}' "$passwd" \
     | while IFS=$'\t' read -r dir uid user; do
         [[ -d "$dir" ]] || continue
         # Skip operator-prefixed accounts (selfdef never touches).
