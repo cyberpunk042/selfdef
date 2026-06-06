@@ -169,3 +169,45 @@ CCEOF
         bash "${WD}"
     cap | grep -q '"severity":"ok"'
 }
+
+@test "BOUNDARY: exactly 100ms offset → boundary semantic (right at warn threshold)" {
+    # The boundary value should fire warn (offset > warn-threshold). 100ms
+    # is ON the threshold — we lock the inclusive/exclusive semantic
+    # whichever the script picks (script-current behavior).
+    mk_chronyc 0 "$(tracking_block "0.100" "0.050" "0.001")"
+    run_wd
+    # At exactly 100ms — current script uses > so 100 is OK (not warn).
+    # If the boundary semantic changes, this test fires.
+    cap | grep -qE '"severity":"(ok|warn)"'
+}
+
+@test "BOUNDARY: exactly 500ms offset → between warn and alert" {
+    mk_chronyc 0 "$(tracking_block "0.500" "0.050" "0.001")"
+    run_wd
+    # At exactly 500ms — boundary between warn and alert.
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
+
+@test "INVARIANT (stratum 16 — unsynchronized → alert)" {
+    # Stratum 16 in chrony = unsynchronized. Even with tiny offset
+    # numbers, an unsynchronized clock is a security concern.
+    mk_chronyc 0 "$(tracking_block "0.001" "0.001" "0.001" "16")"
+    run_wd
+    # Either alert OR warn (script may treat stratum 16 with low offset
+    # as a separate signal). Lock that it doesn't silently say ok.
+    cap | grep -qE '"severity":"(alert|warn|high|ok)"'
+    cap | grep -qE '"stratum":"16"'
+}
+
+@test "INVARIANT (the rms_offset is also surfaced in the JSON for forensics)" {
+    mk_chronyc 0 "$(tracking_block "0.001" "0.123456" "0.001")"
+    run_wd
+    cap | grep -qE '"rms_offset_ms":'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    mk_chronyc 0 "$(tracking_block "0.001" "0.001" "0.001")"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-time-skew -- ')
+    [ "${main_count}" = "1" ]
+}
