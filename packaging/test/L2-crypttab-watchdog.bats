@@ -153,3 +153,61 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — crypttab inventory enumerates LUKS-unlock root-exec surface)" {
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (keyscript under /var/tmp): writable-root expansion" {
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    printf 'data /dev/sda2 none luks,keyscript=/var/tmp/.getkey\n' > "${CRYPTTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (keyscript under /home): user-writable hijack coverage" {
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    printf 'data /dev/sda2 none luks,keyscript=/home/user/.getkey\n' > "${CRYPTTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (keyfile under /tmp → alert): keyfile vs keyscript axis-symmetric" {
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    printf 'data /dev/sda2 /tmp/key luks\n' > "${CRYPTTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (keyfile under /var/tmp → alert): writable-root expansion on keyfile axis" {
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    printf 'data /dev/sda2 /var/tmp/key luks\n' > "${CRYPTTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable crypttab file → alert)" {
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    chmod 0666 "${CRYPTTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-crypttab -- ')
+    [ "${main_count}" = "1" ]
+}
