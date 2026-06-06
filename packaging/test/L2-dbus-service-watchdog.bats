@@ -164,3 +164,67 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — dbus-service inventory enumerates client-trigger root-exec surface)" {
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (Exec under /var/tmp): writable-root expansion" {
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    svc /var/tmp/evil > "${SVC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (Exec under /dev/shm): tmpfs writable-root coverage" {
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    svc /dev/shm/evil > "${SVC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable service file → alert)" {
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    chmod 0666 "${SVC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable service file): group-writable → alert above world-writable bar" {
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    chmod 0664 "${SVC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (DELTA-detect: NEW service surfaces in sample by bus-name)" {
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # New service with distinctive bus name.
+    cat > "${DBUSD}/com.distinctive.attacker.service" <<EOF
+[D-BUS Service]
+Name=com.distinctive.attacker
+Exec=/usr/libexec/something
+User=root
+EOF
+    run_wd
+    cap | grep -q 'distinctive.attacker'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-dbus-service -- ')
+    [ "${main_count}" = "1" ]
+}
