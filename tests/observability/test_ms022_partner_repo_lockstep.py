@@ -129,10 +129,10 @@ def test_partner_repo_alert_rules_carry_canonical_thresholds():
     assert "MS022SseGlobalQuotaApproaching" in rules
     assert "MS022SseGlobalQuotaSaturated" in rules
     assert "> 0.85" in rules["MS022SseGlobalQuotaApproaching"]["expr"], (
-        f"partner-repo approaching alert threshold drift"
+        "partner-repo approaching alert threshold drift"
     )
     assert ">= 1.0" in rules["MS022SseGlobalQuotaSaturated"]["expr"], (
-        f"partner-repo saturated alert threshold drift"
+        "partner-repo saturated alert threshold drift"
     )
 
 
