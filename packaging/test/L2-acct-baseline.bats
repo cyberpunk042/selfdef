@@ -222,3 +222,37 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-' "${LOGROTATE_DST}"
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates pacct file + ACCT_DIR + logrotate drop-in)" {
+    write_config "enabled"
+    run_wd
+    [ -f "${PACCT_FILE}" ]
+    [ -d "${ACCT_DIR}" ]
+    [ -f "${LOGROTATE_DST}" ]
+    rm -rf "${ACCT_DIR}"
+    rm -f "${LOGROTATE_DST}"
+    run_wd
+    [ -d "${ACCT_DIR}" ]
+    [ -f "${PACCT_FILE}" ]
+    [ -f "${LOGROTATE_DST}" ]
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "enabled"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"acct-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=enabled'* ]]
+}
+
+@test "INVARIANT (logrotate drop-in carries compress + missingok + notifempty — operator-standard rotation directives)" {
+    # The drop-in must implement proper rotation safety:
+    # compress (saves disk), missingok (no rotate-bail if log absent),
+    # notifempty (skip zero-byte rotations). Lock against rotation-
+    # config drift to operator-unfriendly defaults.
+    write_config "enabled"
+    run_wd
+    grep -qE 'compress' "${LOGROTATE_DST}"
+    grep -qE 'missingok' "${LOGROTATE_DST}"
+    grep -qE 'notifempty' "${LOGROTATE_DST}"
+}
