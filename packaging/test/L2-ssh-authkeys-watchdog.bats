@@ -266,3 +266,55 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-ssh-authkeys -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (commented key NOT flagged: # prefix filtered from key inventory)" {
+    # authorized_keys files use # as comment marker. Operator notes
+    # about future keys must NOT surface as real keys.
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add a commented evil key.
+    printf '# %s\n' "${KEY_EVIL}" >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    run_wd
+    # Severity must NOT be alert (no real key added).
+    ! cap | grep -q '"event":"authorized_key_added"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-key addition: 2 keys added to same authorized_keys → still single alert event)" {
+    # When an attacker plants multiple keys at once, the alert
+    # fires once (not per-key). Locks the consolidation.
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add 2 distinct keys to alice's file.
+    printf '%s\n' "${KEY_EVIL}" >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEv2Lfixturebody4attackerpersist2 evil2\n' >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    run_wd
+    cap | grep -q '"event":"authorized_key_added"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"added":2'
+    # Single JSON record (SDD-062 contract preserved).
+    main_count=$(cap | grep -cE '^-t selfdef-ssh-authkeys -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_AUTHKEYS_PROFILE)" {
+    plant_baseline_keys
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
+
+@test "INVARIANT (rsa-key algorithm axis: ssh-rsa key also surfaces as alert — algorithm-agnostic detection)" {
+    # The watchdog must catch ALL SSH key algorithms, not just
+    # ed25519. RSA + ECDSA + Ed25519 are all valid SSH key types
+    # with same persistence semantics.
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add an RSA key (different algorithm prefix).
+    printf 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDfakeRSAkeyfortestpurposes attacker-rsa-key\n' >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    run_wd
+    cap | grep -q '"event":"authorized_key_added"'
+    cap | grep -q '"severity":"alert"'
+}
