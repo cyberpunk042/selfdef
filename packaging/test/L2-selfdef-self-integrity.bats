@@ -108,3 +108,84 @@ seed_trust_root() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "manifest is chmod 0600 (confidentiality — self-integrity hashes enumerate the trust root)" {
+    seed_trust_root
+    run_wd
+    [ "$(stat -c '%a' "${MANIFEST}")" = "600" ]
+}
+
+@test "DELTA detect — ADDED baseline .tsv (new watchdog deployed) → alert / trust_root_tampered" {
+    # An added baseline .tsv is the legitimate operator-action
+    # case (deploy a new watchdog module), but it's also the
+    # canonical attacker-action case (drop a stub baseline that
+    # silences a real-baseline-overwrite). Both flow through
+    # the same critical-class path → alert. Locks the contract.
+    seed_trust_root
+    run_wd
+    # Attacker (or operator) deploys a new watchdog baseline.
+    printf 'file\t/etc/passwd\tabc999\n' > "${STATE}/host-sentinel-baseline.tsv"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"trust_root_tampered"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "DELTA detect — ADDED wrapper .sh (new detector deployed) → alert / trust_root_tampered" {
+    seed_trust_root
+    run_wd
+    # Attacker (or operator) deploys a new wrapper script.
+    printf '#!/bin/sh\n# new-watchdog.sh\nexit 0\n' > "${LIBEXEC}/new-watchdog.sh"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"trust_root_tampered"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "tracked/added/removed/critical counts surface in JSON (operator triage observability)" {
+    seed_trust_root
+    run_wd
+    # Two critical-class events: one tampered baseline + one removed wrapper.
+    printf 'file\t/etc/passwd\tEVIL999\n' > "${STATE}/account-baseline.tsv"
+    rm -f "${LIBEXEC}/account-watchdog.sh"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"tracked":[0-9]+'
+    cap | grep -qE '"critical":[1-9]'
+}
+
+@test "INVARIANT (auto-trust): selfdef-self-integrity DOES refresh the manifest on delta (the META watchdog's distinct contract)" {
+    # CONTRAST against the no-auto-trust family. This watchdog
+    # IS the meta-watchdog (watches the watchers) — auto-refresh
+    # is correct here because the alert fires for THIS run, then
+    # the manifest catches up on the next run (legitimate
+    # operator re-baseline / module update). This test locks the
+    # asymmetry against a regression that copies the no-auto-trust
+    # pattern here (which would cause persistent alerts after
+    # every legitimate watchdog re-baseline event).
+    seed_trust_root
+    run_wd
+    printf 'file\t/etc/passwd\tEVIL999\n' > "${STATE}/account-baseline.tsv"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert CLEARED
+    cap | grep -q '"event":"trust_root_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_trust_root
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-self-integrity -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "report profile exits 0 even on alert severity (findings are operator-pull advisory)" {
+    seed_trust_root
+    run_wd
+    printf 'file\t/etc/passwd\tEVIL999\n' > "${STATE}/account-baseline.tsv"
+    PROFILE=report run run_wd
+    [ "${status}" = "0" ]
+    cap | grep -q '"severity":"alert"'
+}
