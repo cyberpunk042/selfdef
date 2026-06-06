@@ -182,3 +182,56 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run_wd
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (multi-log truncation: 2 logs both truncated → alert with shrinks:2)" {
+    printf 'aaaa\nbbbb\n' > "${LOG1}"
+    printf 'cccc\ndddd\n' > "${LOG2}"
+    run_wd
+    : > "${LOG1}"
+    : > "${LOG2}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"log_truncation_detected"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"shrinks":2'
+}
+
+@test "INVARIANT (single line added — sub-byte append is still grew, not shrink)" {
+    printf 'aa' > "${LOG1}"   # no newline
+    run_wd
+    printf 'a' >> "${LOG1}"   # 1 char append
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    cap | grep -qE '"grew":1'
+}
+
+@test "INVARIANT (log size = same — same inode + same size → ok, not alert)" {
+    # If the log is just untouched (same size, same inode), it should be
+    # 'logs_intact' / ok, not alert. Locks the no-false-positive corner.
+    printf 'aaaa\n' > "${LOG1}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    cap | grep -q '"event":"logs_intact"'
+}
+
+@test "INVARIANT (all logs missing — both deleted → warn, not alert)" {
+    printf 'aa\n' > "${LOG1}"
+    printf 'bb\n' > "${LOG2}"
+    run_wd
+    rm -f "${LOG1}" "${LOG2}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"log_missing"'
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"missing":2'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'aa\n' > "${LOG1}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-logfile-integrity -- ')
+    [ "${main_count}" = "1" ]
+}
