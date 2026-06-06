@@ -37,6 +37,12 @@ modified=0
 for f in "$PAM_D"/*; do
     [[ -f "$f" ]] || continue
     [[ -L "$f" ]] && continue  # skip symlinks
+    # Skip our own backup files — walking them would mutate the
+    # preserved original state on re-apply (and spawn a backup-of-
+    # backup chain).
+    case "$f" in
+        *.selfdef-nullok-backup) continue ;;
+    esac
     # Match `pam_unix.so` (or pam_unix2.so) on the same line as `nullok`.
     if grep -qE 'pam_unix(2)?\.so[[:space:]].*\bnullok' "$f" 2>/dev/null; then
         audited=$((audited + 1))
