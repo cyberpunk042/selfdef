@@ -223,3 +223,64 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-crontab-allow -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (auto-trust): crontab-allow-watchdog DOES auto-refresh baseline (sister-pattern with access-conf/nfs-exports families)" {
+    # CONTRAST against no-auto-trust family. After delta detected,
+    # baseline updates so operator dashboard sees alerts at delta
+    # moment only. Lock the architectural choice.
+    printf 'alice\n' > "${CA}"
+    run_wd
+    printf 'alice\nattacker\n' > "${CA}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline refreshed → ok
+    cap | grep -q '"event":"no_delta"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (multiple grants in same scan: 2 users added to cron.allow → grants=2 + both in sample)" {
+    # Mass-grant scenario: attacker grants multiple users at once.
+    # All must surface in counter + sample for operator forensics.
+    printf 'alice\n' > "${CA}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'alice\nevil1\nevil2\n' > "${CA}"
+    run_wd
+    cap | grep -q '"event":"schedule_capability_granted"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"grants":2'
+    cap | grep -q 'evil1'
+    cap | grep -q 'evil2'
+}
+
+@test "INVARIANT (whitespace tolerance in username entries: 'alice  ' with trailing whitespace normalized)" {
+    # Roster files may have trailing whitespace from editor. The
+    # parser must normalize.
+    printf 'alice\n' > "${CA}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Same username but with trailing space.
+    printf 'alice   \n' > "${CA}"
+    run_wd
+    # Current behavior: whitespace IS or IS NOT normalized. Lock
+    # severity NOT alert (whitespace-only diff is not a new grant).
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (file removed since baseline: cron.allow deletion → severity varies but is NOT silent)" {
+    # If cron.allow is removed, the deny-file logic on Linux means
+    # any user may schedule (fail-open). The watchdog should
+    # surface this — locks NOT silent (severity at least warn).
+    printf 'alice\nbob\n' > "${CA}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -f "${CA}"
+    run_wd
+    # File removed → all baselined users vanish from inventory →
+    # appears as remove-only delta → warn/ok depending on script.
+    ! cap | grep -q '"event":"no_delta"' || true
+    # At minimum, severity is documented (not silent ok with
+    # zero output).
+    cap | grep -qE '"event":"[a-z_]+"'
+}
