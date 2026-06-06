@@ -210,3 +210,57 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-rsyslog-exec -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): rsyslog-exec-watchdog does NOT refresh baseline on suspicious-binary detection — alert STAYS until operator updates" {
+    # Log-event-trigger root-exec persistence — suspicious-binary alert
+    # MUST persist across runs until operator explicitly re-baselines.
+    printf 'action(type="omprog" binary="/usr/libexec/rsyslog/helper")\n' > "${CONF}"
+    run_wd
+    printf 'action(type="omprog" binary="/tmp/.x")\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"rsyslog_exec_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (current behavior — comment filter not implemented: # lines ARE scanned)" {
+    # rsyslog uses # for comments. The current rsyslog-exec-watchdog
+    # scanner does NOT filter # lines from inventory — it pattern-matches
+    # raw content. Locks CURRENT behavior as documented; refinement
+    # opportunity to add comment-line filter is tracked separately
+    # (does NOT block this suite). Sister-pattern to apt-hooks-watchdog
+    # (also lacks comment filter — different from boot-script/sshrc/
+    # csh-config which do filter).
+    printf 'action(type="omprog" binary="/usr/libexec/rsyslog/helper")\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# action(type="omprog" binary="/tmp/.example-attacker")\naction(type="omprog" binary="/usr/libexec/rsyslog/helper")\n' > "${CONF}"
+    run_wd
+    # Current behavior: # line IS scanned + alert IS raised.
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (relative-with-slash omprog binary 'sub/dir/p' → alert)" {
+    # Relative-with-slash is rsyslog-undefined behavior + attacker
+    # primitive (resolved against rsyslog's PWD at exec time). Lock
+    # detection alongside absolute-writable-root + bare-name axes.
+    printf 'action(type="omprog" binary="/usr/libexec/rsyslog/helper")\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'action(type="omprog" binary="sub/dir/evil")\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: 'binary=    \"/tmp/.evil\"' multi-space attribute variant still triggers alert)" {
+    # Attacker may use multi-spaces around the binary= attribute to
+    # evade naive grep. Lock whitespace-tolerant parser.
+    printf 'action(type="omprog" binary="/usr/libexec/rsyslog/helper")\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'action(type="omprog" binary=    "/tmp/.evil")\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
