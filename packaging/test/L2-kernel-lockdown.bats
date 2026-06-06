@@ -218,3 +218,47 @@ run_wd() {
     run_wd
     grep -q 'sysctl --system' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates drop-in + fires sysctl --system)" {
+    # Operator may rm the drop-in — apply must rebuild and re-apply
+    # live so kernel state is restored.
+    write_config "balanced"
+    run_wd
+    [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf" ]
+    rm -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf"
+    : > "${SCTL_LOG}"
+    run_wd
+    [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf" ]
+    grep -q 'sysctl --system' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "strict" "true"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"kernel-lockdown"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=strict'* ]]
+}
+
+@test "INVARIANT (refuse-to-brick precedence over profile-key — strict w/o ack dies even after prior balanced install)" {
+    # Operator installs balanced first, then flips to strict but
+    # FORGETS to set acknowledge_modules_disabled. apply MUST refuse
+    # AND leave the prior balanced drop-in unchanged — no silent
+    # escalation to strict-modules-disabled.
+    write_config "balanced"
+    run_wd
+    [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf" ]
+    ! [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" ]
+    # Operator sets strict w/o ack.
+    write_config "strict" "false"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_KERNEL_LOCKDOWN_CONFIG="${CONF}" \
+        SELFDEF_KERNEL_LOCKDOWN_SYSCTL="${SYSCTL_SRC}" \
+        SELFDEF_SYSCTL_DIR="${SYSCTL_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    # Strict drop-in MUST NOT have been installed.
+    ! [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" ]
+    # Prior balanced drop-in preserved.
+    [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf" ]
+}
