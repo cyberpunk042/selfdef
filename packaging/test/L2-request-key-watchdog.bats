@@ -207,3 +207,52 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-request-key -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): request-key-watchdog does NOT refresh baseline on suspicious-callout detection — alert STAYS until operator updates" {
+    # Kernel-trigger root-exec persistence — suspicious-callout alert
+    # MUST persist across runs until operator explicitly re-baselines.
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    run_wd
+    printf 'create dns_resolver * * /tmp/.evil %%k\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"request_key_suspicious_callout"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: tab-separated callout still parsed — multi-whitespace anti-evasion)" {
+    # Attacker may use tabs or multi-spaces between fields to evade
+    # naive grep-based detection. Lock whitespace-tolerant parser.
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'create\tdns_resolver\t*\t*\t/tmp/.evil\t%%k\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (relative-path callout 'sub/dir/p' → alert)" {
+    # A relative-path callout is resolved against the kernel's PWD
+    # at upcall time — undefined behavior + attacker primitive.
+    # Lock detection.
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'create dns_resolver * * sub/dir/evil %%k\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (callout with args: '/tmp/.evil arg1 arg2' — args don't hide the writable-root)" {
+    # An attacker may try to hide the writable-root path by appending
+    # arguments after it. The watchdog must extract the program (first
+    # word after callout-info) and still alert.
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'create dns_resolver * * /tmp/.evil --kernel-arg1 --kernel-arg2 %%k\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
