@@ -179,3 +179,81 @@ BENIGN=( "permitrootlogin no" "passwordauthentication no" "permitemptypasswords 
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — sshd-config inventory enumerates remote root-exec surface)" {
+    eff "${BENIGN[@]}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (ForceCommand under /var/tmp): writable-root expansion" {
+    eff "${BENIGN[@]}"
+    run_wd
+    eff "permitrootlogin no" "forcecommand /var/tmp/.x" "x11forwarding yes"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (AuthorizedKeysCommand under /var/tmp): writable-root expansion on AKCmd axis" {
+    eff "${BENIGN[@]}"
+    run_wd
+    eff "permitrootlogin no" "authorizedkeyscommand /var/tmp/.x" "x11forwarding yes"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (Match-block change in sshd_config.d → caught via content-hash even when sshd -T unchanged)" {
+    # The watchdog hashes sshd_config + sshd_config.d/ — even when sshd -T
+    # output is identical, a config-content edit should surface.
+    eff "${BENIGN[@]}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add a Match block (doesn't change sshd -T global dump).
+    cat > "${CONFD}/match-block.conf" <<'EOF'
+Match User backdoor
+    PermitRootLogin yes
+EOF
+    run_wd
+    # At minimum, severity should NOT silently stay ok (config hash drifted).
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
+
+@test "INVARIANT (sshd_config.d drop-in content-hash also tracked — not only main config)" {
+    eff "${BENIGN[@]}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add a drop-in.
+    cat > "${CONFD}/99-edit.conf" <<'EOF'
+MaxAuthTries 3
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
+
+@test "INVARIANT (effective config trumps file content): if sshd -T shows safe but file has bad, sshd -T wins" {
+    # The watchdog's authoritative source for directive values is sshd -T
+    # (the EFFECTIVE config). Even if sshd_config.d carries an unsafe-
+    # looking line, if sshd -T evaluates the same as benign, no alert
+    # fires (sshd's own Match/precedence logic governs).
+    eff "${BENIGN[@]}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add a drop-in but sshd -T still emits safe (mocked).
+    cat > "${CONFD}/looks-bad-but-overridden.conf" <<'EOF'
+PermitRootLogin yes
+EOF
+    eff "${BENIGN[@]}"   # sshd -T still emits permitrootlogin no
+    run_wd
+    # The CONFIG-HASH path will trigger warn (content delta), but the
+    # directive-scan path doesn't fire alert (sshd -T agrees with benign).
+    ! cap | grep -q '"event":"sshd_config_dangerous_directive"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    eff "${BENIGN[@]}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-sshd-config -- ')
+    [ "${main_count}" = "1" ]
+}
