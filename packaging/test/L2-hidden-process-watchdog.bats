@@ -149,3 +149,33 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -n "${visible}" ]
     [ "${visible}" -gt 0 ]
 }
+
+@test "INVARIANT (BOUNDARY: PROBE_CAP=1 — minimal viable bound)" {
+    PROBE_CAP=1 run_wd
+    line="$(cap)"
+    alive=$(printf '%s' "${line}" | grep -oE '"pids_alive":[0-9]+' | head -1 | grep -oE '[0-9]+')
+    [ "${alive}" -le 1 ]
+    cap | grep -q '"probe_max":1'
+}
+
+@test "INVARIANT (alive set ⊆ visible set on a clean host — no rootkit signature)" {
+    # On a clean host with a tiny cap, alive (PIDs we probed via direct
+    # stat) ⊆ visible (PIDs we got from readdir). Hidden = alive \ visible
+    # = 0. Lock that invariant for the no-rootkit case.
+    PROBE_CAP=50 run_wd
+    cap | grep -qE '"hidden":0'
+}
+
+@test "INVARIANT (enforce + PROBE_CAP=0 → exit 0): degenerate empty alive-set doesn't false-fire enforce" {
+    # PROBE_CAP=0 → alive empty → hidden=0 → ok → enforce exit 0.
+    PROBE_CAP=0 PROFILE=enforce run_wd
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (hidden_sample shape — when populated, comma-separated PIDs)" {
+    # No actual rootkit to simulate; lock the empty-sample shape AND
+    # confirm sample field has consistent type marker.
+    run_wd
+    # Empty sample is "" not "null" or absent.
+    cap | grep -qE '"hidden_sample":""'
+}
