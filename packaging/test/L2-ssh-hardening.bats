@@ -191,3 +191,50 @@ run_wd() {
     run_wd
     [ -f "${DST}" ]
 }
+
+@test "INVARIANT (standard carries PermitRootLogin no — the actual root-disable mechanism)" {
+    write_config "standard"
+    run_wd
+    grep -qE '^PermitRootLogin\s+no' "${DST}"
+}
+
+@test "INVARIANT (standard carries PasswordAuthentication no — the password-disable mechanism)" {
+    write_config "standard"
+    run_wd
+    grep -qE '^PasswordAuthentication\s+no' "${DST}"
+}
+
+@test "INVARIANT (paranoid carries AllowGroups ssh — the actual hard-lockout directive)" {
+    write_config "paranoid" "true"
+    run_wd
+    grep -qE '^AllowGroups\s+ssh' "${DST}"
+}
+
+@test "INVARIANT (standard does NOT carry AllowGroups — asymmetric profile content)" {
+    write_config "standard"
+    run_wd
+    # AllowGroups is paranoid-only. If it appears in standard, the
+    # refuse-to-brick guard is silently bypassed.
+    ! grep -qE '^AllowGroups\s+ssh' "${DST}"
+}
+
+@test "INVARIANT (sshd -t fires on the proposed config — prior-state-preserving validation)" {
+    # Wrap sshd to log -t invocations.
+    cat > "${BIN}/sshd" <<EOF
+#!/usr/bin/env bash
+case "\$1" in
+    -t) printf 'sshd -t %s\\n' "\$*" >> "${TMP}/sshd-validation.log"; exit 0 ;;
+esac
+exit 0
+EOF
+    chmod +x "${BIN}/sshd"
+    write_config "standard"
+    run_wd
+    grep -q '^sshd -t ' "${TMP}/sshd-validation.log"
+}
+
+@test "INVARIANT (no render-timestamp in drop-in): defeats cmp -s idempotency" {
+    write_config "standard"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${DST}"
+}
