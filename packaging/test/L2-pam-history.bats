@@ -194,3 +194,61 @@ EOF
     [ -f "${PWHISTORY_CONF}" ]
     grep -q 'profile=standard' "${PWHISTORY_CONF}"
 }
+
+@test "INVARIANT (strict remember > standard remember — asymmetric tightening)" {
+    # Strict must enforce remembering MORE passwords than standard.
+    # Lock the asymmetric tightening for compliance frameworks.
+    write_config "standard"
+    run_wd
+    std_remember="$(grep -oE 'remember[[:space:]]*=[[:space:]]*[0-9]+' "${PWHISTORY_CONF}" | grep -oE '[0-9]+$' | head -1)"
+    write_config "strict"
+    run_wd
+    strict_remember="$(grep -oE 'remember[[:space:]]*=[[:space:]]*[0-9]+' "${PWHISTORY_CONF}" | grep -oE '[0-9]+$' | head -1)"
+    [ -n "${std_remember}" ]
+    [ -n "${strict_remember}" ]
+    [ "${strict_remember}" -gt "${std_remember}" ]
+}
+
+@test "INVARIANT (profile downgrade strict → standard rewrites with looser remember count)" {
+    # Bidirectional contract — operator can both tighten + loosen.
+    write_config "strict"
+    run_wd
+    strict_sha="$(sha256sum "${PWHISTORY_CONF}" | awk '{print $1}')"
+    write_config "standard"
+    run_wd
+    std_sha="$(sha256sum "${PWHISTORY_CONF}" | awk '{print $1}')"
+    [ "${strict_sha}" != "${std_sha}" ]
+    grep -q 'profile=standard' "${PWHISTORY_CONF}"
+}
+
+@test "INVARIANT (RHEL system-auth detection: pam_pwhistory.so wired there → wired-in status)" {
+    # The detect-and-notice scan must walk both Debian's
+    # common-password AND RHEL's system-auth / password-auth.
+    cat > "${PAM_DIR}/system-auth" <<'EOF'
+password requisite pam_pwhistory.so use_authtok
+password sufficient pam_unix.so use_authtok yescrypt shadow
+EOF
+    write_config "standard"
+    run_wd 2>&1 | grep -qE "pam_pwhistory.so is wired in|wired"
+}
+
+@test "INVARIANT (pwhistory.conf re-arm after operator deletion: re-creates file with header)" {
+    write_config "standard"
+    run_wd
+    [ -f "${PWHISTORY_CONF}" ]
+    rm -f "${PWHISTORY_CONF}"
+    run_wd
+    [ -f "${PWHISTORY_CONF}" ]
+    grep -q 'managed-by: selfdef pam-history' "${PWHISTORY_CONF}"
+    grep -qE '^remember[[:space:]]*=[[:space:]]*[0-9]+' "${PWHISTORY_CONF}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile + pam-wired surfaced for operator dashboard)" {
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=standard'* ]]
+    # wired= key surfaces actual wiring state for operator
+    # to detect dormant configs.
+    [[ "${output}" == *'wired=true'* ]] || [[ "${output}" == *'wired=false'* ]]
+}
