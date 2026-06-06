@@ -52,15 +52,21 @@ if [[ "$PROFILE" == "mask" ]]; then
         tmp="$(mktemp "${MODPROBE_FILE}.XXXXXX")"
         {
             echo "$HEADER_MARKER"
-            echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=mask"
+            # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+            echo "# profile=mask"
             for m in "${WIFI_MODULES[@]}"; do
                 echo "blacklist $m"
                 echo "install $m /bin/true"
             done
         } > "$tmp"
         chmod 0644 "$tmp"
-        mv -f "$tmp" "$MODPROBE_FILE"
-        log "wrote $MODPROBE_FILE (${#WIFI_MODULES[@]} Wi-Fi modules blacklisted; effective next boot/reload)"
+        # Idempotency: skip rewrite when content unchanged.
+        if [[ -f "$MODPROBE_FILE" ]] && cmp -s "$tmp" "$MODPROBE_FILE"; then
+            rm -f "$tmp"
+        else
+            mv -f "$tmp" "$MODPROBE_FILE"
+            log "wrote $MODPROBE_FILE (${#WIFI_MODULES[@]} Wi-Fi modules blacklisted; effective next boot/reload)"
+        fi
     fi
 else
     # rfkill profile: ensure no stale mask file lingers.

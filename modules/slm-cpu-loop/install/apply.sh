@@ -46,13 +46,15 @@ if [ -r /proc/cpuinfo ]; then
     CPU_MODEL="$(awk -F: '/^model name/ {gsub(/^ +/,"",$2); print $2; exit}' /proc/cpuinfo)"
 fi
 
-cat > "${ENV_FILE}" <<EOF
+tmp="$(mktemp "${ENV_FILE}.XXXXXX")"
+trap 'rm -f "${tmp}"' EXIT
+cat > "${tmp}" <<EOF
 # slm-cpu-loop env file — SD-R72.
 # Sourced by operator-supplied systemd units or systemd-run wrappers.
 # Override any value via /etc/systemd/system/<unit>.service.d/*.conf.
 #
+# No render-timestamp — defeats cmp -s idempotency (2026-06-06).
 # Generated on host: ${CPU_MODEL:-(unknown)}
-# Generated at:     $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # ---- Affinity --------------------------------------------------------
 # CCD-0 cores on Zen 5 (master spec § 17.1 Pulse Vector Core). On
@@ -86,5 +88,13 @@ SELFDEF_SLM_KV_DTYPE="fp16"
 #   -c \${SELFDEF_SLM_CONTEXT_TOKENS} \\
 #   --port 8082
 EOF
-
-emit_status "ok" "wrote ${ENV_FILE}; operator sets SELFDEF_SLM_MODEL{,_PATH}"
+chmod 0644 "${tmp}"
+# Idempotency: skip rewrite when content unchanged.
+if [[ -f "${ENV_FILE}" ]] && cmp -s "${tmp}" "${ENV_FILE}"; then
+    rm -f "${tmp}"
+    emit_status "ok" "${ENV_FILE} unchanged; operator sets SELFDEF_SLM_MODEL{,_PATH}"
+else
+    mv -f "${tmp}" "${ENV_FILE}"
+    emit_status "ok" "wrote ${ENV_FILE}; operator sets SELFDEF_SLM_MODEL{,_PATH}"
+fi
+trap - EXIT
