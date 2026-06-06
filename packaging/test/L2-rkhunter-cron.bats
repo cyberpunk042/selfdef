@@ -121,3 +121,62 @@ Warning: Hidden directory found"
     PROFILE=report run run_wd
     [ "${status}" = "0" ]
 }
+
+@test "INVARIANT (enforce profile exits non-zero on errors): asymmetric severity-to-exit mapping" {
+    mk_rk 2 "Error: config problem"
+    PROFILE=enforce run run_wd
+    [ "${status}" -ne 0 ]
+}
+
+@test "INVARIANT (enforce profile exits non-zero on runtime issue): rc>2 also escalates exit" {
+    mk_rk 5 "rkhunter: database outdated"
+    PROFILE=enforce run run_wd
+    [ "${status}" -ne 0 ]
+}
+
+@test "INVARIANT (enforce + ok → exit 0): unchanged passes even in enforce" {
+    mk_rk 0 "System checks summary: no warnings"
+    PROFILE=enforce run run_wd
+    [ "${status}" = "0" ]
+}
+
+@test "INVARIANT (warning sample is capped at 5 lines for log volume — in the MAIN tag's JSON)" {
+    # 10 warnings should be truncated to 5 in the JSON sample field
+    # (the -detail companion still emits all 10 for journal forensics).
+    mk_rk 1 "Warning: 1
+Warning: 2
+Warning: 3
+Warning: 4
+Warning: 5
+Warning: 6
+Warning: 7
+Warning: 8
+Warning: 9
+Warning: 10"
+    run_wd
+    cap | grep -q '"warning_count":10'
+    # The MAIN tag record (with the JSON body) should NOT contain
+    # "Warning: 10" — only the first 5 are in the sample field.
+    main_line=$(cap | grep -E '^-t selfdef-rkhunter --')
+    ! printf '%s' "${main_line}" | grep -q 'Warning: 10'
+}
+
+@test "INVARIANT (zero-warning empty stdout — rc 0, blank stdout → still ok)" {
+    # Degenerate input: rkhunter passes silently. Wrapper should
+    # treat as ok, not crash on empty parse.
+    mk_rk 0 ""
+    run_wd
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (warning_count = 0 when severity is ok)" {
+    mk_rk 0 "System checks summary: no warnings"
+    run_wd
+    cap | grep -q '"warning_count":0'
+}
+
+@test "INVARIANT (rkhunter rc surfaces — even rc=2 visible for operator)" {
+    mk_rk 2 "Error: config problem"
+    run_wd
+    cap | grep -q '"rkhunter_rc":2'
+}
