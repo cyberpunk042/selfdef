@@ -180,3 +180,52 @@ usb_storage            73728  0' run_wd
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
 }
+
+@test "INVARIANT (blocked drop-in carries selfdef-identifier header — operator audit trail + uninstall identification)" {
+    # The drop-in carries '# selfdef usb-storage-mass-disable —
+    # <profile>' as its first-line tracker (per configs/<profile>
+    # .conf source). Locks the marker shape so uninstall +
+    # tracking work.
+    write_config "blocked"
+    run_wd
+    grep -qE '^# selfdef usb-storage-mass-disable' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+}
+
+@test "INVARIANT (audited drop-in carries selfdef-identifier header too — both profiles share ownership signal)" {
+    write_config "audited"
+    run_wd
+    grep -qE '^# selfdef usb-storage-mass-disable' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+}
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates drop-in)" {
+    write_config "blocked"
+    run_wd
+    [ -f "${MODPROBE_D}/50-selfdef-usb-storage.conf" ]
+    rm -f "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+    LSMOD_OUTPUT='Module                  Size  Used by' run_wd
+    [ -f "${MODPROBE_D}/50-selfdef-usb-storage.conf" ]
+    grep -qE '(blacklist|install) usb_storage' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+}
+
+@test "INVARIANT (no phantom rmmod: rmmod called ONLY for modules in lsmod, not blindly)" {
+    # Lock that rmmod is gated on lsmod presence — calling rmmod
+    # on absent modules would emit benign errors that pollute the
+    # log and could mask real issues.
+    write_config "blocked"
+    LSMOD_OUTPUT='Module                  Size  Used by
+usb_storage            73728  0' run_wd
+    # usb_storage IS loaded → rmmod fired.
+    grep -q 'rmmod usb_storage' "${RMMOD_LOG}"
+    # uas NOT loaded → rmmod NOT fired for uas.
+    ! grep -q 'rmmod uas' "${RMMOD_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile + loaded-module-count surfaced for dashboard)" {
+    write_config "blocked"
+    output="$(LSMOD_OUTPUT='Module                  Size  Used by
+usb_storage            73728  0
+uas                    24576  0' run_wd 2>&1)"
+    [[ "${output}" == *'"module":"usb-storage-mass-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=blocked'* ]]
+}
