@@ -177,3 +177,50 @@ run_wd() {
     DRY_RUN=1 AVAHI_PRESENT=0 run_wd
     ! grep -qE 'systemctl stop|systemctl disable|systemctl mask' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (mask is a superset of stop: stop+disable+mask sequence; stop omits the mask step)" {
+    # Lock the architectural contract: mask profile = stop profile
+    # + additional mask step. Operator escalation path is
+    # stop→mask without re-applying the disable.
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl stop avahi-daemon.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable avahi-daemon.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask avahi-daemon.service' "${SYSEOF_LOG}"
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop avahi-daemon.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable avahi-daemon.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask avahi-daemon.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (acted count surfaces in JSON: acted=2 when both units are present — operator dashboard)" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'acted=2'* ]]
+    [[ "${output}" == *'skipped=0'* ]]
+}
+
+@test "INVARIANT (acted=0 + no-op message when avahi absent — operator dashboard distinguishes 'applied' vs 'not-present')" {
+    write_config "mask"
+    output="$(AVAHI_PRESENT=0 run_wd 2>&1)"
+    [[ "${output}" == *'no-op'* ]]
+    [[ "${output}" == *'avahi not present'* ]]
+}
+
+@test "INVARIANT (mask order is stop → disable → mask — NOT mask → stop): mask before stop would leave .service exited but socket-activatable" {
+    # The systemctl mask is a runtime-permanent gate; if applied
+    # BEFORE stop, the service might already be running. The
+    # ordering ensures: stop first (terminate in-flight), disable
+    # (clear boot trigger), mask last (permanent gate). Locks the
+    # sequence so future refactor doesn't accidentally swap.
+    write_config "mask"
+    run_wd
+    # The log contains the actions in order. Extract them.
+    stop_line="$(grep -n 'systemctl stop avahi-daemon.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_line="$(grep -n 'systemctl disable avahi-daemon.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_line="$(grep -n 'systemctl mask avahi-daemon.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_line}" -lt "${disable_line}" ]
+    [ "${disable_line}" -lt "${mask_line}" ]
+}
