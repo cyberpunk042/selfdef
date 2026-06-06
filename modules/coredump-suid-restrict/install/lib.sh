@@ -16,6 +16,6 @@ else
     exit 2
 fi
 
-SYSCTL_DROPIN="/etc/sysctl.d/50-selfdef-suid-dumpable.conf"
-LIMITS_DROPIN="/etc/security/limits.d/50-selfdef-coredump.conf"
+SYSCTL_DROPIN="${SELFDEF_COREDUMP_SUID_SYSCTL_DROPIN:-/etc/sysctl.d/50-selfdef-suid-dumpable.conf}"
+LIMITS_DROPIN="${SELFDEF_COREDUMP_SUID_LIMITS_DROPIN:-/etc/security/limits.d/50-selfdef-coredump.conf}"
 HEADER_MARKER="# managed-by: selfdef coredump-suid-restrict"
