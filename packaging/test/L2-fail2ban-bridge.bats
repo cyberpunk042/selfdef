@@ -199,3 +199,47 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-' "${JAIL_D}/50-selfdef.conf"
 }
+
+@test "INVARIANT (standard drop-in content: enables sshd jail — the canonical baseline target)" {
+    # 50-selfdef.conf must enable [sshd] (the universal SSH-brute-
+    # force defense). A regression silently dropping the [sshd]
+    # section would leave the host unprotected on its primary
+    # remote-access channel.
+    write_config "standard"
+    run_wd
+    grep -qE '^\[sshd\]' "${JAIL_D}/50-selfdef.conf"
+    grep -qE '^enabled[[:space:]]*=[[:space:]]*true' "${JAIL_D}/50-selfdef.conf"
+}
+
+@test "INVARIANT (recidive drop-in content: enables [recidive] section — actual jail definition)" {
+    # 60-selfdef-recidive.conf must enable [recidive]. Otherwise
+    # the file exists but doesn't actually arm the long-term-ban
+    # jail.
+    write_config "broad"
+    run_wd
+    grep -qE '^\[recidive\]' "${JAIL_D}/60-selfdef-recidive.conf"
+    grep -qE '^enabled[[:space:]]*=[[:space:]]*true' "${JAIL_D}/60-selfdef-recidive.conf"
+}
+
+@test "INVARIANT (drop-ins re-arm after operator out-of-band deletion: re-creates both files)" {
+    # Operator deletes drop-ins for debugging. Next apply re-
+    # creates them with correct content + fires reload.
+    write_config "broad"
+    run_wd
+    [ -f "${JAIL_D}/50-selfdef.conf" ]
+    [ -f "${JAIL_D}/60-selfdef-recidive.conf" ]
+    rm -f "${JAIL_D}/50-selfdef.conf" "${JAIL_D}/60-selfdef-recidive.conf"
+    : > "${F2B_LOG}"
+    run_wd
+    [ -f "${JAIL_D}/50-selfdef.conf" ]
+    [ -f "${JAIL_D}/60-selfdef-recidive.conf" ]
+    grep -q 'fail2ban-client reload' "${F2B_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "broad"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"fail2ban-bridge"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=broad'* ]]
+}
