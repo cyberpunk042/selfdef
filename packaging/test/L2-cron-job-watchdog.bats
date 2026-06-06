@@ -238,3 +238,55 @@ EOF
     cap | grep -q '"event":"new_job"'
     cap | grep -q '"severity":"warn"'
 }
+
+@test "INVARIANT (mass-add boundary: 2 new jobs → warn; 3 new jobs → alert)" {
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Exactly 2 new jobs — boundary between warn and alert.
+    echo '*/3 * * * * root /tmp/.callback-1' > "${CRON_D}/cb1"
+    echo '*/5 * * * * root /tmp/.callback-2' > "${CRON_D}/cb2"
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -q '"added":2'
+    ! cap | grep -q '"event":"mass_new_jobs"'
+}
+
+@test "INVARIANT (added_sample carries specific job filename — forensics)" {
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '*/5 * * * * root /tmp/.distinctive-attacker' > "${CRON_D}/distinctive-cb"
+    run_wd
+    cap | grep -q 'distinctive-cb'
+}
+
+@test "INVARIANT (user-crontab spool delta — user-axis coverage independent of cron-dir)" {
+    # Coverage check: edits to spool/<user> are visible (not only
+    # /etc/cron.d). An attacker who edits a user's crontab via crontab(1)
+    # would be visible here.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '*/5 * * * * /tmp/.attacker' >> "${SPOOL_DIR}/bob"
+    run_wd
+    cap | grep -qE '"severity":"(warn|alert)"'
+    cap | grep -q 'bob'
+}
+
+@test "INVARIANT (etc-crontab content edit — etc-axis coverage independent of cron-dir)" {
+    # Coverage check: edits to /etc/crontab are visible.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '*/3 * * * * root /tmp/.attacker' >> "${ETC_CRONTAB}"
+    run_wd
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    write_cron_inventory
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-cron-jobs -- ')
+    [ "${main_count}" = "1" ]
+}
