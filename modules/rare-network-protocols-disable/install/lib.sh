@@ -16,7 +16,7 @@ else
     exit 2
 fi
 
-MODPROBE_FILE="/etc/modprobe.d/selfdef-rare-network-protocols-blacklist.conf"
+MODPROBE_FILE="${SELFDEF_RAREPROTO_MODPROBE_FILE:-/etc/modprobe.d/selfdef-rare-network-protocols-blacklist.conf}"
 HEADER_MARKER="# managed-by: selfdef rare-network-protocols-disable"
 
 BASELINE_MODS=(dccp sctp rds tipc)
