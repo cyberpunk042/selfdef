@@ -29,9 +29,12 @@ set -u
 
 PROFILE="${SELFDEF_CMDLINE_PROFILE:-report}"
 BASELINE="${SELFDEF_CMDLINE_BASELINE:-/var/lib/selfdef/kernel-cmdline-baseline.txt}"
+# SELFDEF_CMDLINE_FILE added 2026-06-06 for L2 weakener-detection
+# testability. Live default unchanged.
+CMDLINE_FILE="${SELFDEF_CMDLINE_FILE:-/proc/cmdline}"
 
 cmdline=""
-[[ -r /proc/cmdline ]] && cmdline=$(tr -s ' ' < /proc/cmdline | sed 's/^ //; s/ $//')
+[[ -r "$CMDLINE_FILE" ]] && cmdline=$(tr -s ' ' < "$CMDLINE_FILE" | sed 's/^ //; s/ $//')
 
 # Weakening-flag denylist (token or token-prefix match).
 WEAKENERS=(
