@@ -143,3 +143,52 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run run_wd
     [ "${status}" -eq 0 ]
 }
+
+@test "INVARIANT (ld.so.preload under /var/tmp): writable-root expansion" {
+    printf '/var/tmp/evil.so\n' > "${PRELOAD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (ld.so.preload under /dev/shm): tmpfs writable-root expansion" {
+    printf '/dev/shm/evil.so\n' > "${PRELOAD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (ld.so.preload under /home): user-writable hijack coverage" {
+    printf '/home/user/evil.so\n' > "${PRELOAD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multiple preload entries — one benign + one suspicious → alert): suspicious wins" {
+    printf '/bin/sh\n/tmp/evil.so\n' > "${PRELOAD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (current-behavior: LD_LIBRARY_PATH is NOT in the LD_PRELOAD scan scope)" {
+    # ld-preload-watchdog focuses on LD_PRELOAD + LD_AUDIT specifically
+    # (the active-injection vectors). LD_LIBRARY_PATH is a search-path
+    # modifier, not an injection mechanism — outside this watchdog's
+    # scope. Sister watchdog systemd-environment-watchdog covers LD_*
+    # broadly. Lock the current architectural boundary.
+    printf 'export LD_LIBRARY_PATH=/tmp/libs\n' > "${ENVF}"
+    run_wd
+    # Should not fire from this watchdog (would fire from systemd-environment).
+    cap | grep -q '"event":"no_ld_preload"' || cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (env file with LD_AUDIT under /var/tmp → alert): writable-root expansion on LD_AUDIT axis" {
+    # Confirms axis coverage for LD_AUDIT (the sister of LD_PRELOAD).
+    printf 'export LD_AUDIT=/var/tmp/auditor.so\n' > "${ENVF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-ld-preload -- ')
+    [ "${main_count}" = "1" ]
+}
