@@ -175,3 +175,50 @@ run_wd() {
     output="$(run_wd 2>&1)"
     [[ "${output}" == *'changes=0'* ]]
 }
+
+@test "INVARIANT (profile reverse disabled → enabled): fires accton on + re-enables service" {
+    write_config "disabled"
+    run_wd
+    : > "${ACCT_LOG}"
+    : > "${SYSEOF_LOG}"
+    write_config "enabled"
+    run_wd
+    grep -qE "accton ${PACCT_FILE}" "${ACCT_LOG}"
+    grep -qE 'systemctl enable --now (acct|psacct)' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (pacct file chmod 0640 — root + adm-group readable, NOT world-readable)" {
+    # pacct contains process-history with command names + args + exit
+    # codes — sensitive on a multi-user system. Lock 0640.
+    write_config "enabled"
+    run_wd
+    [ "$(stat -c '%a' "${PACCT_FILE}")" = "640" ]
+}
+
+@test "INVARIANT (ACCT_DIR chmod 0750 — root + adm-group can list, NOT world-listable)" {
+    write_config "enabled"
+    run_wd
+    [ "$(stat -c '%a' "${ACCT_DIR}")" = "750" ]
+}
+
+@test "INVARIANT (logrotate drop-in references /var/account/pacct — the canonical pacct path)" {
+    # The drop-in is shipped as a fixture (modules/acct-baseline/systemd/
+    # selfdef-acct.logrotate) with /var/account/pacct hard-coded. This
+    # is intentional: logrotate config refs the canonical live path, not
+    # the (test-overridable) PACCT_FILE env var.
+    write_config "enabled"
+    run_wd
+    grep -q '/var/account/pacct' "${LOGROTATE_DST}"
+}
+
+@test "INVARIANT (logrotate drop-in carries the actual rotate directive)" {
+    write_config "enabled"
+    run_wd
+    grep -qE '^[[:space:]]*(daily|weekly|monthly)' "${LOGROTATE_DST}"
+}
+
+@test "INVARIANT (no render-timestamp in logrotate drop-in): defeats cmp -s idempotency" {
+    write_config "enabled"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${LOGROTATE_DST}"
+}
