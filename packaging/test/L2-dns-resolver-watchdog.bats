@@ -230,3 +230,77 @@ EOF
     rc="$(PROFILE=report run_wd_rc)"
     [ "${rc}" = "0" ]
 }
+
+@test "ENFORCE profile: alert delta → exit-1 (the report-vs-enforce contrast)" {
+    write_resolver_inventory
+    PROFILE=report run_wd
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 1.1.1.1
+nameserver 6.6.6.6
+search example.com internal.example.com
+EOF
+    rc="$(PROFILE=enforce run_wd_rc)"
+    [ "${rc}" != "0" ]
+}
+
+@test "INVARIANT (resolved upstream change alone): resolvectl-only delta surfaces as alert" {
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Same resolv.conf, but resolvectl reports a different upstream
+    # (resolved configuration changed via drop-in).
+    export RESOLVED_UPSTREAMS="1.1.1.1 6.6.6.6"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '6\.6\.6\.6'
+}
+
+@test "INVARIANT (mass nameserver flush — all removed, attacker-friendly empty resolver): → alert" {
+    # Realistic attack variant: clear resolv.conf entirely, then
+    # operator's DHCP renews to attacker's resolver. The 'all removed'
+    # signature is itself worth alerting on.
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    : > "${RESOLV_FILE}"
+    export RESOLVED_UPSTREAMS=""
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (DELTA-detect: nameserver change carries the SPECIFIC IP in added_sample)" {
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 1.1.1.1
+nameserver 9.9.9.9
+nameserver 99.66.66.99
+search example.com internal.example.com
+EOF
+    run_wd
+    cap | grep -q '99\.66\.66\.99'   # specific IP visible in JSON sample
+}
+
+@test "INVARIANT (comment-only resolv.conf change → no_delta): byte-level changes that don't affect record set are no-ops" {
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RESOLV_FILE}" <<'EOF'
+# operator-managed resolver
+# (an additional comment that should not count)
+nameserver 1.1.1.1
+nameserver 9.9.9.9
+search example.com internal.example.com
+EOF
+    run_wd
+    cap | grep -q '"event":"no_delta"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    write_resolver_inventory
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-dns-resolver -- ')
+    [ "${main_count}" = "1" ]
+}
