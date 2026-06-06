@@ -151,3 +151,57 @@ run_wd() {
     run_wd
     cmp -s "${CONFIGS_SRC}/pool.conf" "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
 }
+
+@test "drop-in is chmod 0644 (system-config convention for /etc/chrony/conf.d)" {
+    write_config "pool"
+    run_wd
+    perms="$(stat -c '%a' "${CHRONY_DROPIN_DIR}/50-selfdef.conf")"
+    [ "${perms}" = "644" ]
+}
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves mtime (not just no-restart)" {
+    # Stronger than test-122's "no restart" — locks the file-mtime
+    # preservation that the cmp -s guard provides.
+    write_config "pool"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${CHRONY_DROPIN_DIR}/50-selfdef.conf")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${CHRONY_DROPIN_DIR}/50-selfdef.conf")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (profile upgrade pool → nts): replaces drop-in + fires restart" {
+    # The reverse direction of test-130 (nts → pool). Both
+    # transitions must work — locks the bidirectional contract.
+    write_config "pool"
+    run_wd
+    grep -q 'pool' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    write_config "nts"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'nts' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    ! grep -q '^pool ' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    grep -q 'systemctl restart' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (no render-timestamp in drop-in): chrony drop-in must not carry a Generated <ISO-date> line" {
+    write_config "pool"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (NTS profile carries cloudflare + nist server lines): both authenticated servers surface in drop-in" {
+    write_config "nts"
+    run_wd
+    grep -q 'time.cloudflare.com' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    grep -q 'time.nist.gov' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "emit_status surfaces profile + result in JSON (operator observability)" {
+    write_config "pool"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"chrony-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=pool'* ]]
+}
