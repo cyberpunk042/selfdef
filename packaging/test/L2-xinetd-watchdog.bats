@@ -162,3 +162,61 @@ xsvc() { printf 'service telnet\n{\n    socket_type = stream\n    protocol = tcp
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — xinetd inventory enumerates network-connection-trigger exec surface)" {
+    xsvc /usr/sbin/in.telnetd > "${SVC}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (xinetd server= under /var/tmp): writable-root expansion" {
+    xsvc /usr/sbin/in.telnetd > "${SVC}"
+    run_wd
+    xsvc /var/tmp/backdoor > "${SVC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (xinetd server= under /home): user-writable hijack coverage" {
+    xsvc /usr/sbin/in.telnetd > "${SVC}"
+    run_wd
+    xsvc /home/user/backdoor > "${SVC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (inetd.conf server under /var/tmp): inetd-axis writable-root expansion" {
+    printf 'telnet stream tcp nowait root /usr/sbin/in.telnetd in.telnetd\n' > "${INETD}"
+    INETD_CONF="${INETD}" run_wd
+    printf 'telnet stream tcp nowait root /var/tmp/backdoor in.telnetd\n' > "${INETD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    INETD_CONF="${INETD}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (inetd.conf server under /dev/shm): inetd-axis tmpfs coverage" {
+    printf 'telnet stream tcp nowait root /usr/sbin/in.telnetd in.telnetd\n' > "${INETD}"
+    INETD_CONF="${INETD}" run_wd
+    printf 'telnet stream tcp nowait root /dev/shm/backdoor in.telnetd\n' > "${INETD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    INETD_CONF="${INETD}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable xinetd.d file → alert)" {
+    xsvc /usr/sbin/in.telnetd > "${SVC}"
+    run_wd
+    chmod 0666 "${SVC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    xsvc /usr/sbin/in.telnetd > "${SVC}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-xinetd -- ')
+    [ "${main_count}" = "1" ]
+}
