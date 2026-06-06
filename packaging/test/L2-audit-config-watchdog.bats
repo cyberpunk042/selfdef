@@ -284,3 +284,60 @@ setup_baseline_state() {
     main_count=$(cap | grep -cE '^-t selfdef-audit-config -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (auto-trust): audit-config-watchdog DOES auto-refresh baseline (state captured + telemetry continues)" {
+    # CONTRAST against no-auto-trust family. Once T1562.001 signal
+    # fires, the baseline updates to new state — operator-pull
+    # dashboard sees alerts at delta moment only. Locks current
+    # behavior; documents the architecture choice.
+    setup_baseline_state
+    run_wd
+    set_state "" "1" "inactive"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline refreshed
+    cap | grep -q '"event":"audit_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (severity precedence: conf-changed + auditd-disabled in same scan → alert; T1562.001 wins over warn)" {
+    # When BOTH conf change AND auditd down occur in same scan,
+    # severity must be alert (T1562.001 wins ladder over conf-
+    # change warn).
+    setup_baseline_state
+    run_wd
+    printf 'log_file = /var/log/audit/audit.log\nmax_log_file = 100\n' > "${CONFDIR}/auditd.conf"
+    set_state "-w /etc/passwd -p wa -k passwd_changes
+-w /etc/shadow -p wa -k shadow_changes
+-w /etc/group -p wa -k group_changes" "1" "inactive"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"auditd_disabled"'
+}
+
+@test "INVARIANT (current behavior: rules.d file removal may surface as rule-count reduction or audit_intact — depending on whether removal coincides with auditctl -l reload timing)" {
+    # When operator removes a rules.d file, the LIVE auditctl -l
+    # reflects rule reduction only after auditd reload. Depending
+    # on timing, may surface as audit_rules_reduced or
+    # audit_intact. Lock current behavior — severity NOT alert.
+    setup_baseline_state
+    printf '%s\n' '-w /etc/hosts -p wa -k hosts' > "${CONFDIR}/rules.d/10-hosts.rules"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -f "${CONFDIR}/rules.d/10-hosts.rules"
+    run_wd
+    # Removal is operator action; current behavior surfaces as
+    # warn or ok (not alert).
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (rule_count surfaces in baseline_initial too — operator sees install-time count)" {
+    # The baseline_initial event must carry rule_count so operator
+    # sees the install-time-vet number.
+    setup_baseline_state
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"rule_count":3'
+}
