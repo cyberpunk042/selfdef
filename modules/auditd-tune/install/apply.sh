@@ -42,7 +42,10 @@ src="${CONFIGS_SRC}/${PROFILE}.conf"
 tmp_rendered="$(mktemp)"
 {
     echo "$AUDITD_MARKER"
-    echo "# profile=$PROFILE rendered=$(date -u +%FT%TZ)"
+    # NOTE: no `rendered=$(date)` — including timestamp defeats
+    # the cmp -s idempotency check (per dns-shield + proc-hidepid
+    # fix lineage, 2026-06-06).
+    echo "# profile=$PROFILE"
     cat "$src"
 } > "$tmp_rendered"
 

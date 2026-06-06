@@ -53,7 +53,8 @@ fi
 # Render the rules.conf.
 tmp_rules="$(mktemp)"
 {
-    echo "# === selfdef usbguard rules.conf (profile=$PROFILE rendered=$(date -u +%FT%TZ)) ==="
+    # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+    echo "# === selfdef usbguard rules.conf (profile=$PROFILE) ==="
     if [[ "$PROFILE" == "strict" ]]; then
         echo "# --- operator baseline (from $BASELINE_FILE) ---"
         cat "$BASELINE_FILE"

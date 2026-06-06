@@ -55,7 +55,8 @@ fi
 tmp_rendered="$(mktemp)"
 {
     echo "$FAILLOCK_MARKER"
-    echo "# profile=$PROFILE rendered=$(date -u +%FT%TZ)"
+    # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+    echo "# profile=$PROFILE"
     cat "$src"
 } > "$tmp_rendered"
 

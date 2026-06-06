@@ -51,7 +51,8 @@ backup_and_install() {
     tmp_rendered="$(mktemp)"
     {
         echo "$ISSUE_MARKER"
-        echo "# template=$template_basename profile=$PROFILE rendered=$(date -u +%FT%TZ)"
+        # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+        echo "# template=$template_basename profile=$PROFILE"
         cat "$src"
     } > "$tmp_rendered"
 
