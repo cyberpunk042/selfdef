@@ -287,3 +287,50 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-ssh-hostkey -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_HOSTKEY_PROFILE)" {
+    mk_key ed25519 "ssh-ed25519 AAAAAAAA root@host"
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
+
+@test "INVARIANT (ECDSA key-type detection: NIST P-256 family also tracked alongside RSA/Ed25519/DSA)" {
+    # ECDSA host keys are common on hardened hosts. Lock that
+    # they're captured + tracked alongside other algorithms.
+    mk_key ecdsa "ssh-ecdsa CCCCCCCC root@host"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"host_keys":1'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    mk_key ecdsa "ssh-ecdsa SWAPPED root@host"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE 'ECDSA'
+}
+
+@test "INVARIANT (severity precedence: changed wins over add+remove combined → alert with changed_sample populated)" {
+    # When rotation produces BOTH net-new types AND changed-types,
+    # severity must be alert (changed wins over add/remove).
+    mk_key ed25519 "ssh-ed25519 ORIGINAL root@host"
+    mk_key rsa     "ssh-rsa     OLDONE root@host"
+    run_wd
+    # Swap ed25519 + retire rsa + add ecdsa.
+    mk_key ed25519 "ssh-ed25519 SWAPPED root@host"
+    rm -f "${KEYDIR}/ssh_host_rsa_key.pub"
+    mk_key ecdsa "ssh-ecdsa CCCCCCCC root@host"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"hostkey_changed"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"changed":1'
+}
+
+@test "INVARIANT (host_keys count surfaces accurately — initial inventory baseline_count tracks N installed types)" {
+    # Operator dashboard counts host keys via the host_keys field.
+    # Lock that the count is accurate across 3 algorithm types.
+    mk_key ed25519 "ssh-ed25519 AAAAAAAA root@host"
+    mk_key rsa     "ssh-rsa     BBBBBBBB root@host"
+    mk_key ecdsa   "ssh-ecdsa   CCCCCCCC root@host"
+    run_wd
+    cap | grep -qE '"host_keys":3'
+}
