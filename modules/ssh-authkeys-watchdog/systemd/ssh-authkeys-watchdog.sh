@@ -25,6 +25,10 @@ set -u
 
 PROFILE="${SELFDEF_AUTHKEYS_PROFILE:-report}"
 BASELINE="${SELFDEF_AUTHKEYS_BASELINE:-/var/lib/selfdef/ssh-authkeys-baseline.tsv}"
+# SELFDEF_AUTHKEYS_PASSWD_FILE + SELFDEF_AUTHKEYS_CENTRAL_DIR added
+# 2026-06-06 for L2 delta-testability. Live defaults unchanged.
+PASSWD_FILE="${SELFDEF_AUTHKEYS_PASSWD_FILE:-/etc/passwd}"
+CENTRAL_DIR="${SELFDEF_AUTHKEYS_CENTRAL_DIR:-/etc/ssh/authorized_keys.d}"
 
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
@@ -54,11 +58,11 @@ while IFS=: read -r user _ uid _ _ home _; do
     [[ -z "$home" || ! -d "$home" ]] && continue
     emit_keys "$user" "${home}/.ssh/authorized_keys"
     emit_keys "$user" "${home}/.ssh/authorized_keys2"
-done < /etc/passwd
+done < "$PASSWD_FILE"
 
 # Central authorized_keys.d (if sshd_config points there).
-if [[ -d /etc/ssh/authorized_keys.d ]]; then
-    for f in /etc/ssh/authorized_keys.d/*; do
+if [[ -d "$CENTRAL_DIR" ]]; then
+    for f in "$CENTRAL_DIR"/*; do
         [[ -f "$f" ]] && emit_keys "central:$(basename "$f")" "$f"
     done
 fi

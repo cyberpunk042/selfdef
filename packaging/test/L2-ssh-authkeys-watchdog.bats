@@ -1,23 +1,48 @@
 #!/usr/bin/env bats
 # L2 functional + capture-regression suite for ssh-authkeys-watchdog.
 #
-# ssh-authkeys-watchdog is the MITRE T1098.004 sentry — the single most common
-# Linux persistence vector is dropping a key into a user's authorized_keys. It
-# hashes the base64 key body (comment-independent) of every user's
-# authorized_keys{,2} + the central authorized_keys.d into a baseline, then
-# alerts on an added key. It reads /etc/passwd homes directly (no input-source
-# knob), so to exercise capture deterministically this suite PLANTS a fixture
-# key in the current user's own authorized_keys (only when none pre-exists —
-# it never clobbers a real file) and asserts the scan captured it.
+# ssh-authkeys-watchdog is the MITRE T1098.004 sentry — the single
+# most common Linux persistence vector is dropping a public key into
+# a user's authorized_keys for backdoored passwordless SSH access.
+# This watchdog hashes the base64 key body (comment-independent) of
+# every user's authorized_keys{,2} + the central authorized_keys.d
+# into a baseline, then alerts on a NEW key.
 #
-# This is the regression lock for the 2026-05-27 bug where `emit_keys`'s
-# `printf` went to stdout instead of `$current`, leaving the baseline empty so
-# a newly-added authorized key was NEVER detected.
+# Severity:
+#   ok    → no delta
+#   warn  → a key REMOVED only (post-hoc cleanup)
+#   alert → a key ADDED (the persistence signature)
+#
+# What this suite locks:
+#   - INVENTORY-CAPTURE regression (existing) — `emit_keys` must
+#     write records to `$current` not stdout; the 2026-05-27 bug
+#     left the baseline empty and a new key was NEVER detected
+#   - Synthetic-passwd fixture surfaces every user's authorized_keys
+#     in the baseline with the user, file path, and 32-char sha256
+#     prefix of the base64 body
+#   - Comment-independent hashing: a key with the same body but
+#     different comment hashes to the SAME fp → no_delta
+#   - Central authorized_keys.d surface: a key dropped there is
+#     captured under the `central:<basename>` synthetic user
+#   - DELTA detect: ADDED key (drop-into-existing file) → alert
+#   - DELTA detect: ADDED file (new user's first key) → alert
+#   - DELTA detect: REMOVED key → warn (post-hoc cleanup; not alert)
+#   - ENFORCE profile: addition → exit-1 (failure surface for systemd
+#     unit alerting); removal → exit-0 (operator cleanup is OK)
+#   - REPORT profile: any delta → exit-0 (log-only)
+#
+# Adds SELFDEF_AUTHKEYS_PASSWD_FILE + SELFDEF_AUTHKEYS_CENTRAL_DIR
+# env-var overrides (added 2026-06-06) for L2 delta-testability.
+# Live defaults unchanged.
 #
 # Run with: bats packaging/test/L2-ssh-authkeys-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/ssh-authkeys-watchdog/systemd/ssh-authkeys-watchdog.sh"
-FIXTURE_KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAISELFDEFL2FIXTUREkeyDoNotTrust selfdef-l2-fixture'
+
+# Two valid ED25519-shape fixture keys (base64 body differs).
+KEY_ALICE='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAlIceFiXTUREbody1ForUnitTest selfdef-l2-alice'
+KEY_BOB='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBoBfixturebody2forunittests0001 selfdef-l2-bob'
+KEY_EVIL='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEv1Lfixturebody3attackerpersist1 selfdef-l2-evil'
 
 setup() {
     TMP="$(mktemp -d)"
@@ -30,61 +55,160 @@ FAKELOGGER
     export SELFDEF_TEST_LOGCAP="${TMP}/log.out"
     : > "${SELFDEF_TEST_LOGCAP}"
     BASELINE="${TMP}/ssh-authkeys-baseline.tsv"
-    PLANTED=""        # path we created (removed in teardown); empty = none
-    PLANTED_DIR=""    # .ssh dir we created (removed in teardown); empty = none
+    PASSWD_FILE="${TMP}/passwd"
+    HOMES_ROOT="${TMP}/homes"
+    CENTRAL_DIR="${TMP}/authorized_keys.d"
+    mkdir -p "${HOMES_ROOT}/alice/.ssh" "${HOMES_ROOT}/bob/.ssh" "${CENTRAL_DIR}"
+    # Synthetic /etc/passwd pointing at our test homes.
+    cat > "${PASSWD_FILE}" <<EOF
+alice:x:1000:1000:Alice:${HOMES_ROOT}/alice:/bin/bash
+bob:x:1001:1001:Bob:${HOMES_ROOT}/bob:/bin/bash
+EOF
 }
 
-teardown() {
-    # Restore the real home to its prior state — only remove what WE created.
-    [ -n "${PLANTED}" ] && rm -f "${PLANTED}"
-    [ -n "${PLANTED_DIR}" ] && rmdir "${PLANTED_DIR}" 2>/dev/null || true
-    rm -rf "${TMP}"
-}
+teardown() { rm -rf "${TMP}"; }
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
     SELFDEF_AUTHKEYS_PROFILE="${PROFILE:-report}" \
     SELFDEF_AUTHKEYS_BASELINE="${BASELINE}" \
+    SELFDEF_AUTHKEYS_PASSWD_FILE="${PASSWD_FILE}" \
+    SELFDEF_AUTHKEYS_CENTRAL_DIR="${CENTRAL_DIR}" \
     bash "${WD}"
+}
+
+run_wd_rc() {
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_AUTHKEYS_PROFILE="${PROFILE:-report}" \
+    SELFDEF_AUTHKEYS_BASELINE="${BASELINE}" \
+    SELFDEF_AUTHKEYS_PASSWD_FILE="${PASSWD_FILE}" \
+    SELFDEF_AUTHKEYS_CENTRAL_DIR="${CENTRAL_DIR}" \
+    bash "${WD}" >/dev/null 2>&1
+    echo $?
 }
 
 cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
 
-# Plant a fixture authorized_keys in the current user's passwd home — the exact
-# path the watchdog reads — but ONLY if it can do so without clobbering a real
-# file. Sets PLANTED on success; skips the test otherwise.
-plant_fixture() {
-    local home
-    home="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f6)"
-    [ -n "${home}" ] && [ -d "${home}" ] && [ -w "${home}" ] \
-        || skip "current user's home not writable — cannot plant fixture"
-    local ak="${home}/.ssh/authorized_keys"
-    [ -e "${ak}" ] && skip "real authorized_keys present — refusing to clobber"
-    if [ ! -d "${home}/.ssh" ]; then
-        mkdir -p "${home}/.ssh" || skip "cannot create ${home}/.ssh"
-        PLANTED_DIR="${home}/.ssh"
-    fi
-    printf '%s\n' "${FIXTURE_KEY}" > "${ak}" || skip "cannot write fixture key"
-    PLANTED="${ak}"
+# Helper: write each user's starting authorized_keys.
+plant_baseline_keys() {
+    printf '%s\n' "${KEY_ALICE}" > "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    printf '%s\n' "${KEY_BOB}" > "${HOMES_ROOT}/bob/.ssh/authorized_keys"
 }
 
-@test "first run captures the planted authorized key into the baseline" {
-    plant_fixture
+@test "first run captures the planted authorized keys into the baseline (capture-regression lock)" {
+    plant_baseline_keys
     run_wd
     cap | grep -q '"event":"baseline_initial"'
     cap | grep -q '"severity":"ok"'
     [ -s "${BASELINE}" ]                                  # capture regression lock
-    # The planted key's record is <user>\t<file>\t<fp> — at least one TSV row,
-    # and the count must reflect it (baseline_count:0 was the bug's symptom).
+    # Each record is <user>\t<file>\t<fp32> — at least one well-formed row.
     awk -F'\t' 'NF>=3{ok=1} END{exit ok?0:1}' "${BASELINE}"
-    cap | grep -qE '"baseline_count":[1-9][0-9]*'
+    # Both users surface.
+    grep -qP '^alice\t' "${BASELINE}"
+    grep -qP '^bob\t' "${BASELINE}"
+    cap | grep -qE '"baseline_count":[2-9]'
 }
 
-@test "re-adding the same key on a second run -> ok / no_delta (stable hash)" {
-    plant_fixture
+@test "baseline is chmod 0600 (confidentiality — SSH key fingerprints are sensitive)" {
+    plant_baseline_keys
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (comment-independent hashing): same body + different comment → same fp → no_delta" {
+    plant_baseline_keys
     run_wd
     : > "${SELFDEF_TEST_LOGCAP}"
+    # Rewrite alice's key with a DIFFERENT comment but the same body.
+    cat > "${HOMES_ROOT}/alice/.ssh/authorized_keys" <<'EOF'
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAlIceFiXTUREbody1ForUnitTest renamed-comment-doesnt-mask
+EOF
     run_wd
     cap | grep -q '"event":"no_delta"'
     cap | grep -q '"severity":"ok"'
+}
+
+@test "central authorized_keys.d surface — a key in /etc/ssh/authorized_keys.d/ is captured under central:<basename>" {
+    plant_baseline_keys
+    printf '%s\n' "${KEY_BOB}" > "${CENTRAL_DIR}/operator-shared"
+    run_wd
+    grep -qP '^central:operator-shared\t' "${BASELINE}"
+}
+
+@test "DELTA detect — ADDED key (drop into EXISTING file) → alert / authorized_key_added (the canonical MITRE T1098.004 case)" {
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Attacker appends a backdoor key to alice's existing file.
+    printf '%s\n' "${KEY_EVIL}" >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    run_wd
+    cap | grep -q '"event":"authorized_key_added"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"added":1'
+}
+
+@test "DELTA detect — ADDED file (first key for a user who had none) → alert / authorized_key_added" {
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Attacker creates a new user's first authorized_keys.
+    mkdir -p "${HOMES_ROOT}/alice/.ssh"
+    cat > "${PASSWD_FILE}" <<EOF
+alice:x:1000:1000:Alice:${HOMES_ROOT}/alice:/bin/bash
+bob:x:1001:1001:Bob:${HOMES_ROOT}/bob:/bin/bash
+evil:x:1002:1002:Evil:${HOMES_ROOT}/evil:/bin/bash
+EOF
+    mkdir -p "${HOMES_ROOT}/evil/.ssh"
+    printf '%s\n' "${KEY_EVIL}" > "${HOMES_ROOT}/evil/.ssh/authorized_keys"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"authorized_key_added"'
+}
+
+@test "DELTA detect — REMOVED key → warn / authorized_key_removed (post-hoc cleanup, not alert)" {
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Operator removes bob's key.
+    rm -f "${HOMES_ROOT}/bob/.ssh/authorized_keys"
+    run_wd
+    cap | grep -q '"event":"authorized_key_removed"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "ENFORCE profile: ADDED key → exit-1 (failure surface for systemd unit alerting)" {
+    plant_baseline_keys
+    PROFILE=report run_wd
+    printf '%s\n' "${KEY_EVIL}" >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    rc="$(PROFILE=enforce run_wd_rc)"
+    [ "${rc}" = "1" ]
+}
+
+@test "ENFORCE profile: REMOVED-only delta → exit-0 (operator cleanup is OK, no alert escalation)" {
+    plant_baseline_keys
+    PROFILE=report run_wd
+    rm -f "${HOMES_ROOT}/bob/.ssh/authorized_keys"
+    rc="$(PROFILE=enforce run_wd_rc)"
+    [ "${rc}" = "0" ]
+}
+
+@test "REPORT profile: ADDED key → exit-0 (log-only — journald is the surface)" {
+    plant_baseline_keys
+    PROFILE=report run_wd
+    printf '%s\n' "${KEY_EVIL}" >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    rc="$(PROFILE=report run_wd_rc)"
+    [ "${rc}" = "0" ]
+}
+
+@test "INVARIANT (no auto-trust): ssh-authkeys-watchdog does NOT refresh the baseline on delta — every subsequent run re-reports the alert until operator updates the baseline" {
+    # CONTRAST with group-integrity-watchdog (which DOES auto-refresh).
+    # New SSH keys are NEVER routine; the alert must STAY visible.
+    plant_baseline_keys
+    PROFILE=report run_wd
+    printf '%s\n' "${KEY_EVIL}" >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    PROFILE=report run_wd                                  # first delta run
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PROFILE=report run_wd                                  # alert STAYS
+    cap | grep -q '"event":"authorized_key_added"'
+    cap | grep -q '"severity":"alert"'
 }
