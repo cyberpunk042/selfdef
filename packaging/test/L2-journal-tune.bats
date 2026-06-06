@@ -129,3 +129,50 @@ run_wd() {
     run_wd
     cmp -s modules/journal-tune/configs/standard.conf "${DROPIN_DIR}/50-selfdef.conf"
 }
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves drop-in mtime" {
+    # Stronger than test-94's "no restart" — locks the file-mtime
+    # preservation that the cmp -s guard provides.
+    write_config "standard"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${DROPIN_DIR}/50-selfdef.conf")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${DROPIN_DIR}/50-selfdef.conf")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (profile downgrade paranoid → standard): replaces drop-in + restarts journald" {
+    # The reverse direction of test-103. Both transitions must work —
+    # locks the bidirectional contract.
+    write_config "paranoid"
+    run_wd
+    cmp -s modules/journal-tune/configs/paranoid.conf "${DROPIN_DIR}/50-selfdef.conf"
+    write_config "standard"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    cmp -s modules/journal-tune/configs/standard.conf "${DROPIN_DIR}/50-selfdef.conf"
+    grep -q 'systemctl restart systemd-journald' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (paranoid carries Storage=persistent): paranoid drop-in must commit journals to disk (forward-to-remote requires persistent)" {
+    write_config "paranoid"
+    run_wd
+    grep -qE '^Storage=persistent' "${DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (no render-timestamp in drop-in): journald drop-in must not carry a Generated <ISO-date> line" {
+    # Latent variant-A risk class — without this guard, re-install
+    # would replace the drop-in every time + flush in-memory journal.
+    write_config "standard"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (graceful-reload preferred when available): journald supports SIGUSR1 reload — but restart is the canonical for journal-tune config-change semantics" {
+    # journald drop-ins require restart (USR1 only re-rotates), so the
+    # restart is the *correct* mechanism here (not a fallback).
+    write_config "standard"
+    run_wd
+    grep -q 'systemctl restart systemd-journald' "${SYSEOF_LOG}"
+}
