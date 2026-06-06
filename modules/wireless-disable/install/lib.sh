@@ -16,7 +16,7 @@ else
     exit 2
 fi
 
-MODPROBE_FILE="/etc/modprobe.d/selfdef-wireless-blacklist.conf"
+MODPROBE_FILE="${SELFDEF_WIRELESS_MODPROBE_FILE:-/etc/modprobe.d/selfdef-wireless-blacklist.conf}"
 HEADER_MARKER="# managed-by: selfdef wireless-disable"
 
 # Wi-Fi stack + common driver modules (mask profile).
