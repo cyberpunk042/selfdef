@@ -22,14 +22,13 @@ set -u
 PROFILE="${SELFDEF_LOGINT_PROFILE:-report}"
 STATE="${SELFDEF_LOGINT_STATE:-/var/lib/selfdef/logfile-integrity-state.tsv}"
 
-# Watched logs (only those that exist are tracked).
-WATCH=(
-    /var/log/wtmp /var/log/btmp /var/log/lastlog
-    /var/log/auth.log /var/log/secure
-    /var/log/audit/audit.log
-    /var/log/journal
-    /var/log/syslog /var/log/messages
-)
+# Watch-list override: operator-test affordance + L2 testability. A
+# colon-separated PATH-style list lets the L2 suite (or operator) point
+# at a fixture set instead of the canonical /var/log targets. Live
+# default is the 9-file canonical watch-list below.
+DEFAULT_WATCH="/var/log/wtmp:/var/log/btmp:/var/log/lastlog:/var/log/auth.log:/var/log/secure:/var/log/audit/audit.log:/var/log/journal:/var/log/syslog:/var/log/messages"
+WATCH_LIST="${SELFDEF_LOGINT_WATCH:-$DEFAULT_WATCH}"
+IFS=':' read -ra WATCH <<< "$WATCH_LIST"
 
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
