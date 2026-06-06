@@ -74,3 +74,50 @@ Warning: Hidden directory found"
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"warn"'
 }
+
+@test "warning count surfaces in JSON (operator triage)" {
+    mk_rk 1 "Warning: Suspicious file /dev/.hidden
+Warning: Hidden directory found
+Warning: Third warning"
+    run_wd
+    cap | grep -q '"warning_count":3'
+}
+
+@test "warning sample (up to 5 lines) surfaces in 'sample' field for operator triage" {
+    mk_rk 1 "Warning: Suspicious file /dev/.hidden
+Warning: Hidden directory found"
+    run_wd
+    cap | grep -q 'Suspicious file'
+}
+
+@test "profile field surfaces in JSON (echo of operator-set profile)" {
+    mk_rk 0 "System checks summary: no warnings"
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
+
+@test "rkhunter rc surfaces in JSON (operator can see the raw exit code)" {
+    mk_rk 1 "Warning: x"
+    run_wd
+    cap | grep -q '"rkhunter_rc":1'
+}
+
+@test "JSON record is emitted as a SINGLE logger line (downstream JSON-line consumer contract)" {
+    mk_rk 0 "System checks summary: no warnings"
+    run_wd
+    n=$(cap | grep -c '"tag":"selfdef-rkhunter"')
+    [ "${n}" = "1" ]
+}
+
+@test "report profile exits 0 even on alert severity (findings are advisory)" {
+    mk_rk 2 "Error: config problem"
+    PROFILE=report run run_wd
+    [ "${status}" = "0" ]
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "report profile exits 0 even on warn severity (warnings are advisory)" {
+    mk_rk 1 "Warning: x"
+    PROFILE=report run run_wd
+    [ "${status}" = "0" ]
+}
