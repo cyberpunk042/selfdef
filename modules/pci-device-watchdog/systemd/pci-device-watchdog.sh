@@ -26,11 +26,17 @@ set -u
 PROFILE="${SELFDEF_PCIDEV_PROFILE:-report}"
 BASELINE="${SELFDEF_PCIDEV_BASELINE:-/var/lib/selfdef/pci-device-baseline.tsv}"
 
+# Source override: operator-test affordance + L2 testability. Default
+# is the live /sys/bus/pci/devices. SELFDEF_PCIDEV_SYSDIR lets the L2
+# suite (or an operator) point at a captured fixture tree replicating
+# the per-device {vendor,device,class} sysfs file layout.
+SYSDIR="${SELFDEF_PCIDEV_SYSDIR:-/sys/bus/pci/devices}"
+
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
 
-if [[ -d /sys/bus/pci/devices ]]; then
-    for d in /sys/bus/pci/devices/*; do
+if [[ -d "$SYSDIR" ]]; then
+    for d in "$SYSDIR"/*; do
         [[ -e "$d" ]] || continue
         slot=$(basename "$d")
         vendor=$(cat "$d/vendor" 2>/dev/null || echo "?")
