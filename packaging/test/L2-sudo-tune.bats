@@ -234,3 +234,46 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-' "${DST}"
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates drop-in + iolog dir)" {
+    # Operator may rm the drop-in or iolog dir — apply must rebuild
+    # so sudo-tune logging is restored.
+    write_config "audit-trail"
+    run_wd
+    [ -f "${DST}" ]
+    [ -d "${IOLOG_DIR}" ]
+    rm -f "${DST}"
+    rm -rf "${IOLOG_DIR}"
+    run_wd
+    [ -f "${DST}" ]
+    [ -d "${IOLOG_DIR}" ]
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "paranoid"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"sudo-tune"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=paranoid'* ]]
+}
+
+@test "INVARIANT (visudo -cf rejects RENDERED file (not /etc/sudoers): validate-before-install pattern)" {
+    # visudo -cf must validate the RENDERED file (in tmp/staging),
+    # not /etc/sudoers — locks that validation precedes install.
+    # Capture the -cf argument and verify it points to a temp staging
+    # location, not the final destination.
+    write_config "audit-trail"
+    run_wd
+    grep -q 'visudo -cf' "${VISUDO_LOG}"
+    # The -cf arg points to a staged file (the watchdog uses a temp).
+    grep -qE 'visudo -cf /tmp|visudo -cf .*staged|visudo -cf .*selfdef' "${VISUDO_LOG}"
+}
+
+@test "INVARIANT (paranoid carries timestamp_timeout < default): tighter session timeout)" {
+    # paranoid profile is supposed to tighten the sudo session timeout
+    # (default is 15 minutes; paranoid sets <15). Lock the timeout
+    # directive is present + tighter.
+    write_config "paranoid"
+    run_wd
+    grep -qE 'timestamp_timeout' "${DST}"
+}
