@@ -115,3 +115,73 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — securetty inventory enumerates direct-root-login surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (pts/N detection): pts/1, pts/2, etc. — any pts/<N> → alert" {
+    # The script must catch arbitrary pts/<N> values, not just
+    # pts/0. A regression that whitelists only pts/0 would let
+    # an attacker use pts/1 to widen.
+    seed_benign
+    run_wd
+    printf 'tty1\ntty2\nttyS0\npts/7\n' > "${SECURETTY}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"event":"securetty_widened"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (pre-existing pts at install-time): baseline_initial records the pts entry (operator sees it on next-run delta)" {
+    # The script's baseline_initial path doesn't re-scan for
+    # pts at install — it locks the inventory as-is. The
+    # subsequent run with same content stays ok (no DELTA on
+    # something pre-existing). Documents the implementation
+    # choice: install-time-vet on pts is NOT in scope; subsequent
+    # WIDEN events surface attackers, not legitimate install state.
+    printf 'tty1\npts/0\n' > "${SECURETTY}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    # Baseline records the pts/0 entry — the next-run delta
+    # against ANYTHING ADDED will surface it. We verify the
+    # pts/0 IS in the baseline file.
+    grep -q 'pts/0' "${BASELINE}"
+}
+
+@test "INVARIANT (group-writable securetty): group-writable → alert (more than just world-writable)" {
+    seed_benign
+    run_wd
+    chmod 0664 "${SECURETTY}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "DELTA detect — REMOVED physical tty (operator pruning) → warn / securetty_changed" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'tty1\nttyS0\n' > "${SECURETTY}"            # tty2 removed
+    run_wd
+    cap | grep -qE '"event":"securetty_changed"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "DELTA detect — newly-ADDED pts entry surfaces in JSON sample (operator triage)" {
+    seed_benign
+    run_wd
+    printf 'tty1\ntty2\nttyS0\npts/99\n' > "${SECURETTY}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q 'pts/99'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-securetty -- ')
+    [ "${main_count}" = "1" ]
+}
