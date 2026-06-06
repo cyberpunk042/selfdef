@@ -26,10 +26,16 @@ set -u
 PROFILE="${SELFDEF_HOSTKEY_PROFILE:-report}"
 BASELINE="${SELFDEF_HOSTKEY_BASELINE:-/var/lib/selfdef/ssh-hostkey-baseline.tsv}"
 
+# Source override: operator-test affordance + L2 testability. Default
+# is the canonical /etc/ssh directory. SELFDEF_HOSTKEY_DIR lets the L2
+# suite (or operator) point at a captured snapshot to verify
+# classification logic without touching the live host's keys.
+KEYDIR="${SELFDEF_HOSTKEY_DIR:-/etc/ssh}"
+
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
 
-for pub in /etc/ssh/ssh_host_*_key.pub; do
+for pub in "$KEYDIR"/ssh_host_*_key.pub; do
     [[ -f "$pub" ]] || continue
     # ssh-keygen -lf prints: <bits> SHA256:<fp> <comment> (<TYPE>)
     line=$(ssh-keygen -lf "$pub" 2>/dev/null) || continue
