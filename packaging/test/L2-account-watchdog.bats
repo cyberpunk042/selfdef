@@ -225,3 +225,51 @@ EOF
     cap | grep -q '"event":"new_privileged_account"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (wheel group also fires sudo path — distro-axis coverage)" {
+    # Some distros use wheel instead of sudo. Test that wheel group
+    # membership also triggers the privilege alert path.
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    sed -i 's|^wheel:x:10:|wheel:x:10:bob|' "${GROUP_FIXTURE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (admin group also fires sudo path — distro-axis coverage)" {
+    # Some distros (Debian, older) use admin instead of sudo.
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    sed -i 's|^admin:x:50:|admin:x:50:bob|' "${GROUP_FIXTURE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (uid0 with different name — even root2/admin1 → alert as uid0 impostor)" {
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Different name from 'evil' — what matters is uid 0.
+    echo 'admin1:x:0:0:Admin1:/root:/bin/bash' >> "${PASSWD_FILE}"
+    run_wd
+    cap | grep -q '"event":"new_privileged_account"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (delta carries the NEW account NAME in added_sample for forensics)" {
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo 'distinctive_attacker:x:0:0:Distinctive:/root:/bin/bash' >> "${PASSWD_FILE}"
+    run_wd
+    cap | grep -q 'distinctive_attacker'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    write_account_inventory
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-accounts -- ')
+    [ "${main_count}" = "1" ]
+}
