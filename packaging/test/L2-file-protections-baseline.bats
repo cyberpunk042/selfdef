@@ -141,3 +141,59 @@ run_wd() {
     grep -q 'fs.protected_fifos' "${DROPIN}"
     grep -q 'fs.protected_regular' "${DROPIN}"
 }
+
+@test "INVARIANT (strict profile bumps regular AND fifos to =2 — locks asymmetric profile values)" {
+    write_config "strict"
+    run_wd
+    grep -qE 'fs\.protected_regular\s*=\s*2' "${DROPIN}"
+    grep -qE 'fs\.protected_fifos\s*=\s*2' "${DROPIN}"
+}
+
+@test "INVARIANT (baseline profile has regular AND fifos at =2 too — high-CVE class needs strict default)" {
+    # The 2017 CVE-2017-7610-class race needs =2 to actually block. =1
+    # blocks symlinks but not regular-file races. Even baseline must
+    # set regular + fifos to 2.
+    write_config "baseline"
+    run_wd
+    grep -qE 'fs\.protected_regular\s*=\s*2' "${DROPIN}"
+    grep -qE 'fs\.protected_fifos\s*=\s*2' "${DROPIN}"
+}
+
+@test "INVARIANT (profile upgrade baseline → strict): rewrites drop-in" {
+    write_config "baseline"
+    run_wd
+    sha_before="$(sha256sum "${DROPIN}" | awk '{print $1}')"
+    write_config "strict"
+    run_wd
+    sha_after="$(sha256sum "${DROPIN}" | awk '{print $1}')"
+    # baseline and strict may differ in protected_hardlinks/symlinks value;
+    # if content is identical at our protection level, that's also OK —
+    # but at minimum the profile= metadata bumps.
+    grep -q 'profile=strict' "${DROPIN}"
+}
+
+@test "INVARIANT (sysctl -w fires on every apply — live-knob re-application even when drop-in unchanged)" {
+    # Disk path may skip on idempotent re-apply but LIVE kernel knob
+    # must always be re-asserted (operator could have done sysctl -w
+    # fs.protected_hardlinks=0 between runs).
+    write_config "baseline"
+    run_wd
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -q 'sysctl -w fs.protected_hardlinks=' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (drop-in filename selfdef-* pattern): tracking + uninstall identification" {
+    write_config "baseline"
+    run_wd
+    case "${DROPIN}" in
+        */50-selfdef-*.conf) : ;;
+        *) fail "drop-in filename must follow 50-selfdef-*.conf pattern" ;;
+    esac
+}
+
+@test "INVARIANT (no render-timestamp): defeats cmp -s idempotency guard" {
+    write_config "baseline"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${DROPIN}"
+}
