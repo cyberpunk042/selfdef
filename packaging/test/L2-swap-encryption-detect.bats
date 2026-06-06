@@ -221,3 +221,42 @@ run_wd() {
         ! grep -qE '^# Generated [0-9]{4}-' "$f"
     done
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates all 4 files + fires daemon-reload)" {
+    write_config "report"
+    run_wd
+    [ -f "${TIMER_DST}" ]
+    rm -f "${SCRIPT_DST}" "${SVC_DST}" "${TIMER_DST}" "${DROPIN_PROFILE}"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${SCRIPT_DST}" ]
+    [ -f "${SVC_DST}" ]
+    [ -f "${TIMER_DST}" ]
+    [ -f "${DROPIN_PROFILE}" ]
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "enforce"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"swap-encryption-detect"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=enforce'* ]]
+}
+
+@test "INVARIANT (enforce profile non-zero-exit semantics in libexec: PROFILE check translates unencrypted-swap to systemd-failure)" {
+    # The enforce profile is the lever that turns unencrypted-swap
+    # into a systemd service failure. Lock that the libexec script
+    # contains profile-aware exit logic.
+    write_config "enforce"
+    run_wd
+    grep -qE 'PROFILE|SELFDEF_SWAPENC_PROFILE|enforce' "${SCRIPT_DST}"
+    grep -qE 'exit\s+[1-9]|return\s+[1-9]' "${SCRIPT_DST}"
+}
+
+@test "INVARIANT (timer + service carry 'selfdef' identifier in Description/Documentation — operator-audit-trail)" {
+    write_config "report"
+    run_wd
+    grep -qE '^Description=.*selfdef|^Documentation=.*selfdef' "${TIMER_DST}"
+    grep -qE '^Description=.*selfdef|^Documentation=.*selfdef' "${SVC_DST}"
+}
