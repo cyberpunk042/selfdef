@@ -223,3 +223,57 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-' "${DAEMON_DROPIN_DIR}/50-selfdef.conf"
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates rules + drop-in + restarts)" {
+    # Operator (or attacker) may rm the rules.conf — apply must rebuild
+    # and re-arm the daemon so USB-allow-list enforcement is restored.
+    write_config "permissive"
+    run_wd
+    [ -f "${RULES_DST}" ]
+    [ -f "${DAEMON_DROPIN_DIR}/50-selfdef.conf" ]
+    rm -f "${RULES_DST}" "${DAEMON_DROPIN_DIR}/50-selfdef.conf"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${RULES_DST}" ]
+    [ -f "${DAEMON_DROPIN_DIR}/50-selfdef.conf" ]
+    grep -q 'systemctl restart usbguard' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (header-marker in rules.conf is first non-blank line — stale-cleanup head -1 discipline)" {
+    write_config "permissive"
+    run_wd
+    first_line="$(awk 'NF' "${RULES_DST}" | head -1)"
+    [[ "${first_line}" == *"selfdef usbguard"* || "${first_line}" == *"managed-by"* ]]
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "permissive"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"usbguard"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=permissive'* ]]
+}
+
+@test "INVARIANT (refuse-to-brick precedence over profile-key — strict w/o baseline dies even after prior permissive install)" {
+    # Operator installs permissive first (baseline-collection phase),
+    # then flips to strict but FORGETS to seed the operator-baseline.
+    # apply MUST refuse AND leave the prior permissive rules unchanged
+    # — no silent escalation to strict-with-empty-rules (= locked-out keyboard).
+    write_config "permissive"
+    run_wd
+    grep -q 'profile=permissive' "${RULES_DST}"
+    # Operator removes the prior baseline (or it was never seeded).
+    rm -f "${BASELINE_FILE}"
+    write_config "strict"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_USBGUARD_CONFIG="${CONF}" \
+        SELFDEF_USBGUARD_RULES_FILE="${RULES_DST}" \
+        SELFDEF_USBGUARD_DROPIN_DIR="${DAEMON_DROPIN_DIR}" \
+        SELFDEF_USBGUARD_OPERATOR_DIR="${OPERATOR_DIR}" \
+        SELFDEF_USBGUARD_BASELINE="${BASELINE_FILE}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    # Prior permissive rules preserved — header marker stays permissive
+    # (no mutation to strict-empty = no locked-out keyboard).
+    grep -q 'profile=permissive' "${RULES_DST}"
+}
