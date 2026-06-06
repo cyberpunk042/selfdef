@@ -160,3 +160,59 @@ run_wd() {
     [ -f "${SYSTEMD_DIR}/proc.mount" ]
     grep -q 'hidepid=2' "${SYSTEMD_DIR}/proc.mount"
 }
+
+@test "INVARIANT (profile downgrade invisible → noaccess WITH ack-still-needed-no): rewrites hidepid=4 back to hidepid=2" {
+    # Downgrade direction. noaccess doesn't require ack, so this works
+    # without acknowledge_hidepid=true.
+    write_config "invisible" "true"
+    run_wd
+    grep -q 'hidepid=4' "${SYSTEMD_DIR}/proc.mount"
+    write_config "noaccess"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'hidepid=2' "${SYSTEMD_DIR}/proc.mount"
+    ! grep -q 'hidepid=4' "${SYSTEMD_DIR}/proc.mount"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves mount unit mtime" {
+    write_config "noaccess"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${SYSTEMD_DIR}/proc.mount")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${SYSTEMD_DIR}/proc.mount")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (mount unit carries [Mount] section header — valid systemd .mount fragment)" {
+    write_config "noaccess"
+    run_wd
+    grep -qE '^\[Mount\]' "${SYSTEMD_DIR}/proc.mount"
+    grep -qE '^\[Unit\]' "${SYSTEMD_DIR}/proc.mount"
+}
+
+@test "INVARIANT (What=proc + Where=/proc + Type=proc): the actual remount-of-proc semantic" {
+    # If What/Where/Type drift, the mount unit might remount something
+    # else (or nothing). Lock the mount target.
+    write_config "noaccess"
+    run_wd
+    grep -qE '^What=proc' "${SYSTEMD_DIR}/proc.mount"
+    grep -qE '^Where=/proc' "${SYSTEMD_DIR}/proc.mount"
+    grep -qE '^Type=proc' "${SYSTEMD_DIR}/proc.mount"
+}
+
+@test "INVARIANT (no render-timestamp in mount unit): defeats cmp -s idempotency guard" {
+    write_config "noaccess"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${SYSTEMD_DIR}/proc.mount"
+}
+
+@test "INVARIANT (bypass_gid NOT applied to noaccess): operator-pull only relevant when invisible" {
+    # If operator sets bypass_gid on noaccess (which doesn't strictly
+    # need it since hidepid=2 already exposes /proc/* entries), it
+    # should still be applied (script applies bypass_gid uniformly).
+    write_config "noaccess" "false" "987"
+    run_wd
+    grep -qE 'gid=987|hidepid=2' "${SYSTEMD_DIR}/proc.mount"
+}
