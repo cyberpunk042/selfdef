@@ -154,3 +154,82 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — fstab inventory enumerates boot-mount surface)" {
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (bind-mount shadowing /bin → alert)" {
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/data/fakebin /bin none bind 0 0\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (bind-mount shadowing /root/.ssh → alert): authorized_keys hijack via shadow-mount" {
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/data/fake-ssh /root/.ssh none bind 0 0\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (loop under /var/tmp → alert): writable-root expansion" {
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/var/tmp/disk.img /mnt ext4 loop 0 0\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (loop under /dev/shm → alert): tmpfs writable-root coverage" {
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/dev/shm/disk.img /mnt ext4 loop 0 0\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (suid option mid-list — not only when at start of options): defaults,foo,suid,bar → alert" {
+    # An attacker who can sneak `,suid` into the options list mid-list
+    # would still re-enable setuid. Locks regex matches mid-list too.
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/dev/sdb1 /data ext4 defaults,nodev,suid,relatime 0 2\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (current-behavior lock — fstab-watchdog scans entry CONTENT, not the file's own perms)" {
+    # fstab-watchdog inspects the parsed entry list (devices /
+    # mountpoints / options) — NOT the file mode of /etc/fstab itself.
+    # That gap is intentional in the current design (fstab is owned
+    # by the static-watchdog file-mode pass via world-writable-watchdog
+    # / suid-sgid-watchdog rather than this scan). This test locks
+    # that semantic: a world-writable fstab does NOT itself fire
+    # fstab-watchdog alert (it WILL fire elsewhere).
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    chmod 0666 "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    # The file's mode change MAY trigger a content-delta if the script
+    # carries baseline file-stat, OR may be silent. What we lock here:
+    # entry-list content is unchanged → at most warn/fstab_intact.
+    ! cap | grep -q '"event":"fstab_suspicious_mount"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-fstab -- ')
+    [ "${main_count}" = "1" ]
+}
