@@ -175,3 +175,55 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-sysctl-hardening -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (auto-trust): sysctl-hardening-watchdog DOES auto-refresh baseline on weakening detection" {
+    # CONTRAST against no-auto-trust family. After alert,
+    # baseline updates so next-run sees intact. Locks the
+    # architectural choice.
+    seed_benign
+    run_wd
+    printf 'kernel.randomize_va_space = 0\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline refreshed → ok
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (commented sysctl NOT counted: # prefix filtered from inventory)" {
+    # /etc/sysctl.conf supports # comments. Operator notes about
+    # hypothetical weakening must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'kernel.randomize_va_space = 2\nkernel.kptr_restrict = 2\nkernel.yama.ptrace_scope = 1\n# kernel.randomize_va_space = 0 — example of bad config\n' > "${CONF}"
+    run_wd
+    # Commented weakening must NOT trigger alert.
+    ! cap | grep -q '"event":"sysctl_hardening_weakened"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: 'kernel.randomize_va_space  =  0' multi-space variant still triggers alert)" {
+    # Attacker may use multi-spaces to evade naive grep-based
+    # detection. Lock whitespace-tolerant parser.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'kernel.randomize_va_space    =    0\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file scan: sysctl.d drop-in axis — weakened sysctl in any of the watched files → alert)" {
+    # /etc/sysctl.d/*.conf drop-ins are honored by systemd-sysctl
+    # alongside /etc/sysctl.conf. Attackers may plant weakening
+    # in drop-in to avoid main file. Lock multi-file axis.
+    CONF2="${TMP}/50-weakening.conf"
+    seed_benign
+    FILES_V="${CONF} ${CONF2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant weakening in drop-in.
+    printf 'kernel.randomize_va_space = 0\n' > "${CONF2}"
+    FILES_V="${CONF} ${CONF2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
