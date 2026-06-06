@@ -196,3 +196,56 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-krb5-plugins -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): krb5-plugins-watchdog does NOT refresh baseline on suspicious-path detection — alert STAYS until operator updates" {
+    # T1574/T1546 GSSAPI/preauth dlopen-load primitive — suspicious-path
+    # alert MUST persist across runs until operator explicitly re-baselines.
+    printf '[plugins]\n  clpreauth = { module = pkinit:/usr/lib/krb5/plugins/preauth/pkinit.so }\n' > "${CONF}"
+    run_wd
+    printf '[plugins]\n  kdcpreauth = { module = evil:/tmp/evil.so }\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file scan: krb5.conf + krb5.conf.d/*.conf drop-in axes — suspicious .so in ANY → alert)" {
+    # MIT krb5 reads BOTH /etc/krb5.conf AND /etc/krb5.conf.d/*.conf.
+    # Attacker may plant in either. Lock multi-file axis.
+    CONF2="${TMP}/krb5-dropin.conf"
+    printf '[plugins]\n  clpreauth = { module = pkinit:/usr/lib/krb5/plugins/preauth/pkinit.so }\n' > "${CONF}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_KRB5_PROFILE="report" \
+    SELFDEF_KRB5_BASELINE="${BASELINE}" \
+    SELFDEF_KRB5_DIRS="${EMPTY}" \
+    SELFDEF_KRB5_FILES="${CONF} ${CONF2}" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant suspicious .so in drop-in.
+    printf '[plugins]\n  kdcpreauth = { module = evil:/tmp/evil.so }\n' > "${CONF2}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_KRB5_PROFILE="report" \
+    SELFDEF_KRB5_BASELINE="${BASELINE}" \
+    SELFDEF_KRB5_DIRS="${EMPTY}" \
+    SELFDEF_KRB5_FILES="${CONF} ${CONF2}" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (writable-root expansion: /dev/shm .so → alert (tmpfs-backed code-load))" {
+    # /dev/shm is tmpfs, world-writable on most distros. Lock coverage.
+    printf '[plugins]\n  kdcpreauth = { module = evil:/dev/shm/p.so }\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: 'module    =    evil:/tmp/evil.so' multi-space variant still triggers alert)" {
+    # Attacker may use multi-spaces to evade naive grep-based
+    # detection. Lock whitespace-tolerant parser.
+    printf '[plugins]\n  kdcpreauth = { module    =    evil:/tmp/evil.so }\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
