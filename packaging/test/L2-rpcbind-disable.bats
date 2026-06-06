@@ -126,3 +126,61 @@ run_wd() {
     run_wd
     grep -q 'systemctl mask rpcbind.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (rpcbind.socket coverage in mask): the .socket variant is masked too (not just .service)" {
+    # rpcbind.socket can re-activate rpcbind.service on demand
+    # via systemd socket activation — both must be masked.
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask rpcbind.socket' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (rpcbind.socket coverage in stop): the .socket variant is stopped + disabled too" {
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop rpcbind.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable rpcbind.socket' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (rpc-statd-notify): stop profile acts on the rpc-statd-notify.service unit too" {
+    # rpc-statd-notify is the rpc-statd companion — both must be
+    # disabled. A regression that drops it would let rpc-statd
+    # come back via notify.
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop rpc-statd-notify.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable rpc-statd-notify.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (rpc-gssd): stop profile acts on rpc-gssd (NFSv4 Kerberos client)" {
+    # rpc-gssd is the NFSv4 Kerberos GSS-API helper. Locks that
+    # the full 5-unit set is acted on.
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop rpc-gssd.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable rpc-gssd.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent mask): re-applying mask fires the same systemctl set" {
+    write_config "mask"
+    run_wd
+    first_log="$(cat "${SYSEOF_LOG}")"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    second_log="$(cat "${SYSEOF_LOG}")"
+    diff <(printf '%s\n' "${first_log}") <(printf '%s\n' "${second_log}") >/dev/null
+}
+
+@test "INVARIANT (nfs-server-active + DRY_RUN): WARN logged but DRY_RUN still suppresses mutation" {
+    write_config "mask"
+    NFS_SERVER_ACTIVE=1 DRY_RUN=1 run_wd
+    ! grep -qE 'systemctl stop|systemctl disable|systemctl mask' "${SYSEOF_LOG}"
+}
+
+@test "emit_status surfaces profile + result in JSON (operator observability)" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"rpcbind-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
