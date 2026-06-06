@@ -16,5 +16,7 @@ else
     exit 2
 fi
 
-SYSCTL_DROPIN="/etc/sysctl.d/50-selfdef-userns.conf"
+# SELFDEF_USERNS_DROPIN added 2026-06-06 for L2 testability — live
+# default unchanged.
+SYSCTL_DROPIN="${SELFDEF_USERNS_DROPIN:-/etc/sysctl.d/50-selfdef-userns.conf}"
 HEADER_MARKER="# managed-by: selfdef unprivileged-userns-baseline"

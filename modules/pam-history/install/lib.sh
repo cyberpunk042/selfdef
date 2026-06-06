@@ -16,17 +16,20 @@ else
     exit 2
 fi
 
-PWHISTORY_CONF="/etc/security/pwhistory.conf"
-BACKUP_DIR="/var/lib/selfdef"
+# SELFDEF_PWHISTORY_CONF + SELFDEF_PWHISTORY_BACKUP_DIR added
+# 2026-06-06 for L2 testability — live defaults unchanged.
+PWHISTORY_CONF="${SELFDEF_PWHISTORY_CONF:-/etc/security/pwhistory.conf}"
+BACKUP_DIR="${SELFDEF_PWHISTORY_BACKUP_DIR:-/var/lib/selfdef}"
 BACKUP_FILE="${BACKUP_DIR}/pam-history-distro-default.bak"
 HEADER_MARKER="# managed-by: selfdef pam-history"
 
-# Detect whether pam_pwhistory.so is wired into the PAM
-# password stack. Same DETECT-AND-NOTICE pattern as
-# pam-pwquality + pam-faillock.
+# SELFDEF_PWHISTORY_PAM_DIR added 2026-06-06 for L2 testability —
+# detect_pam_wiring()'s scan-root is overridable so tests can
+# point at a tmp /etc/pam.d-like directory.
 detect_pam_wiring() {
+    local pam_dir="${SELFDEF_PWHISTORY_PAM_DIR:-/etc/pam.d}"
     local wired_files=()
-    for f in /etc/pam.d/common-password /etc/pam.d/system-auth /etc/pam.d/password-auth; do
+    for f in "${pam_dir}/common-password" "${pam_dir}/system-auth" "${pam_dir}/password-auth"; do
         if [[ -r "$f" ]] && grep -qE '^\s*password\s+\S+\s+pam_pwhistory\.so' "$f"; then
             wired_files+=("$f")
         fi

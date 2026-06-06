@@ -1,0 +1,159 @@
+#!/usr/bin/env bats
+# L2 functional suite for bluetooth-disable.
+#
+# bluetooth-disable closes the Bluetooth attack vector. Two
+# profiles:
+#   mask → stop + disable + mask the bluez user-space stack,
+#          rfkill block the radio, AND modprobe blacklist the
+#          kernel modules (btusb / btintel / btbcm / btmtk /
+#          btrtl / bluetooth) so they can't be auto-loaded via
+#          uevent/coldplug after reboot.
+#   stop → stop + disable bluez services AND rfkill block the
+#          radio, but NO modprobe blacklist (reversible — a
+#          modprobe re-enable + service start brings BT back).
+#
+# Adds SELFDEF_BT_MODPROBE_BLACKLIST env-var (added 2026-06-06)
+# for L2 testability. Live default unchanged.
+#
+# Run with: bats packaging/test/L2-bluetooth-disable.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/bluetooth-disable/install/apply.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/systemctl" <<'SYSEOF'
+#!/usr/bin/env bash
+printf 'systemctl %s\n' "$*" >> "${SYSEOF_LOG}"
+# list-unit-files: pretend every queried unit exists.
+case "$1" in
+    list-unit-files) exit 0 ;;
+esac
+exit 0
+SYSEOF
+    chmod +x "${BIN}/systemctl"
+    cat > "${BIN}/rfkill" <<'RFEOF'
+#!/usr/bin/env bash
+printf 'rfkill %s\n' "$*" >> "${RF_LOG}"
+exit 0
+RFEOF
+    chmod +x "${BIN}/rfkill"
+    export SYSEOF_LOG="${TMP}/systemctl.log"
+    export RF_LOG="${TMP}/rfkill.log"
+    : > "${SYSEOF_LOG}"
+    : > "${RF_LOG}"
+    CONF="${TMP}/bluetooth-disable.toml"
+    MODPROBE_BLACKLIST="${TMP}/selfdef-bluetooth-blacklist.conf"
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+write_config() {
+    printf 'profile = "%s"\n' "$1" > "${CONF}"
+}
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    SYSEOF_LOG="${SYSEOF_LOG}" \
+    RF_LOG="${RF_LOG}" \
+    SELFDEF_DRY_RUN="${DRY_RUN:-0}" \
+    SELFDEF_BLUETOOTH_CONFIG="${CONF}" \
+    SELFDEF_BT_MODPROBE_BLACKLIST="${MODPROBE_BLACKLIST}" \
+    bash "${WD}"
+}
+
+@test "missing config → die" {
+    SELFDEF_BLUETOOTH_CONFIG="${TMP}/missing.toml"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_BLUETOOTH_CONFIG="${SELFDEF_BLUETOOTH_CONFIG}" \
+        SELFDEF_BT_MODPROBE_BLACKLIST="${MODPROBE_BLACKLIST}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"config not readable"* ]]
+}
+
+@test "invalid profile → die" {
+    write_config "exterminate"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_BLUETOOTH_CONFIG="${CONF}" \
+        SELFDEF_BT_MODPROBE_BLACKLIST="${MODPROBE_BLACKLIST}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"profile must be mask|stop"* ]]
+}
+
+@test "stop profile → stops + disables units, fires rfkill block — NO modprobe blacklist file" {
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop bluetooth.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable bluetooth.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask bluetooth' "${SYSEOF_LOG}"
+    grep -q 'rfkill block bluetooth' "${RF_LOG}"
+    ! [ -f "${MODPROBE_BLACKLIST}" ]
+}
+
+@test "mask profile → stops + disables + MASKS units, fires rfkill, writes modprobe blacklist" {
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl stop bluetooth.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable bluetooth.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask bluetooth.service' "${SYSEOF_LOG}"
+    grep -q 'rfkill block bluetooth' "${RF_LOG}"
+    [ -f "${MODPROBE_BLACKLIST}" ]
+}
+
+@test "modprobe blacklist covers the full BT kernel stack (btusb + btintel + btbcm + btmtk + btrtl + bluetooth)" {
+    write_config "mask"
+    run_wd
+    grep -q '^blacklist btusb$' "${MODPROBE_BLACKLIST}"
+    grep -q '^blacklist btintel$' "${MODPROBE_BLACKLIST}"
+    grep -q '^blacklist btbcm$' "${MODPROBE_BLACKLIST}"
+    grep -q '^blacklist btmtk$' "${MODPROBE_BLACKLIST}"
+    grep -q '^blacklist btrtl$' "${MODPROBE_BLACKLIST}"
+    grep -q '^blacklist bluetooth$' "${MODPROBE_BLACKLIST}"
+    # install-/bin/true is the belt-and-suspenders modprobe alias hardening.
+    grep -q '^install btusb /bin/true$' "${MODPROBE_BLACKLIST}"
+    grep -q '^install bluetooth /bin/true$' "${MODPROBE_BLACKLIST}"
+}
+
+@test "modprobe blacklist carries header marker (no timestamp — defeats cmp -s)" {
+    write_config "mask"
+    run_wd
+    grep -q 'managed-by: selfdef bluetooth-disable' "${MODPROBE_BLACKLIST}"
+    # Anti-timestamp invariant (2026-06-06 sweep).
+    ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${MODPROBE_BLACKLIST}"
+}
+
+@test "modprobe blacklist is chmod 0644 (system-config convention)" {
+    write_config "mask"
+    run_wd
+    [ "$(stat -c '%a' "${MODPROBE_BLACKLIST}")" = "644" ]
+}
+
+@test "INVARIANT: idempotent — byte-identical re-install does NOT rewrite blacklist (2026-06-06 idempotency fix)" {
+    write_config "mask"
+    run_wd
+    [ -f "${MODPROBE_BLACKLIST}" ]
+    mtime_before="$(stat -c '%Y' "${MODPROBE_BLACKLIST}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${MODPROBE_BLACKLIST}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT: DRY_RUN does not fire systemctl mutations, rfkill, or write blacklist" {
+    write_config "mask"
+    DRY_RUN=1 run_wd
+    ! grep -q '^systemctl stop' "${SYSEOF_LOG}"
+    ! grep -q '^systemctl disable' "${SYSEOF_LOG}"
+    ! grep -q '^systemctl mask' "${SYSEOF_LOG}"
+    ! grep -q '^rfkill block' "${RF_LOG}"
+    ! [ -f "${MODPROBE_BLACKLIST}" ]
+}
+
+@test "default profile is mask (no profile key — the conservative reboot-survives default)" {
+    : > "${CONF}"
+    run_wd
+    grep -q 'systemctl mask bluetooth.service' "${SYSEOF_LOG}"
+    [ -f "${MODPROBE_BLACKLIST}" ]
+}

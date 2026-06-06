@@ -35,5 +35,7 @@ BT_MODULES=(
     "bluetooth"
 )
 
-MODPROBE_BLACKLIST="/etc/modprobe.d/selfdef-bluetooth-blacklist.conf"
+# SELFDEF_BT_MODPROBE_BLACKLIST added 2026-06-06 for L2 testability —
+# live default unchanged.
+MODPROBE_BLACKLIST="${SELFDEF_BT_MODPROBE_BLACKLIST:-/etc/modprobe.d/selfdef-bluetooth-blacklist.conf}"
 HEADER_MARKER="# managed-by: selfdef bluetooth-disable"

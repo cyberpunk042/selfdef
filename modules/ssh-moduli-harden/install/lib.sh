@@ -16,8 +16,10 @@ else
     exit 2
 fi
 
-MODULI_FILE="/etc/ssh/moduli"
-BACKUP_DIR="/var/lib/selfdef"
+# SELFDEF_MODULI_FILE + SELFDEF_MODULI_BACKUP_DIR added 2026-06-06
+# for L2 testability — live defaults unchanged.
+MODULI_FILE="${SELFDEF_MODULI_FILE:-/etc/ssh/moduli}"
+BACKUP_DIR="${SELFDEF_MODULI_BACKUP_DIR:-/var/lib/selfdef}"
 BACKUP_FILE="${BACKUP_DIR}/ssh-moduli.bak"
 
 # Threshold (minimum modulus bit-size) per profile.
