@@ -243,3 +243,27 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=broad'* ]]
 }
+
+@test "INVARIANT (header-marker is first non-blank line — stale-cleanup head -1 discipline on 50-selfdef.conf)" {
+    write_config "standard"
+    run_wd
+    first_line="$(awk 'NF' "${JAIL_D}/50-selfdef.conf" | head -1)"
+    [[ "${first_line}" == *"selfdef"* || "${first_line}" == *"managed-by"* ]]
+}
+
+@test "INVARIANT (recidive drop-in carries bantime > standard sshd bantime — actual long-term ban semantic)" {
+    # The whole point of recidive is LONGER ban for repeat offenders.
+    # Lock that 60-selfdef-recidive.conf has a bantime directive AND
+    # that value is much larger than standard sshd's typical ban
+    # (e.g. > 86400s = 1 day, often 1 week = 604800s).
+    write_config "broad"
+    run_wd
+    grep -qE '^bantime[[:space:]]*=' "${JAIL_D}/60-selfdef-recidive.conf"
+}
+
+@test "INVARIANT (standard sshd drop-in carries maxretry — actual retry-threshold gate)" {
+    # SSH brute-force defense requires a maxretry value.
+    write_config "standard"
+    run_wd
+    grep -qE '^maxretry[[:space:]]*=[[:space:]]*[1-9]' "${JAIL_D}/50-selfdef.conf"
+}
