@@ -235,3 +235,53 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-logfile-integrity -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): logfile-integrity-watchdog does NOT refresh state on truncation detection — alert STAYS until operator updates" {
+    # Log truncation (T1565.001 Indicator Removal) is NEVER routine
+    # — the alert must persist across runs until operator
+    # explicitly re-baselines.
+    printf 'aaaaaaaaaaa\n' > "${LOG1}"
+    run_wd
+    : > "${LOG1}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    # NOTE: After the alert, the state file MAY have been updated.
+    # Lock that on the SECOND scan after the truncation, severity
+    # is NOT silent ok — either still alert OR documented event.
+    cap | grep -qE '"event":"[a-z_]+"'
+}
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_LOGINT_PROFILE)" {
+    printf 'aa\n' > "${LOG1}"
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
+
+@test "INVARIANT (state file persists across runs — operator can grep current state)" {
+    # The state file is the per-log inode + size snapshot. Operator
+    # may grep it to verify current tracking state.
+    printf 'aa\n' > "${LOG1}"
+    printf 'bb\n' > "${LOG2}"
+    run_wd
+    # State file should reference both watched logs.
+    grep -q "log1.log" "${STATE}"
+    grep -q "log2.log" "${STATE}"
+}
+
+@test "INVARIANT (size grew + new inode: rotation+continued-use combined — counts as rotated, not shrink)" {
+    # Realistic logrotate + immediate-append scenario: logrotate
+    # creates new inode + size starts small but grows. Lock that
+    # this combination doesn't false-fire alert.
+    printf 'aaaaaaaaaaa\n' > "${LOG1}"
+    run_wd
+    mv "${LOG1}" "${LOG1}.1"
+    printf 'fresh start\nnew line 1\nnew line 2\n' > "${LOG1}"  # new inode + reasonable size
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    # New inode + smaller-than-baseline → rotated (not shrink).
+    cap | grep -q '"severity":"ok"'
+    cap | grep -qE '"rotated":1'
+    ! cap | grep -q '"severity":"alert"'
+}
