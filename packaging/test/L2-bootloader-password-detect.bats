@@ -206,3 +206,53 @@ run_wd() {
         ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$f"
     done
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates all 4 files + fires daemon-reload)" {
+    # Operator may rm one of the installed files — apply must rebuild
+    # and re-arm the timer so the bootloader-detect surveillance is restored.
+    write_config "report"
+    run_wd
+    [ -f "${SYSTEMD_DIR}/selfdef-bootloader-password.timer" ]
+    rm -f "${LIBEXEC_DIR}/bootloader-password-detect.sh" \
+          "${SYSTEMD_DIR}/selfdef-bootloader-password.service" \
+          "${SYSTEMD_DIR}/selfdef-bootloader-password.timer" \
+          "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${LIBEXEC_DIR}/bootloader-password-detect.sh" ]
+    [ -f "${SYSTEMD_DIR}/selfdef-bootloader-password.service" ]
+    [ -f "${SYSTEMD_DIR}/selfdef-bootloader-password.timer" ]
+    [ -f "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf" ]
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "enforce"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"bootloader-password-detect"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=enforce'* ]]
+}
+
+@test "INVARIANT (libexec carries GRUB detection axes — multi-distro grub.cfg locations probed)" {
+    # Module-header comment notes "other bootloaders out of scope" —
+    # the libexec is GRUB-focused. Lock the actual coverage: GRUB
+    # primary config + multi-distro EFI variants + user-config file.
+    write_config "report"
+    run_wd
+    libexec="${LIBEXEC_DIR}/bootloader-password-detect.sh"
+    # Core GRUB locations.
+    grep -q '/boot/grub/grub.cfg' "${libexec}"
+    grep -q '/boot/grub2/grub.cfg' "${libexec}"
+    # Multi-distro EFI variants.
+    grep -qE '/boot/efi/EFI/(debian|ubuntu|fedora)/grub.cfg' "${libexec}"
+    # Password directive scanner (the actual check).
+    grep -qE 'password' "${libexec}"
+}
+
+@test "INVARIANT (timer + service header marker — operator-audit-trail)" {
+    write_config "report"
+    run_wd
+    grep -qE '^#.*selfdef|^#.*managed-by' "${SYSTEMD_DIR}/selfdef-bootloader-password.timer"
+    grep -qE '^#.*selfdef|^#.*managed-by' "${SYSTEMD_DIR}/selfdef-bootloader-password.service"
+}
