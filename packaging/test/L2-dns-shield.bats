@@ -166,23 +166,25 @@ run_wd() {
     grep -q '^0\.0\.0\.0 tracker\.example$' "${HOSTS_FILE}"
 }
 
-@test "FUNCTIONAL idempotency — re-render with identical input produces identical BLOCKLIST CONTENT" {
-    # The script's rendered block carries a `rendered=$(date)` comment
-    # line, so byte-equality across runs is impossible (the timestamp
-    # always differs) and /etc/hosts is rewritten on every apply.
-    # Functional idempotency (the actual blocklist content) IS still
-    # guaranteed: every 0.0.0.0 line is byte-identical across runs.
-    # This test locks the FUNCTIONAL invariant; the timestamp-induced
-    # mtime-bump is a known follow-up (would need to either drop the
-    # timestamp from the rendered block or compare content excluding
-    # the metadata line).
+@test "INVARIANT: idempotent — re-render with identical input does NOT re-write /etc/hosts" {
+    # The rendered block omits the timestamp comment (fixed 2026-06-06)
+    # so byte-equality across runs is now guaranteed: /etc/hosts is
+    # NOT re-written on a no-content-change apply. Locks both the
+    # SHA256 byte-equality AND the mtime preservation — the latter
+    # is what watchdogs key on for inventory diffs.
     write_config "base"
     run_wd
-    grep -E '^0\.0\.0\.0 ' "${HOSTS_FILE}" | sort > "${TMP}/before-domains.txt"
+    sha_before="$(sha256sum "${HOSTS_FILE}" | awk '{print $1}')"
+    mtime_before="$(stat -c '%Y' "${HOSTS_FILE}")"
     sleep 1
     run_wd
-    grep -E '^0\.0\.0\.0 ' "${HOSTS_FILE}" | sort > "${TMP}/after-domains.txt"
-    cmp -s "${TMP}/before-domains.txt" "${TMP}/after-domains.txt"
+    sha_after="$(sha256sum "${HOSTS_FILE}" | awk '{print $1}')"
+    mtime_after="$(stat -c '%Y' "${HOSTS_FILE}")"
+    [ "${sha_before}" = "${sha_after}" ]
+    # mtime preserved — the no-change apply doesn't bump the file's
+    # modification time, so downstream watchdogs (hosts-file-watchdog)
+    # don't fire spurious "changed" findings.
+    [ "${mtime_before}" = "${mtime_after}" ]
 }
 
 @test "INVARIANT: DRY_RUN does not modify /etc/hosts" {

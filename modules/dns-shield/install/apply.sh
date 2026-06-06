@@ -62,11 +62,18 @@ fi
 
 count=$(wc -l < "$tmp_merged" | tr -d ' ')
 
-# Render the /etc/hosts block.
+# Render the /etc/hosts block. The metadata comment carries profile
+# + count but NOT a render-timestamp — including the timestamp would
+# defeat idempotency (the timestamp differs on every apply, forcing
+# a re-write of /etc/hosts even when the actual blocklist content
+# hasn't changed, bumping the mtime and tripping watchdog
+# inventory diffs unnecessarily). The cmp -s idempotency check
+# below depends on the rendered block being byte-stable across
+# runs with identical input.
 tmp_block="$(mktemp)"
 {
     echo "$DNS_SHIELD_BEGIN"
-    echo "# profile=$PROFILE count=$count rendered=$(date -u +%FT%TZ)"
+    echo "# profile=$PROFILE count=$count"
     while IFS= read -r domain; do
         # Bare + www. variants.
         echo "0.0.0.0 $domain"
