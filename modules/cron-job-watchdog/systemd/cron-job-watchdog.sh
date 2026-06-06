@@ -22,6 +22,15 @@ set -u
 
 PROFILE="${SELFDEF_CRONJOBS_PROFILE:-report}"
 BASELINE="${SELFDEF_CRONJOBS_BASELINE:-/var/lib/selfdef/cron-jobs-baseline.tsv}"
+# SELFDEF_CRONJOBS_SPOOL_DIRS + SELFDEF_CRONJOBS_ETC_CRONTAB +
+# SELFDEF_CRONJOBS_CRON_DIRS added 2026-06-06 for L2 delta-
+# testability. Live defaults unchanged. systemctl calls are
+# mocked via PATH override in tests.
+_default_spool_dirs="/var/spool/cron/crontabs /var/spool/cron"
+SPOOL_DIRS="${SELFDEF_CRONJOBS_SPOOL_DIRS:-${_default_spool_dirs}}"
+ETC_CRONTAB="${SELFDEF_CRONJOBS_ETC_CRONTAB:-/etc/crontab}"
+_default_cron_dirs="/etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly"
+CRON_DIRS="${SELFDEF_CRONJOBS_CRON_DIRS:-${_default_cron_dirs}}"
 
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
@@ -36,7 +45,7 @@ emit_file() {
 }
 
 # User crontabs (Debian + RHEL locations).
-for spool in /var/spool/cron/crontabs /var/spool/cron; do
+for spool in ${SPOOL_DIRS}; do
     [[ -d "$spool" ]] || continue
     for f in "$spool"/*; do
         [[ -e "$f" ]] || continue
@@ -45,8 +54,8 @@ for spool in /var/spool/cron/crontabs /var/spool/cron; do
 done
 
 # System crontab + cron.d + periodic dirs.
-emit_file "etc-crontab" "/etc/crontab"
-for d in /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly; do
+emit_file "etc-crontab" "${ETC_CRONTAB}"
+for d in ${CRON_DIRS}; do
     [[ -d "$d" ]] || continue
     for f in "$d"/*; do
         [[ -f "$f" ]] || continue
