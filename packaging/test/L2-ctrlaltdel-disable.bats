@@ -167,3 +167,48 @@ run_wd() {
     run_wd
     grep -qE '^\[Login\]' "${LOGIND_DROPIN}"
 }
+
+@test "INVARIANT (mask profile does NOT write logind drop-in — the two profiles are mutually-exclusive mechanisms)" {
+    # mask blocks ALL Ctrl+Alt+Del presses via target masking;
+    # burst-guard allows single press + blocks 7-press burst via
+    # logind drop-in. These are different mechanisms, never
+    # composed. Lock that mask doesn't accidentally write the
+    # drop-in too.
+    write_config "mask"
+    run_wd
+    ! [ -f "${LOGIND_DROPIN}" ]
+    grep -q 'systemctl mask ctrl-alt-del.target' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl kill -s HUP systemd-logind' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (logind drop-in carries managed-by header marker — operator audit trail)" {
+    # Header marker enables stale-cleanup head -1 grep for
+    # ownership identification. Operator audit trail too —
+    # 'who put this drop-in here'.
+    write_config "burst-guard"
+    run_wd
+    grep -qE '^#.*selfdef.*ctrlaltdel|^#.*managed-by.*selfdef' "${LOGIND_DROPIN}"
+}
+
+@test "INVARIANT (burst-guard re-arm after operator deletion: re-creates drop-in + fires logind reload)" {
+    # Operator deletes the drop-in out-of-band. Next apply re-
+    # creates with intact content + fires logind reload to apply
+    # live.
+    write_config "burst-guard"
+    run_wd
+    [ -f "${LOGIND_DROPIN}" ]
+    rm -f "${LOGIND_DROPIN}"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${LOGIND_DROPIN}" ]
+    grep -qE '^CtrlAltDelBurstAction=none' "${LOGIND_DROPIN}"
+    grep -q 'systemctl kill -s HUP systemd-logind' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"ctrlaltdel-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
