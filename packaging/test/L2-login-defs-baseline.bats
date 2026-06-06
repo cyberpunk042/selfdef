@@ -218,3 +218,30 @@ run_wd() {
     run_wd
     grep -qE '^# managed-by: selfdef login-defs-baseline' "${LEGACY_LOGIN_DEFS}"
 }
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "strict"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"login-defs-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=strict'* ]]
+}
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates drop-in + re-fences legacy block)" {
+    write_config "standard"
+    run_wd
+    [ -f "${DROPIN}" ]
+    rm -f "${DROPIN}"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -q 'managed-by: selfdef login-defs-baseline' "${DROPIN}"
+    grep -q 'managed-by: selfdef login-defs-baseline' "${LEGACY_LOGIN_DEFS}"
+}
+
+@test "INVARIANT (strict carries ENCRYPT_METHOD SHA512 — strongest available hash algorithm)" {
+    # Even if MIN_ROUNDS drifts, ENCRYPT_METHOD=SHA512 must hold to
+    # ensure passwords are hashed with the strongest algorithm.
+    write_config "strict"
+    run_wd
+    grep -qE 'ENCRYPT_METHOD[[:space:]]+SHA512' "${DROPIN}"
+}
