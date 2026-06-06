@@ -228,3 +228,41 @@ EOF
         *) fail "drop-in filename must follow 50-selfdef-* pattern" ;;
     esac
 }
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates drop-in)" {
+    write_config "standard"
+    run_wd
+    [ -f "${DST}" ]
+    rm -f "${DST}"
+    run_wd
+    [ -f "${DST}" ]
+    grep -qE 'AllowUnauthenticated[[:space:]]*"?false"?' "${DST}"
+}
+
+@test "INVARIANT (drop-in carries selfdef-identifier header — operator audit trail)" {
+    # APT conf uses // for line comments. The header is the
+    # operator-readable selfdef-managed marker.
+    write_config "standard"
+    run_wd
+    grep -qE '^(//|#).*selfdef.*package-trust|^(//|#).*managed-by.*selfdef' "${DST}"
+}
+
+@test "INVARIANT (strict profile carries pinning/repo-restriction directives — stronger than standard)" {
+    # Strict (CIS/STIG) profile must carry pinning or repo-
+    # restriction directives beyond just 'no AllowUnauthenticated'.
+    # Lock that strict content includes some additional directive
+    # like APT::Default-Release or stricter Acquire:: settings.
+    write_config "strict"
+    run_wd
+    # Strict file content must mention at least one stricter
+    # directive than standard.
+    grep -qiE 'AllowDowngradeToInsecureRepositories|AllowInsecureRepositories|Default-Release|Verbose' "${DST}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"package-trust-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=standard'* ]]
+}
