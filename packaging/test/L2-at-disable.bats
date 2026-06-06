@@ -196,3 +196,46 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=mask'* ]]
 }
+
+@test "INVARIANT (mask is superset of stop: stop+disable+mask sequence; stop omits mask)" {
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl stop atd.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable atd.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop atd.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable atd.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (atd.service present + JSON status=ok contract — operator dashboard signals successful neutralization)" {
+    # Unlike multi-unit modules (avahi/nscd/rsh-telnet), at-disable
+    # is single-unit so emit_status doesn't carry an explicit
+    # acted=N counter. Lock the equivalent contract: status=ok +
+    # profile surfaced for the success case.
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+    # Mask actions actually fired (success signal).
+    grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (no auto-uninstall: at package NEVER auto-removed; only stop+disable+mask)" {
+    write_config "mask"
+    run_wd
+    ! grep -qE 'apt|dnf|yum|rpm' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (mask order: stop → disable → mask)" {
+    write_config "mask"
+    run_wd
+    stop_line="$(grep -n 'systemctl stop atd.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_line="$(grep -n 'systemctl disable atd.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_line="$(grep -n 'systemctl mask atd.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_line}" -lt "${disable_line}" ]
+    [ "${disable_line}" -lt "${mask_line}" ]
+}
