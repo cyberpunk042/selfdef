@@ -204,3 +204,52 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-' "${DROPIN}"
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates drop-in + fires sysctl -w)" {
+    # Operator may rm the drop-in — apply must rebuild and re-apply
+    # live so kernel state is restored.
+    write_config "strict"
+    run_wd
+    [ -f "${DROPIN}" ]
+    rm -f "${DROPIN}"
+    : > "${SCTL_LOG}"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -q 'profile=strict' "${DROPIN}"
+    grep -q 'sysctl -w kernel.yama.ptrace_scope=2' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (header-marker is first non-blank line — stale-cleanup head -1 discipline)" {
+    write_config "strict"
+    run_wd
+    first_line="$(awk 'NF' "${DROPIN}" | head -1)"
+    [[ "${first_line}" == *"selfdef kernel-yama-baseline"* ]]
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "paranoid" "true"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"kernel-yama-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=paranoid'* ]]
+}
+
+@test "INVARIANT (refuse-to-brick precedence over profile-key — paranoid w/o ack dies even after prior strict install)" {
+    # Operator installs strict first, then flips to paranoid but
+    # FORGETS to set acknowledge_paranoid. apply MUST refuse AND
+    # leave the prior strict drop-in unchanged — no silent
+    # escalation to ptrace_scope=3 which is IRREVERSIBLE-until-reboot.
+    write_config "strict"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -q 'profile=strict' "${DROPIN}"
+    # Operator sets paranoid w/o ack.
+    write_config "paranoid" "false"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_YAMA_CONFIG="${CONF}" \
+        SELFDEF_YAMA_DROPIN="${DROPIN}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    # Prior strict drop-in preserved at profile=strict.
+    grep -q 'profile=strict' "${DROPIN}"
+}
