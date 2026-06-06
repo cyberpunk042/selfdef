@@ -126,3 +126,54 @@ run_wd() {
     # state. Real systemctl is idempotent and our fake always exits 0.
     grep -q 'systemctl mask avahi-daemon.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (.socket+.service dual coverage in stop): both units are stopped + disabled (avahi.socket can re-activate .service)" {
+    # avahi-daemon.socket can re-activate avahi-daemon.service on
+    # demand via systemd socket activation. If only .service is
+    # touched, .socket brings it right back. Both must be acted on.
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop avahi-daemon.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable avahi-daemon.socket' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (.socket+.service dual coverage in mask): both units are masked" {
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask avahi-daemon.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask avahi-daemon.socket' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent stop): re-applying stop profile fires the same systemctl set across both applies" {
+    write_config "stop"
+    run_wd
+    first_log="$(cat "${SYSEOF_LOG}")"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    second_log="$(cat "${SYSEOF_LOG}")"
+    diff <(printf '%s\n' "${first_log}") <(printf '%s\n' "${second_log}") >/dev/null
+}
+
+@test "INVARIANT (idempotent mask): re-applying mask profile fires the same set + does not escalate scope" {
+    write_config "mask"
+    run_wd
+    first_log="$(cat "${SYSEOF_LOG}")"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    second_log="$(cat "${SYSEOF_LOG}")"
+    diff <(printf '%s\n' "${first_log}") <(printf '%s\n' "${second_log}") >/dev/null
+}
+
+@test "emit_status surfaces profile + result in JSON (operator observability)" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"avahi-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
+
+@test "avahi not present + DRY_RUN=1 → still no mutation (dry-run + detect short-circuit compose correctly)" {
+    write_config "mask"
+    DRY_RUN=1 AVAHI_PRESENT=0 run_wd
+    ! grep -qE 'systemctl stop|systemctl disable|systemctl mask' "${SYSEOF_LOG}"
+}
