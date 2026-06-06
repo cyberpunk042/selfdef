@@ -102,3 +102,96 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — capability-grant inventory enumerates priv-elevated users)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (dangerous-cap detect): cap_setuid grant → alert / capability_conf_dangerous_grant" {
+    seed_benign
+    run_wd
+    printf 'cap_net_raw netuser\ncap_setuid evil\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (dangerous-cap detect): cap_dac_override grant → alert" {
+    seed_benign
+    run_wd
+    printf 'cap_net_raw netuser\ncap_dac_override evil\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (dangerous-cap detect): cap_sys_ptrace grant → alert" {
+    seed_benign
+    run_wd
+    printf 'cap_net_raw netuser\ncap_sys_ptrace evil\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (dangerous-cap detect): cap_sys_module grant → alert" {
+    seed_benign
+    run_wd
+    printf 'cap_net_raw netuser\ncap_sys_module evil\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (pre-existing dangerous grant): baseline_initial fires alert if capability.conf already has a dangerous grant" {
+    # Like access-conf, locks the install-time-vet contract.
+    printf 'cap_setuid root-admin\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (existing dangerous grant is NOT re-alerted): same grant in baseline + current → ok / intact" {
+    # The watchdog scans only the ADDED set for the dangerous-
+    # grant alert; pre-existing grants don't re-trigger every
+    # scan. Locks the no-spurious-re-alert contract.
+    printf 'cap_setuid sysadmin\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"capability_conf_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "DELTA detect — REMOVED grant (operator pruning) → warn / capability_conf_changed" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '' > "${CONF}"                               # remove all grants
+    run_wd
+    cap | grep -qE '"severity":"(warn|ok)"'             # at minimum, not alert
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-capability-conf -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (auto-trust): capability-conf-watchdog DOES auto-refresh the baseline" {
+    # CONTRAST against the no-auto-trust family. capability.conf
+    # changes ARE common operator action (deploying a new capable
+    # service). The watchdog flags the delta for THIS run; the
+    # baseline catches up on the next.
+    seed_benign
+    run_wd
+    printf 'cap_net_bind_service nginx\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — warn
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline refreshed
+    cap | grep -q '"event":"capability_conf_intact"'
+}
