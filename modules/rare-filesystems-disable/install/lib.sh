@@ -16,7 +16,7 @@ else
     exit 2
 fi
 
-MODPROBE_FILE="/etc/modprobe.d/selfdef-rare-filesystems-blacklist.conf"
+MODPROBE_FILE="${SELFDEF_RAREFS_MODPROBE_FILE:-/etc/modprobe.d/selfdef-rare-filesystems-blacklist.conf}"
 HEADER_MARKER="# managed-by: selfdef rare-filesystems-disable"
 
 BASELINE_MODS=(cramfs freevxfs jffs2 hfs hfsplus udf ksmbd)
