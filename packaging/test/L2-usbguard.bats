@@ -1,0 +1,184 @@
+#!/usr/bin/env bats
+# L2 functional suite for usbguard.
+#
+# usbguard pins the USB-allow-list — kernel-level enforcement of
+# "only known devices are allowed to register". Blocks the entire
+# class of USB-implant attacks (bad-USB keyboards, malicious
+# storage devices, USB-Ethernet devices that redirect DNS, etc.).
+#
+# Profiles:
+#   permissive → policy logs new devices but allows everything
+#                (the operator-baseline-collection phase)
+#   strict     → require operator-baseline rules; reject anything
+#                outside the baseline (the enforcement phase)
+#
+# CRITICAL INVARIANTS this suite locks:
+#   - strict profile REFUSES TO INSTALL if operator-baseline is
+#     missing or empty (refuse-to-brick: empty baseline + strict
+#     = locked-out keyboard + mouse).
+#   - Idempotent: byte-identical re-install fires NO usbguard
+#     restart (timestamp-removal fix from ec1d60a locked here —
+#     usbguard restart flushes in-memory authorization state).
+#   - DRY_RUN protects rules + daemon drop-in + restart.
+#   - rules.conf chmod 0600 (operator-private — rules MAY contain
+#     sensitive device IDs).
+#
+# Uses 5 env-var overrides (already present) for L2 testability.
+#
+# Run with: bats packaging/test/L2-usbguard.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/usbguard/install/apply.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/systemctl" <<'SYSEOF'
+#!/usr/bin/env bash
+printf 'systemctl %s\n' "$*" >> "${SYSEOF_LOG}"
+exit 0
+SYSEOF
+    chmod +x "${BIN}/systemctl"
+    export SYSEOF_LOG="${TMP}/systemctl.log"
+    : > "${SYSEOF_LOG}"
+    CONF="${TMP}/usbguard.toml"
+    RULES_DST="${TMP}/rules.conf"
+    DAEMON_DROPIN_DIR="${TMP}/usbguard-daemon.conf.d"
+    OPERATOR_DIR="${TMP}/usbguard-operator"
+    BASELINE_FILE="${OPERATOR_DIR}/operator-baseline.rules"
+    mkdir -p "${OPERATOR_DIR}" "${DAEMON_DROPIN_DIR}"
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+write_config() {
+    printf 'profile = "%s"\n' "$1" > "${CONF}"
+}
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    SYSEOF_LOG="${SYSEOF_LOG}" \
+    SELFDEF_DRY_RUN="${DRY_RUN:-0}" \
+    SELFDEF_USBGUARD_CONFIG="${CONF}" \
+    SELFDEF_USBGUARD_RULES_FILE="${RULES_DST}" \
+    SELFDEF_USBGUARD_DROPIN_DIR="${DAEMON_DROPIN_DIR}" \
+    SELFDEF_USBGUARD_OPERATOR_DIR="${OPERATOR_DIR}" \
+    SELFDEF_USBGUARD_BASELINE="${BASELINE_FILE}" \
+    bash "${WD}"
+}
+
+@test "missing config → die" {
+    SELFDEF_USBGUARD_CONFIG="${TMP}/missing.toml"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_USBGUARD_CONFIG="${SELFDEF_USBGUARD_CONFIG}" \
+        SELFDEF_USBGUARD_RULES_FILE="${RULES_DST}" \
+        SELFDEF_USBGUARD_DROPIN_DIR="${DAEMON_DROPIN_DIR}" \
+        SELFDEF_USBGUARD_OPERATOR_DIR="${OPERATOR_DIR}" \
+        SELFDEF_USBGUARD_BASELINE="${BASELINE_FILE}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"config not readable"* ]]
+}
+
+@test "invalid profile → die" {
+    write_config "exterminate"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_USBGUARD_CONFIG="${CONF}" \
+        SELFDEF_USBGUARD_RULES_FILE="${RULES_DST}" \
+        SELFDEF_USBGUARD_DROPIN_DIR="${DAEMON_DROPIN_DIR}" \
+        SELFDEF_USBGUARD_OPERATOR_DIR="${OPERATOR_DIR}" \
+        SELFDEF_USBGUARD_BASELINE="${BASELINE_FILE}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"profile must be permissive|strict"* ]]
+}
+
+@test "INVARIANT: strict profile + missing baseline → die (refuse-to-brick)" {
+    write_config "strict"
+    # No baseline file.
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_USBGUARD_CONFIG="${CONF}" \
+        SELFDEF_USBGUARD_RULES_FILE="${RULES_DST}" \
+        SELFDEF_USBGUARD_DROPIN_DIR="${DAEMON_DROPIN_DIR}" \
+        SELFDEF_USBGUARD_OPERATOR_DIR="${OPERATOR_DIR}" \
+        SELFDEF_USBGUARD_BASELINE="${BASELINE_FILE}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"requires non-empty baseline"* ]]
+    # rules.conf MUST NOT be installed.
+    ! [ -f "${RULES_DST}" ]
+}
+
+@test "INVARIANT: strict profile + EMPTY baseline → die (refuse-to-brick)" {
+    write_config "strict"
+    : > "${BASELINE_FILE}"     # baseline exists but empty
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_USBGUARD_CONFIG="${CONF}" \
+        SELFDEF_USBGUARD_RULES_FILE="${RULES_DST}" \
+        SELFDEF_USBGUARD_DROPIN_DIR="${DAEMON_DROPIN_DIR}" \
+        SELFDEF_USBGUARD_OPERATOR_DIR="${OPERATOR_DIR}" \
+        SELFDEF_USBGUARD_BASELINE="${BASELINE_FILE}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"requires non-empty baseline"* ]]
+}
+
+@test "permissive profile installs rules.conf + daemon drop-in + restarts usbguard" {
+    write_config "permissive"
+    run_wd
+    [ -f "${RULES_DST}" ]
+    [ -f "${DAEMON_DROPIN_DIR}/50-selfdef.conf" ]
+    grep -q 'profile=permissive' "${RULES_DST}"
+    grep -q 'AuditBackend=LinuxAudit' "${DAEMON_DROPIN_DIR}/50-selfdef.conf"
+    grep -q 'systemctl restart usbguard' "${SYSEOF_LOG}"
+}
+
+@test "strict profile WITH non-empty baseline installs rules with baseline body + strict tail" {
+    write_config "strict"
+    printf '%s\n' 'allow id 1d6b:0002  # known root hub' > "${BASELINE_FILE}"
+    run_wd
+    [ -f "${RULES_DST}" ]
+    grep -q 'profile=strict' "${RULES_DST}"
+    grep -q 'operator baseline' "${RULES_DST}"
+    grep -q 'allow id 1d6b:0002' "${RULES_DST}"
+    grep -q 'selfdef strict.conf' "${RULES_DST}"
+}
+
+@test "INVARIANT: rules.conf is chmod 0600 (operator-private)" {
+    write_config "permissive"
+    run_wd
+    [ "$(stat -c '%a' "${RULES_DST}")" = "600" ]
+}
+
+@test "INVARIANT: idempotent — byte-identical re-install fires NO usbguard restart" {
+    write_config "permissive"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    run_wd
+    # No restart = no in-memory authorization-state flush.
+    ! grep -q 'systemctl restart usbguard' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT: profile change permissive → strict (with baseline) rewrites rules + restarts" {
+    write_config "permissive"
+    run_wd
+    printf '%s\n' 'allow id 1d6b:0002' > "${BASELINE_FILE}"
+    write_config "strict"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'profile=strict' "${RULES_DST}"
+    grep -q 'systemctl restart usbguard' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT: DRY_RUN does not install rules / drop-in or restart" {
+    write_config "permissive"
+    DRY_RUN=1 run_wd
+    ! [ -f "${RULES_DST}" ]
+    ! [ -f "${DAEMON_DROPIN_DIR}/50-selfdef.conf" ]
+    ! grep -q 'systemctl restart' "${SYSEOF_LOG}"
+}
+
+@test "default profile is permissive (no profile key — safe baseline-collection default)" {
+    : > "${CONF}"
+    run_wd
+    grep -q 'profile=permissive' "${RULES_DST}"
+}
