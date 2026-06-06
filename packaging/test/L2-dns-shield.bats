@@ -278,3 +278,38 @@ EOF
     end_line=$(grep -nE '^# === selfdef dns-shield END' "${HOSTS_FILE}" | head -1 | cut -d: -f1)
     [ "${end_line}" -gt "${begin_line}" ]
 }
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "strict"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"dns-shield"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=strict'* ]]
+}
+
+@test "INVARIANT (allowlist with comment line is respected — comment-skip applies to allowlist too)" {
+    # allowlist file uses same # comment convention as operator file.
+    # Lock that allowlist comments don't accidentally subtract an empty
+    # entry (no-op) but don't accidentally PASS the comment as a domain.
+    write_config "base"
+    cat > "${ALLOW_FILE}" <<'EOF'
+# allowlist file
+ads.example
+# comment again
+EOF
+    run_wd
+    ! grep -q '^0\.0\.0\.0 ads\.example$' "${HOSTS_FILE}"
+    # tracker.example NOT in allowlist, should still be blocked.
+    grep -q '^0\.0\.0\.0 tracker\.example$' "${HOSTS_FILE}"
+}
+
+@test "INVARIANT (operator additions deduplicate with strict-list — same domain in operator + strict renders ONCE)" {
+    # In strict profile, if operator additions include a domain that
+    # strict.txt already has, the merged result must render that domain
+    # ONCE (not twice). Locks dedup across all sources.
+    write_config "strict"
+    printf '%s\n' 'analytics.example' > "${OPERATOR_FILE}"      # already in strict.txt
+    run_wd
+    n=$(grep -c '^0\.0\.0\.0 analytics\.example$' "${HOSTS_FILE}")
+    [ "${n}" = "1" ]
+}
