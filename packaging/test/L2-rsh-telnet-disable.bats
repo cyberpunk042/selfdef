@@ -174,3 +174,52 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=mask'* ]]
 }
+
+@test "INVARIANT (mask is superset of stop: mask = stop + disable + mask; stop omits mask step)" {
+    # Architectural contract identical to avahi/nscd:
+    # mask supersedes stop. Verify behavioral split.
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    grep -q 'systemctl stop telnet.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable telnet.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask telnet.socket' "${SYSEOF_LOG}"
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    LEGACY_PRESENT=1 run_wd
+    grep -q 'systemctl stop telnet.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable telnet.socket' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask telnet' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (acted=14 when all legacy units present): full coverage count surfaces" {
+    write_config "mask"
+    output="$(LEGACY_PRESENT=1 run_wd 2>&1)"
+    [[ "${output}" == *'acted=14'* ]]
+}
+
+@test "INVARIANT (acted=0 + no-op when no legacy units present — healthy modern host has zero)" {
+    write_config "mask"
+    output="$(LEGACY_PRESENT=0 run_wd 2>&1)"
+    [[ "${output}" == *'no-op'* ]] || [[ "${output}" == *'acted=0'* ]]
+}
+
+@test "INVARIANT (legacy units NEVER auto-uninstalled — only stop+disable+mask; package removal is operator decision)" {
+    # The module's contract is to neutralize, not uninstall.
+    # 'systemctl mask' makes the unit unloadable; the package
+    # itself is left alone. Operator may want package removal
+    # via apt/dnf separately.
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    # No apt/dnf/yum/rpm removal calls.
+    ! grep -qE 'apt|dnf|yum|rpm' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (mask order per unit: stop before disable before mask — terminate-then-clear-then-gate)" {
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    stop_line="$(grep -n 'systemctl stop telnet.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_line="$(grep -n 'systemctl disable telnet.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_line="$(grep -n 'systemctl mask telnet.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_line}" -lt "${disable_line}" ]
+    [ "${disable_line}" -lt "${mask_line}" ]
+}
