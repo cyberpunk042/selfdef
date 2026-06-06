@@ -16,7 +16,7 @@ else
     exit 2
 fi
 
-SYSCTL_DROPIN="/etc/sysctl.d/50-selfdef-yama.conf"
+SYSCTL_DROPIN="${SELFDEF_YAMA_DROPIN:-/etc/sysctl.d/50-selfdef-yama.conf}"
 HEADER_MARKER="# managed-by: selfdef kernel-yama-baseline"
 
 profile_to_value() {
