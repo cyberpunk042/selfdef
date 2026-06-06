@@ -185,3 +185,55 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-securetty -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (auto-trust): securetty-watchdog DOES auto-refresh baseline on pts-widen — sister-pattern with access-conf/nfs-exports families" {
+    # CONTRAST against no-auto-trust family. After operator
+    # re-baselines, the alert clears for the next run. Lock the
+    # auto-trust classification.
+    seed_benign
+    run_wd
+    printf 'tty1\ntty2\nttyS0\npts/0\n' > "${SECURETTY}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline refreshed → ok
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (commented pts entry NOT flagged: # prefix filtered)" {
+    # An operator note about a future pts entry must not surface
+    # as a real widening event.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'tty1\ntty2\nttyS0\n# pts/0 — future, not yet active\n' > "${SECURETTY}"
+    run_wd
+    ! cap | grep -q '"event":"securetty_widened"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (file removed since baseline → alert PERSISTS — fail-open persistence)" {
+    # When the file is removed since baseline (fail-open), the
+    # alert MUST persist across runs since there's no file to
+    # restore to baseline; operator must manually re-create.
+    seed_benign
+    run_wd
+    rm -f "${SECURETTY}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"securetty_removed"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: 'pts/0  ' with trailing whitespace still triggers alert)" {
+    # Attacker may use trailing whitespace to evade detection.
+    # The parser must normalize whitespace.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'tty1\ntty2\nttyS0\npts/0   \n' > "${SECURETTY}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
