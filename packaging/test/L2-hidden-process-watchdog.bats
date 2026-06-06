@@ -179,3 +179,42 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # Empty sample is "" not "null" or absent.
     cap | grep -qE '"hidden_sample":""'
 }
+
+@test "INVARIANT (PROBE_CAP=0 + report → exit 0; degenerate empty alive-set doesn't false-fire report mode)" {
+    # Parallel to enforce; report should also not fail on degenerate
+    # empty alive-set.
+    PROBE_CAP=0 PROFILE=report run_wd
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (profile default is report when SELFDEF_HIDDENPROC_PROFILE unset — safe log-only default)" {
+    # The default profile is the conservative log-only mode.
+    # Lock against a regression that silently defaults to enforce.
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_HIDDENPROC_CAP=50 \
+        bash "${WD}"
+    cap | grep -q '"profile":"report"'
+}
+
+@test "INVARIANT (pids_visible ≥ 1 always on real host: PID 1 init MUST always be in visible set)" {
+    # /proc/1 (init) always exists on a Linux host. readdir(/proc)
+    # must always return at least 1. Locks against a regression
+    # that breaks readdir enumeration.
+    run_wd
+    line="$(cap)"
+    visible=$(printf '%s' "${line}" | grep -oE '"pids_visible":[0-9]+' | head -1 | grep -oE '[0-9]+')
+    [ "${visible}" -ge 1 ]
+}
+
+@test "INVARIANT (tag is consistently 'selfdef-hidden-process' — single canonical tag, no variants)" {
+    # Some regression patterns introduce variant tags
+    # (selfdef_hidden_process / selfdef-hiddenproc / etc.) which
+    # break the downstream Sigma rule + JSON-line consumer that
+    # filters on the exact tag string.
+    run_wd
+    # MAIN tag is exactly 'selfdef-hidden-process' — no underscore
+    # variant, no shortened variant.
+    cap | grep -q '^-t selfdef-hidden-process'
+    ! cap | grep -q 'selfdef_hidden_process'
+    ! cap | grep -q 'selfdef-hiddenproc'
+}
