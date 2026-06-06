@@ -241,3 +241,44 @@ seed_benign() {
         bash "${WD}"
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (whitespace tolerance: '+ : backdoor : ALL' with extra spaces still triggers alert)" {
+    # Attacker may use multi-spaces to evade naive grep. The access.conf
+    # format is ' : '-separated; lock that the parser is tolerant.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '+    :    backdoor    :    ALL\n- : ALL : ALL\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (multi-broad-permit detection: 3+ broad permits all surface in suspicious_sample)" {
+    # An attacker may stack multiple backdoor accounts. All MUST
+    # surface in the suspicious sample (operator triage payload).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '+ : root : LOCAL\n+ : bd1 : ALL\n+ : bd2 : ALL\n+ : bd3 : ALL\n- : ALL : ALL\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    # At least one of the backdoor accounts appears in the sample.
+    cap | grep -qE 'bd[1-3]'
+}
+
+@test "INVARIANT (auto-trust applies to broad permits too: alert fires for THIS run, baseline catches up on next)" {
+    # access-conf-watchdog is auto-trust per the existing test —
+    # this lock specifically covers broad-permit-alert variant:
+    # operator deliberately adds a broad permit (e.g. for new
+    # remote-admin service); alert fires for THIS run, but baseline
+    # refreshes so next run reports intact.
+    seed_benign
+    run_wd
+    printf '+ : root : LOCAL\n+ : ops-admin : ALL\n- : ALL : ALL\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    cap | grep -q '"severity":"alert"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline refreshed
+    cap | grep -q '"event":"access_conf_intact"'
+}
