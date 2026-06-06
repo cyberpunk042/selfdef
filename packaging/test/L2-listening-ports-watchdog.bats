@@ -321,3 +321,56 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # All lines have exactly 1 TAB (2 fields).
     awk -F'\t' '{if(NF!=2) bad=1} END{exit bad?1:0}' "${BASELINE}"
 }
+
+@test "INVARIANT (same-port different-proto: 0.0.0.0:53/tcp and 0.0.0.0:53/udp are tracked as 2 distinct listeners)" {
+    # DNS listeners (port 53) commonly run on BOTH tcp + udp.
+    # Same port-number but different proto must be tracked as
+    # 2 distinct baseline entries — losing the protocol distinction
+    # would let an attacker swap tcp:80 for udp:80 silently.
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    # Add DNS on both protos. Now total: tcp{22,53} udp{53} = 3 listeners
+    # of which 2 are new (tcp:53 + udp:53) — should warn.
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:53')"
+    udp="$(mk_ss_lines '0.0.0.0:53')"
+    mk_ss "${tcp}" "${udp}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"added":2'                          # 2 distinct entries
+}
+
+@test "INVARIANT (sample cap at 8: more than 8 added listeners surface in sample[] truncated, count NOT truncated)" {
+    # Operator dashboard JSON budget: sample = first 8 listeners.
+    # The 'added' count must reflect the TRUE count.
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    # Now add 12 new listeners — true count surfaces, sample truncated.
+    new_list='0.0.0.0:22,0.0.0.0:1001,0.0.0.0:1002,0.0.0.0:1003,0.0.0.0:1004,0.0.0.0:1005,0.0.0.0:1006,0.0.0.0:1007,0.0.0.0:1008,0.0.0.0:1009,0.0.0.0:1010,0.0.0.0:1011,0.0.0.0:1012'
+    tcp="$(mk_ss_lines "${new_list}")"
+    mk_ss "${tcp}" ""
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"added":1[0-9]'                       # 12+ adds
+    cap | grep -q '"event":"mass_new_listeners"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (port:address compound: same port, different bind-address — 127.0.0.1:631 vs 0.0.0.0:631 are 2 distinct listeners)" {
+    # Bind-address matters for the attacker model — 127.0.0.1:631
+    # is loopback-only; 0.0.0.0:631 is wildcard (potentially-internet-
+    # facing). A listener flipping from 127.0.0.1:631 to 0.0.0.0:631
+    # MUST surface as a delta (remove old + add new), not as no-delta.
+    tcp="$(mk_ss_lines '0.0.0.0:22,127.0.0.1:631')"
+    mk_ss "${tcp}" ""
+    run_wd
+    # Flip 127.0.0.1:631 → 0.0.0.0:631 (exposure-surface change).
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:631')"
+    mk_ss "${tcp}" ""
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"added":1'
+    cap | grep -qE '"removed":1'
+}
