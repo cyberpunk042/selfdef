@@ -169,3 +169,52 @@ run_wd() {
     [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf" ]
     ! [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" ]
 }
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves drop-in mtime" {
+    write_config "balanced"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (profile upgrade balanced → strict WITH ack): installs strict drop-in + fires sysctl" {
+    # Reverse of the downgrade lock — locks bidirectional contract.
+    write_config "balanced"
+    run_wd
+    ! [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" ]
+    write_config "strict" "true"
+    : > "${SCTL_LOG}"
+    run_wd
+    [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" ]
+    grep -q 'sysctl --system' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (strict drop-in carries kernel.modules_disabled=1): the actual irreversible mechanism" {
+    write_config "strict" "true"
+    run_wd
+    grep -qE 'kernel\.modules_disabled\s*=\s*1' "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf"
+}
+
+@test "INVARIANT (balanced does NOT carry modules_disabled): asymmetric content lock" {
+    write_config "balanced"
+    run_wd
+    ! grep -qE 'kernel\.modules_disabled\s*=\s*1' "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf"
+}
+
+@test "INVARIANT (drop-in chmod 0644): sysctl.d convention" {
+    write_config "balanced"
+    run_wd
+    [ "$(stat -c '%a' "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf")" = "644" ]
+}
+
+@test "INVARIANT (sysctl --system fires on change — operator-edit between runs forces re-apply)" {
+    write_config "balanced"
+    run_wd
+    : > "${SCTL_LOG}"
+    write_config "strict" "true"
+    run_wd
+    grep -q 'sysctl --system' "${SCTL_LOG}"
+}
