@@ -157,3 +157,53 @@ run_wd() {
     cmp -s modules/auditd-immutable/configs/audit.rules "${RULES_D}/99-selfdef-immutable.rules"
     grep -q 'augenrules --load' "${AUGEN_LOG}"
 }
+
+@test "INVARIANT (profile upgrade audit → enforce WITH ack): writes enforce.rules + reloads" {
+    # Reverse direction. Locks bidirectional contract.
+    write_config "audit"
+    run_wd
+    cmp -s modules/auditd-immutable/configs/audit.rules "${RULES_D}/99-selfdef-immutable.rules"
+    write_config "enforce" "true"
+    : > "${AUGEN_LOG}"
+    run_wd
+    cmp -s modules/auditd-immutable/configs/enforce.rules "${RULES_D}/99-selfdef-immutable.rules"
+    grep -q 'augenrules --load' "${AUGEN_LOG}"
+}
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves drop-in mtime" {
+    write_config "audit"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${RULES_D}/99-selfdef-immutable.rules")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${RULES_D}/99-selfdef-immutable.rules")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (enforce.rules carries -e 2 LOCK directive — the actual immutability mechanism)" {
+    write_config "enforce" "true"
+    run_wd
+    grep -qE '^-e[[:space:]]+2' "${RULES_D}/99-selfdef-immutable.rules"
+}
+
+@test "INVARIANT (audit.rules does NOT carry -e 2): the safe profile must not actually lock the subsystem" {
+    write_config "audit"
+    run_wd
+    ! grep -qE '^-e[[:space:]]+2' "${RULES_D}/99-selfdef-immutable.rules"
+}
+
+@test "INVARIANT (no render-timestamp in drop-in): defeats cmp -s idempotency guard" {
+    write_config "audit"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${RULES_D}/99-selfdef-immutable.rules"
+}
+
+@test "INVARIANT (filename is 99- prefix — sorts AFTER operator rules + base rules, applies LAST)" {
+    # The 99- prefix is critical: -e 2 must apply LAST so the immutable
+    # flag fires AFTER all operator-authored rules load. A 10- or 50-
+    # prefix would lock the subsystem BEFORE operator rules apply.
+    write_config "enforce" "true"
+    run_wd
+    # Confirm the actual filename is 99-prefixed.
+    ls "${RULES_D}/" | grep -qE '^99-selfdef-immutable\.rules$'
+}
