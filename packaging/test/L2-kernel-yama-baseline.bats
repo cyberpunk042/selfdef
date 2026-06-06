@@ -157,3 +157,50 @@ run_wd() {
     grep -q 'profile=relaxed' "${DROPIN}"
     grep -q 'sysctl -w kernel.yama.ptrace_scope=1' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (drop-in carries actual sysctl directive ptrace_scope=N)" {
+    write_config "strict"
+    run_wd
+    grep -qE 'kernel\.yama\.ptrace_scope\s*=\s*2' "${DROPIN}"
+}
+
+@test "INVARIANT (profile transition relaxed → strict): rewrites drop-in + applies live" {
+    write_config "relaxed"
+    run_wd
+    grep -q 'profile=relaxed' "${DROPIN}"
+    write_config "strict"
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -q 'profile=strict' "${DROPIN}"
+    grep -q 'sysctl -w kernel.yama.ptrace_scope=2' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (profile transition strict → paranoid WITH ack): rewrites drop-in + applies =3 live" {
+    write_config "strict"
+    run_wd
+    write_config "paranoid" "true"
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -q 'profile=paranoid' "${DROPIN}"
+    grep -q 'sysctl -w kernel.yama.ptrace_scope=3' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (drop-in chmod 0644): sysctl.d convention" {
+    write_config "strict"
+    run_wd
+    [ "$(stat -c '%a' "${DROPIN}")" = "644" ]
+}
+
+@test "INVARIANT (live-knob re-application — sysctl -w fires on every apply)" {
+    write_config "strict"
+    run_wd
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -q 'sysctl -w kernel.yama.ptrace_scope=' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (no render-timestamp in drop-in): defeats cmp -s idempotency guard" {
+    write_config "strict"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${DROPIN}"
+}
