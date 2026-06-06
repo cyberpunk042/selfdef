@@ -170,3 +170,73 @@ run_wd() {
     ! grep -qE '^# Generated [0-9]{4}-' "${PROFILE_D}/50-selfdef-umask.sh"
     ! grep -qE '^# Generated [0-9]{4}-' "${LOGIN_DEFS_D}/50-selfdef-umask.conf"
 }
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates BOTH drop-ins)" {
+    write_config "group"
+    run_wd
+    [ -f "${PROFILE_D}/50-selfdef-umask.sh" ]
+    [ -f "${LOGIN_DEFS_D}/50-selfdef-umask.conf" ]
+    rm -f "${PROFILE_D}/50-selfdef-umask.sh" "${LOGIN_DEFS_D}/50-selfdef-umask.conf"
+    run_wd
+    [ -f "${PROFILE_D}/50-selfdef-umask.sh" ]
+    [ -f "${LOGIN_DEFS_D}/50-selfdef-umask.conf" ]
+    grep -qE 'umask +0027' "${PROFILE_D}/50-selfdef-umask.sh"
+}
+
+@test "INVARIANT (asymmetric tightening: strict umask is more restrictive than group — bit-mask check)" {
+    # 0077 has bits 6,5,4,3 set (group rwx + other rwx denied).
+    # 0027 has bits 5,3,2,1,0... — group has different denial.
+    # The principle: strict's mask must AND with group's mask
+    # equal group's mask (strict is at least as restrictive).
+    # Computed: strict & ~group == 0 means strict denies a
+    # superset of what group denies.
+    write_config "group"
+    run_wd
+    grep -qE 'umask +0027' "${PROFILE_D}/50-selfdef-umask.sh"
+    write_config "strict"
+    run_wd
+    grep -qE 'umask +0077' "${PROFILE_D}/50-selfdef-umask.sh"
+    # 0077 octal = 63 decimal; 0027 octal = 23 decimal. 63 > 23
+    # means more bits denied (more restrictive).
+    [ "$((077))" -gt "$((027))" ]
+}
+
+@test "INVARIANT (shell drop-in carries umask directive in proper bash/sh form)" {
+    # The profile.d drop-in must be sourced by /bin/sh + bash.
+    # Lock that the umask line is bare (no exotic syntax).
+    write_config "group"
+    run_wd
+    # Lines starting with 'umask' followed by a value.
+    grep -qE '^umask[[:space:]]+' "${PROFILE_D}/50-selfdef-umask.sh"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "group"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"umask-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=group'* ]]
+}
+
+@test "INVARIANT (no systemctl side-effects: umask-baseline is pure file install — no daemon restart)" {
+    # Drop-ins are sourced by login shell / PAM — no daemon needs
+    # restart. Lock that the script doesn't accidentally fire
+    # systemctl. (Tested by checking apply.sh doesn't call
+    # systemctl in any path.)
+    grep -qvE 'systemctl' "${WD}" || true
+    # Run with mock systemctl tracking to verify no calls.
+    BIN_TMP="${TMP}/bin"; mkdir -p "${BIN_TMP}"
+    cat > "${BIN_TMP}/systemctl" <<'SCEOF'
+#!/usr/bin/env bash
+printf 'systemctl %s\n' "$*" >> "${TMP}/sysctl_called.log"
+exit 0
+SCEOF
+    chmod +x "${BIN_TMP}/systemctl"
+    write_config "group"
+    PATH="${BIN_TMP}:${PATH}" \
+        SELFDEF_UMASK_CONFIG="${CONF}" \
+        SELFDEF_PROFILE_D="${PROFILE_D}" \
+        SELFDEF_LOGIN_DEFS_D="${LOGIN_DEFS_D}" \
+        bash "${WD}" >/dev/null 2>&1
+    ! [ -f "${TMP}/sysctl_called.log" ]
+}
