@@ -145,3 +145,52 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — pkcs11 inventory enumerates credential-handling code-load surface)" {
+    printf 'module: /usr/lib/opensc-pkcs11.so\n' > "${MOD}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (module .so under /var/tmp): writable-root expansion" {
+    printf 'module: /var/tmp/evil.so\n' > "${MOD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (module .so under /dev/shm): tmpfs writable-root expansion" {
+    printf 'module: /dev/shm/evil.so\n' > "${MOD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (module .so under /home): user-writable hijack coverage" {
+    printf 'module: /home/user/evil.so\n' > "${MOD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable .module file → alert)" {
+    printf 'module: /usr/lib/opensc-pkcs11.so\n' > "${MOD}"
+    run_wd
+    chmod 0666 "${MOD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable .module file): group-writable → alert above world-writable bar" {
+    printf 'module: /usr/lib/opensc-pkcs11.so\n' > "${MOD}"
+    run_wd
+    chmod 0664 "${MOD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'module: /usr/lib/opensc-pkcs11.so\n' > "${MOD}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-pkcs11-modules -- ')
+    [ "${main_count}" = "1" ]
+}
