@@ -155,3 +155,59 @@ run_wd() {
     [ -f "${SYSCTL_DROPIN}" ]
     ! [ -f "${LIMITS_DROPIN}" ]
 }
+
+@test "INVARIANT (profile upgrade suid-only → all-off): ADDS limits.d drop-in (reverse of test-104)" {
+    write_config "suid-only"
+    run_wd
+    ! [ -f "${LIMITS_DROPIN}" ]
+    write_config "all-off"
+    run_wd
+    [ -f "${LIMITS_DROPIN}" ]
+}
+
+@test "INVARIANT (sysctl drop-in carries fs.suid_dumpable=0 directive — the actual restriction)" {
+    write_config "suid-only"
+    run_wd
+    grep -qE '^fs\.suid_dumpable\s*=\s*0' "${SYSCTL_DROPIN}"
+}
+
+@test "INVARIANT (all-off limits.d carries '* hard core 0' — PAM-evaluated restriction)" {
+    write_config "all-off"
+    run_wd
+    grep -qE 'hard\s+core\s+0' "${LIMITS_DROPIN}"
+}
+
+@test "INVARIANT (sysctl drop-in chmod 0644 — sysctl.d convention)" {
+    write_config "suid-only"
+    run_wd
+    [ "$(stat -c '%a' "${SYSCTL_DROPIN}")" = "644" ]
+}
+
+@test "INVARIANT (all-off limits.d drop-in chmod 0644 — security/limits.d convention)" {
+    write_config "all-off"
+    run_wd
+    [ "$(stat -c '%a' "${LIMITS_DROPIN}")" = "644" ]
+}
+
+@test "INVARIANT (no render-timestamp in limits.d drop-in — defeats cmp -s on PAM file too)" {
+    # The variant-A guard for the secondary drop-in. The sysctl drop-in
+    # is covered above; the PAM-evaluated limits.d drop-in also lives
+    # under the same cmp -s gate and must not carry a render-timestamp.
+    write_config "all-off"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${LIMITS_DROPIN}"
+}
+
+@test "INVARIANT (sysctl -w fires on every apply): the LIVE kernel knob must be set even when drop-in unchanged" {
+    # If the sysctl drop-in is already on disk byte-identical, the
+    # disk-write skips (mtime test) — BUT the LIVE kernel parameter
+    # might still be wrong (operator could have done `sysctl -w
+    # fs.suid_dumpable=1`). The script must still re-apply the LIVE
+    # knob even on idempotent-disk path.
+    write_config "suid-only"
+    run_wd
+    : > "${SCTL_LOG}"
+    run_wd
+    # Even with disk unchanged, sysctl -w fires for the live-knob.
+    grep -q 'sysctl -w fs.suid_dumpable=0' "${SCTL_LOG}"
+}
