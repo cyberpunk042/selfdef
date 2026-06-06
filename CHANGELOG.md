@@ -6,6 +6,35 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — dns-resolver-watchdog silent no-op (capture regression, 2026-06-06)
+
+`dns-resolver-watchdog` declared `$current` as a temp file then never wrote to
+it: the three emitter blocks (awk over `/etc/resolv.conf`, the resolvectl
+pipeline, the `/etc/hosts` override-count printf) all went to stdout, and the
+subsequent `{ sort -u > "${current}.sorted"; } < "$current"` read an empty
+`$current` — leaving `cur_count=0` and every comm delta a no-op, so a DNS
+hijack (the very thing this watchdog is the canary for) would never fire.
+Same class as the 2026-05-27 `cron-job` / `ssh-authkeys` / `sudoers-integrity`
+/ `systemd-unit` / `group-integrity` fix (commit 77b3bc8); surfaced by the
+follow-up scan of every watchdog declaring `$current` without a
+`> "$current"` / `>> "$current"` populate-redirect — dns-resolver was the one
+remaining.
+
+Fix: wrap the three emit blocks in `{ ... } | sort -u > "$current"` so every
+record reaches the temp file the comm-delta reads. Empirically verified
+(`cur_count=2` for a host with `/etc/hosts` + nameservers vs `cur_count=0`
+before). New L2 functional suite `packaging/test/L2-dns-resolver-watchdog.bats`
+locks the capture regression: baseline non-empty, `baseline_count` non-zero,
+unconditional `hosts_overrides` record present, `no_delta` on second run.
+All 4 cases pass locally.
+
+The L2 scan-script capture guard (`L2-scan-script-capture-guard.bats`) was
+already correct: its `>>? *"\$current"` regex catches both inline `>>` and
+block `>` redirects. The dns-resolver bug evaded it because the script
+contained `> "${current}.sorted"` and `mv ... "$current"` — neither a direct
+shell redirect to `$current` itself. The fix uses `> "$current"` directly so
+the guard now passes the redirect-presence check on this watchdog too.
+
 ### Added — MS048 Goldilocks Scheduler + Deterministic Cortex Runtime COMPLETE (2026-06-05)
 
 The `selfdef-scheduler` crate now comprehensively realizes the avx-plus-plus

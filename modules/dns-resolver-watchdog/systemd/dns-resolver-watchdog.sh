@@ -26,31 +26,31 @@ BASELINE="${SELFDEF_DNSRES_BASELINE:-/var/lib/selfdef/dns-resolver-baseline.tsv}
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
 
-# resolv.conf may be a symlink to systemd-resolved's stub; we
-# read the effective file either way.
-RESOLV="/etc/resolv.conf"
-if [[ -r "$RESOLV" ]]; then
-    awk '/^nameserver/ {print "nameserver\t" $2}
-         /^search/     {for(i=2;i<=NF;i++) print "search\t" $i}' "$RESOLV"
-fi
+{
+    # resolv.conf may be a symlink to systemd-resolved's stub; we
+    # read the effective file either way.
+    RESOLV="/etc/resolv.conf"
+    if [[ -r "$RESOLV" ]]; then
+        awk '/^nameserver/ {print "nameserver\t" $2}
+             /^search/     {for(i=2;i<=NF;i++) print "search\t" $i}' "$RESOLV"
+    fi
 
-# systemd-resolved actual upstreams (the stub 127.0.0.53 hides
-# the real servers; resolvectl shows them).
-if command -v resolvectl >/dev/null 2>&1; then
-    resolvectl dns 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F:]+:+)+[0-9a-fA-F]+' \
-        | sort -u | while IFS= read -r ip; do
-            [[ -n "$ip" ]] && echo -e "resolved\t$ip"
-        done
-fi
+    # systemd-resolved actual upstreams (the stub 127.0.0.53 hides
+    # the real servers; resolvectl shows them).
+    if command -v resolvectl >/dev/null 2>&1; then
+        resolvectl dns 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F:]+:+)+[0-9a-fA-F]+' \
+            | sort -u | while IFS= read -r ip; do
+                [[ -n "$ip" ]] && printf 'resolved\t%s\n' "$ip"
+            done
+    fi
 
-# /etc/hosts override count (a sudden jump = mass-hijack via
-# hosts entries, the poor-man's DNS redirect).
-if [[ -r /etc/hosts ]]; then
-    hc=$(grep -cvE '^\s*(#|$)' /etc/hosts 2>/dev/null || echo 0)
-    echo -e "hosts_overrides\t$hc"
-fi
-
-{ sort -u > "${current}.sorted"; } < "$current" && mv "${current}.sorted" "$current"
+    # /etc/hosts override count (a sudden jump = mass-hijack via
+    # hosts entries, the poor-man's DNS redirect).
+    if [[ -r /etc/hosts ]]; then
+        hc=$(grep -cvE '^\s*(#|$)' /etc/hosts 2>/dev/null || echo 0)
+        printf 'hosts_overrides\t%s\n' "$hc"
+    fi
+} | sort -u > "$current"
 cur_count=$(wc -l < "$current" | tr -d ' ')
 
 if [[ ! -f "$BASELINE" ]]; then
