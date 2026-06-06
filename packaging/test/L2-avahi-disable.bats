@@ -224,3 +224,31 @@ run_wd() {
     [ "${stop_line}" -lt "${disable_line}" ]
     [ "${disable_line}" -lt "${mask_line}" ]
 }
+
+@test "INVARIANT (.socket also follows stop→disable→mask order — symmetric ordering across all units)" {
+    # Same order MUST hold for avahi-daemon.socket as for .service.
+    # A regression that applies the order to only one unit would
+    # leave the other reactivatable.
+    write_config "mask"
+    run_wd
+    stop_socket="$(grep -n 'systemctl stop avahi-daemon.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_socket="$(grep -n 'systemctl disable avahi-daemon.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_socket="$(grep -n 'systemctl mask avahi-daemon.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_socket}" -lt "${disable_socket}" ]
+    [ "${disable_socket}" -lt "${mask_socket}" ]
+}
+
+@test "INVARIANT (downgrade mask → stop does NOT auto-unmask — operator-explicit unmask required)" {
+    # Once masked, a downgrade to stop profile does NOT auto-unmask
+    # the units. The unmask requires explicit operator action.
+    # Locks the architectural safety: mask is sticky; operator
+    # must affirmatively undo it to allow re-enablement.
+    write_config "mask"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    # stop profile fires stop+disable but does NOT fire unmask.
+    grep -q 'systemctl stop avahi-daemon.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl unmask avahi-daemon.service' "${SYSEOF_LOG}"
+}
