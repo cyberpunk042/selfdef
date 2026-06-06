@@ -17,9 +17,19 @@ if ! command -v ruff >/dev/null 2>&1; then
     exit 0
 fi
 
-# The two no-extension python3 entrypoints + every .py (excluding caches/target).
+# The two no-extension python3 entrypoints + every .py (excluding caches/
+# target/ + sister-repo checkouts under _infohub/, _selfdef/, _sovereign-os/
+# — the CI four-watchdog job clones the info-hub sister repo into _infohub/
+# for runbook-URL existence checks, and that subtree has its own Python
+# surface that isn't selfdef's responsibility to lint).
 targets=(scripts/guardian/guardian-core scripts/ux-harness/selfdef-ux-harness)
-mapfile -t pys < <(find . -name '*.py' -not -path '*/__pycache__/*' -not -path './target/*' 2>/dev/null | sort)
+mapfile -t pys < <(find . -name '*.py' \
+    -not -path '*/__pycache__/*' \
+    -not -path './target/*' \
+    -not -path './_infohub/*' \
+    -not -path './_selfdef/*' \
+    -not -path './_sovereign-os/*' \
+    2>/dev/null | sort)
 targets+=("${pys[@]}")
 
 if ! ruff check "${targets[@]}"; then

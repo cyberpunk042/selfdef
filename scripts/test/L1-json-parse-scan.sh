@@ -22,9 +22,17 @@
 set -euo pipefail
 
 mapfile -t files < <(
-    find . \( -path ./target -o -path '*/node_modules/*' \) -prune -o \
+    # Exclude target/ + node_modules + sister-repo checkouts (_infohub/,
+    # _selfdef/, _sovereign-os/). See L1-ruff-python.sh + L1-yaml-parse-
+    # scan.sh for the rationale: CI four-watchdog clones info-hub into
+    # _infohub/ for runbook-URL existence checks, and its wiki/ JSON
+    # files (manifest.json etc.) aren't selfdef's responsibility to scan.
+    find . \( -path ./target -o -path '*/node_modules/*' \
+              -o -path ./_infohub -o -path ./_selfdef \
+              -o -path ./_sovereign-os \) -prune -o \
         -name '*.json' -type f -print 2>/dev/null \
-        | grep -vE '/target/|/node_modules/' | sort
+        | grep -vE '/target/|/node_modules/|/_infohub/|/_selfdef/|/_sovereign-os/' \
+        | sort
 )
 if [[ ${#files[@]} -eq 0 ]]; then
     echo "L1-json-parse-scan FAIL: no JSON files found" >&2

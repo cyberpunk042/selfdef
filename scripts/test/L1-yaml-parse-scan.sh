@@ -28,10 +28,18 @@
 set -euo pipefail
 
 mapfile -t files < <(
-    find . -path ./target -prune -o \
+    # Exclude target/ + sister-repo checkouts (_infohub/, _selfdef/,
+    # _sovereign-os/) so the CI four-watchdog job's `actions/checkout@v4
+    # path: _infohub` doesn't contaminate selfdef's YAML surface with
+    # info-hub's wiki frontmatter etc.
+    find . \( -path ./target -o -path ./_infohub \
+              -o -path ./_selfdef -o -path ./_sovereign-os \) -prune -o \
         \( -name '*.yaml' -o -name '*.yml' \
            -o -name '*.yml.template' -o -name '*.yaml.template' \) \
-        -type f -print 2>/dev/null | grep -v '/target/' | sort
+        -type f -print 2>/dev/null \
+        | grep -v -e '/target/' -e '/_infohub/' -e '/_selfdef/' \
+                  -e '/_sovereign-os/' \
+        | sort
 )
 if [[ ${#files[@]} -eq 0 ]]; then
     echo "L1-yaml-parse-scan FAIL: no YAML files found" >&2
