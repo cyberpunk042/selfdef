@@ -206,3 +206,78 @@ EOF
     [[ "${output}" == *'audited=2'* ]]
     [[ "${output}" == *'modified=2'* ]]
 }
+
+@test "INVARIANT (audit profile: JSON modified=0 — read-only contract)" {
+    # Audit must never report modifications. Locks the contract
+    # that audit is purely diagnostic — dashboards rely on this
+    # to count "found-but-not-fixed" vs "fixed-by-enforce".
+    write_vulnerable_pam "login"
+    write_vulnerable_pam "su"
+    write_config "audit"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'modified=0'* ]]
+}
+
+@test "INVARIANT (audit profile: NO .selfdef-nullok-backup files created anywhere — purely read-only)" {
+    # Audit must produce ZERO side-effects on disk. Even one
+    # backup file would break the "read-only" contract operators
+    # rely on for safe production audits.
+    write_vulnerable_pam "login"
+    write_vulnerable_pam "su"
+    write_vulnerable_pam "sudo"
+    write_config "audit"
+    run_wd
+    ! [ -f "${PAM_D}/login.selfdef-nullok-backup" ]
+    ! [ -f "${PAM_D}/su.selfdef-nullok-backup" ]
+    ! [ -f "${PAM_D}/sudo.selfdef-nullok-backup" ]
+}
+
+@test "INVARIANT (backup file restoration: cp backup → original restores nullok verbatim)" {
+    # The backup file MUST be sufficient to roll back. Operator
+    # may need to restore if the enforced removal broke a
+    # legitimate workflow (e.g. recovery account).
+    write_vulnerable_pam "login"
+    write_config "enforce"
+    run_wd
+    [ -f "${PAM_D}/login.selfdef-nullok-backup" ]
+    # Verify backup contents have the original nullok line.
+    grep -qE '\bnullok\b' "${PAM_D}/login.selfdef-nullok-backup"
+    # Restore + verify integrity.
+    cp "${PAM_D}/login.selfdef-nullok-backup" "${PAM_D}/login"
+    grep -qE '\bnullok\b' "${PAM_D}/login"
+}
+
+@test "INVARIANT (token-level removal preserves other arguments on the SAME pam line — pam_unix.so + try_first_pass remain)" {
+    # The sed surgery must be token-level — NOT line-level. A
+    # line-level removal would strip pam_unix.so itself + break
+    # auth. Token-level preserves the rest of the args.
+    cat > "${PAM_D}/login" <<'EOF'
+auth sufficient pam_unix.so nullok try_first_pass use_authtok
+account required pam_unix.so
+EOF
+    write_config "enforce"
+    run_wd
+    ! grep -qE '\bnullok\b'         "${PAM_D}/login"
+    grep -q  'pam_unix\.so'          "${PAM_D}/login"
+    grep -q  'try_first_pass'        "${PAM_D}/login"
+    grep -q  'use_authtok'           "${PAM_D}/login"
+}
+
+@test "INVARIANT (no false-positive on substring 'nullok' in identifiers — e.g. 'nullok_audit_log' on a non-PAM-arg word boundary)" {
+    # Defensive: the sed must use word boundaries, not raw
+    # substring. A param named "nullok_audit" must NOT be touched
+    # (current sed uses \b — locked here as a regression guard).
+    cat > "${PAM_D}/login" <<'EOF'
+# notes: nullok_audit_log feature was discussed
+auth sufficient pam_unix.so try_first_pass
+EOF
+    pre_sha="$(sha256sum "${PAM_D}/login" | awk '{print $1}')"
+    write_config "enforce"
+    run_wd
+    # File should be untouched (no nullok token, just substring
+    # inside a comment-word).
+    post_sha="$(sha256sum "${PAM_D}/login" | awk '{print $1}')"
+    [ "${pre_sha}" = "${post_sha}" ]
+    ! [ -f "${PAM_D}/login.selfdef-nullok-backup" ]
+}
