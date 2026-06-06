@@ -206,3 +206,47 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-syslog-ng-exec -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): syslog-ng-exec-watchdog does NOT refresh baseline on suspicious-program detection — alert STAYS until operator updates" {
+    # Log-event-trigger root-exec persistence — suspicious-program alert
+    # MUST persist across runs until operator explicitly re-baselines.
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    printf 'destination d_evil { program("/tmp/.x"); };\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"syslog_ng_exec_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (program() under /dev/shm tmpfs writable-root — full coverage)" {
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'destination d_evil { program("/dev/shm/.attacker"); };\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (relative-with-slash program 'sub/dir/p' → alert)" {
+    # Relative-with-slash = PWD-at-exec attacker primitive.
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'destination d_evil { program("sub/dir/evil"); };\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: 'program  (  \"/tmp/.evil\"  )' multi-space variant still triggers alert)" {
+    # Attacker may use multi-spaces between program(  ... ) to evade
+    # naive grep. Lock whitespace-tolerant parser.
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'destination d_evil { program  (  "/tmp/.evil"  ); };\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
