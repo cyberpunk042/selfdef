@@ -208,3 +208,53 @@ run_wd() {
     [ "$(stat -c '%a' "${HOMES}/operator")" = "755" ]
     [ "$(stat -c '%a' "${HOMES}/selfdef-test")" = "755" ]
 }
+
+@test "INVARIANT (backup carries pre-tighten state — sufficient to restore via uninstall)" {
+    # The backup must record the original perms so uninstall can
+    # restore (or operator can review what was changed).
+    write_config "group"
+    mk_home alice 1001 0755
+    mk_home bob   1002 0755
+    run_wd
+    [ -f "${BACKUP_DIR}/home-perms.bak" ]
+    # Backup contains username + original mode tuples.
+    grep -q 'alice' "${BACKUP_DIR}/home-perms.bak"
+    grep -q '755' "${BACKUP_DIR}/home-perms.bak"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile + tightened count surfaced for operator dashboard)" {
+    write_config "group"
+    mk_home alice 1001 0755
+    mk_home bob   1002 0755
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"home-perms-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=group'* ]]
+    # Acted count (2 users acted on).
+    [[ "${output}" == *'acted=2'* ]]
+}
+
+@test "INVARIANT (no homes to tighten — empty passwd: doesn't crash + emits clean status)" {
+    # If no users qualify (empty fixture passwd), watchdog must
+    # not crash and must emit a clean status.
+    write_config "group"
+    # No mk_home calls — passwd file is empty.
+    : > "${PASSWD}"
+    run_wd
+    # No mutation, no errors.
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"status":"ok"'* ]]
+}
+
+@test "INVARIANT (mixed scan: already-tightened + tightenable-eligible coexist in same scan)" {
+    # Realistic scan: some users already at 0700 (manually
+    # tightened earlier), others at 0755 (default). Both axes
+    # handled correctly in single scan.
+    write_config "group"
+    mk_home already 1001 0700      # already tightened
+    mk_home loose   1002 0755      # to be tightened
+    run_wd
+    # already stays 0700; loose tightens to 0750.
+    [ "$(stat -c '%a' "${HOMES}/already")" = "700" ]
+    [ "$(stat -c '%a' "${HOMES}/loose")" = "750" ]
+}
