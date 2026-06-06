@@ -16,7 +16,7 @@ else
     exit 2
 fi
 
-SYSCTL_DROPIN="/etc/sysctl.d/50-selfdef-network-baseline.conf"
+SYSCTL_DROPIN="${SELFDEF_SYSCTL_NETWORK_DROPIN:-/etc/sysctl.d/50-selfdef-network-baseline.conf}"
 HEADER_MARKER="# managed-by: selfdef sysctl-network-baseline"
 
 # Sentinel keys for drift detection (representative subset; check.sh
