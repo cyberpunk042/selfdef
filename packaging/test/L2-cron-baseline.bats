@@ -258,3 +258,36 @@ run_wd() {
     run_wd
     [ ! -s "${CRON_DENY}" ]
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates all 4 files)" {
+    # Operator may rm one of the .allow/.deny files — apply must
+    # rebuild them so cron/at access policy is restored.
+    write_config "root-only"
+    run_wd
+    [ -f "${CRON_ALLOW}" ]
+    rm -f "${CRON_ALLOW}" "${AT_ALLOW}" "${CRON_DENY}" "${AT_DENY}"
+    run_wd
+    [ -f "${CRON_ALLOW}" ]
+    [ -f "${AT_ALLOW}" ]
+    [ -f "${CRON_DENY}" ]
+    [ -f "${AT_DENY}" ]
+    grep -q '^root$' "${CRON_ALLOW}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "operator-list" "alice,bob"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"cron-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=operator-list'* ]]
+}
+
+@test "INVARIANT (operator pre-staged with manual content gets backed up — backup contains ORIGINAL contents)" {
+    # The first-apply backup MUST preserve the original .allow file
+    # content (with 'someone' user). Lock backup-content fidelity.
+    write_config "root-only"
+    run_wd
+    [ -f "${CRON_ALLOW}.selfdef-backup" ]
+    # Backup contains original 'someone' entry.
+    grep -q '^someone$' "${CRON_ALLOW}.selfdef-backup"
+}
