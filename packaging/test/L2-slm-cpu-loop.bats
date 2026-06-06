@@ -108,3 +108,104 @@ INSTALL_DIR="${MODULE_DIR}/install"
     rm -rf "${TEST_DIR}"
     unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
 }
+
+@test "INVARIANT (env file is chmod 0644 — system-config convention)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    mode="$(stat -c '%a' "${SELFDEF_SLM_LOOP_ENV}")"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+    [ "${mode}" = "644" ]
+}
+
+@test "INVARIANT (CCD-0 affinity defaults — SD-R72 6-physical-core core pinning)" {
+    # Master spec § 17.1 Pulse Vector Core: SD-R72 SLM agent loop
+    # pins to CCD-0 (cores 0-5 physical on 9900X). DEFAULT_AFFINITY
+    # = "0-5" + DEFAULT_THREADS = "6" is the 6-physical-core spec.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    grep -qE '^SELFDEF_SLM_AFFINITY="0-5"$'  "${SELFDEF_SLM_LOOP_ENV}"
+    grep -qE '^SELFDEF_SLM_THREADS="6"$'     "${SELFDEF_SLM_LOOP_ENV}"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+}
+
+@test "INVARIANT (engine default is llama.cpp — Phi-4-mini GGUF recommendation)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    grep -qE '^SELFDEF_SLM_ENGINE="llama.cpp"$' "${SELFDEF_SLM_LOOP_ENV}"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+}
+
+@test "INVARIANT (context/KV defaults — 8192 tokens + fp16 KV dtype)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    grep -qE '^SELFDEF_SLM_CONTEXT_TOKENS="8192"$' "${SELFDEF_SLM_LOOP_ENV}"
+    grep -qE '^SELFDEF_SLM_KV_DTYPE="fp16"$'       "${SELFDEF_SLM_LOOP_ENV}"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+}
+
+@test "INVARIANT (SLM_MODEL + SLM_MODEL_PATH are empty defaults — operator-set, NOT catalog-auto-discovered)" {
+    # The env file leaves model selection to the operator (must
+    # match a sovereign-os models/catalog.yaml entry with
+    # class=slm). Hard-coding a default would silently bind to a
+    # specific model version across hosts.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    grep -qE '^SELFDEF_SLM_MODEL=""$'      "${SELFDEF_SLM_LOOP_ENV}"
+    grep -qE '^SELFDEF_SLM_MODEL_PATH=""$' "${SELFDEF_SLM_LOOP_ENV}"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+}
+
+@test "INVARIANT (DRY_RUN does NOT write the env file)" {
+    # Pre-existing dry-run smoke tests only check exit 0 — that's
+    # weaker than write-skip. Lock that DRY_RUN truly side-effects
+    # nothing on disk (per emit_status's 'skipped' contract).
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_DRY_RUN=1
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    written_exists=0
+    [ -f "${SELFDEF_SLM_LOOP_ENV}" ] && written_exists=1
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_DRY_RUN SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+    [ "${written_exists}" = "0" ]
+}
+
+@test "INVARIANT (JSON emit_status: status=ok + module=slm-cpu-loop on real apply)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    output="$(bash "${INSTALL_DIR}/apply.sh" 2>&1)"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+    [[ "${output}" == *'"module":"slm-cpu-loop"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+}
