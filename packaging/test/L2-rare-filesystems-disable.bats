@@ -182,3 +182,61 @@ run_wd() {
     run_wd
     grep -qE '^#.*managed-by:.*selfdef' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (install /bin/true hardening: each module also blocked via install line — defends against manual modprobe)" {
+    # 'blacklist' alone allows manual modprobe to still load the
+    # module. 'install <mod> /bin/true' blocks even explicit
+    # modprobe invocations. Lock that the canonical hardening
+    # shape is present (whitespace tolerant — actual config uses
+    # multi-space alignment).
+    write_config "baseline"
+    run_wd
+    for m in cramfs jffs2 hfs hfsplus; do
+        grep -qE "^install[[:space:]]+${m}[[:space:]]+/bin/(true|false)" "${MODPROBE_FILE}"
+    done
+}
+
+@test "INVARIANT (blacklist re-arm after operator deletion: re-creates with header)" {
+    write_config "baseline"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    rm -f "${MODPROBE_FILE}"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    grep -q 'managed-by: selfdef rare-filesystems-disable' "${MODPROBE_FILE}"
+    grep -q 'blacklist cramfs' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (header-marker is first non-blank line — predictable for stale-cleanup head -1 grep)" {
+    write_config "baseline"
+    run_wd
+    first_line="$(head -1 "${MODPROBE_FILE}")"
+    [ "${first_line}" = "# managed-by: selfdef rare-filesystems-disable" ]
+}
+
+@test "INVARIANT (current behavior: write target is overwritten — selfdef-prefixed filename means file is owned by selfdef)" {
+    # Unlike wireless-disable + wwan-disable which check the
+    # header marker before removal in their downgrade paths,
+    # rare-filesystems-disable does NOT guard against overwriting
+    # a pre-existing file at the target path. This is current
+    # behavior because the file path is explicitly selfdef-
+    # prefixed (/etc/modprobe.d/selfdef-rare-filesystems-blacklist.
+    # conf) — any file at that path is treated as selfdef-owned.
+    # Operators wanting custom modprobe blacklists use different
+    # filenames. Lock current contract; future refinement could
+    # add header-marker guard.
+    printf '%s\n' '# managed-by: somebody-else' 'blacklist some-other-mod' > "${MODPROBE_FILE}"
+    write_config "baseline"
+    run_wd
+    # The file IS overwritten with selfdef content.
+    grep -q 'managed-by: selfdef rare-filesystems-disable' "${MODPROBE_FILE}"
+    ! grep -q 'somebody-else' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "baseline"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"rare-filesystems-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=baseline'* ]]
+}
