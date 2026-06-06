@@ -119,6 +119,39 @@ scan_scripts() { compgen -G "${SCRIPTS_GLOB}"; }
     fi
 }
 
+@test "every *-watchdog module has an L2-<mod>.bats functional suite (full-fleet coverage lock)" {
+    # The SDD-063-consolidated check above only covers watchdogs that
+    # source module-lib (the post-2026-05-27 fleet). 13 pre-SDD-063
+    # watchdogs (audit-config, coredump-pattern, crontab-allow,
+    # dns-resolver, hidden-process, kernel-cmdline, kernel-module,
+    # listening-ports, logfile-integrity, mount-options, nfs-mount,
+    # pci-device, ssh-hostkey, time-skew) carry their own bespoke
+    # classification logic that ALSO emits severity findings — but
+    # was not gated by the SDD-063 filter. The 2026-06-06 backfill
+    # closed the coverage gap (every watchdog now has L2 functional
+    # coverage; verified empirically at commit acfea98).
+    #
+    # This invariant LOCKS the backfill: any new *-watchdog module
+    # shipped without a same-named L2-<mod>.bats suite will land
+    # red here. Structural — emitter idiom is irrelevant. The
+    # 105-watchdog fleet is the floor.
+    bad=()
+    for wd_dir in "${BATS_TEST_DIRNAME}/../../modules"/*-watchdog; do
+        [ -d "${wd_dir}" ] || continue
+        mod="$(basename "${wd_dir}")"
+        suite="${BATS_TEST_DIRNAME}/L2-${mod}.bats"
+        [ -f "${suite}" ] || bad+=("${mod}")
+    done
+    if [ "${#bad[@]}" -gt 0 ]; then
+        printf 'watchdog module without an L2 functional suite: %s\n' "${bad[*]}" >&2
+        printf 'FIX: add packaging/test/L2-<mod>.bats covering ok/warn/alert\n' >&2
+        printf '     tiers + JSON schema + enforce-exit. See L2-dns-resolver-\n' >&2
+        printf '     watchdog.bats (canonical comm-delta) or L2-hidden-process-\n' >&2
+        printf '     watchdog.bats (set-difference variant) as templates.\n' >&2
+        return 1
+    fi
+}
+
 @test "module-lib-sourcing watchdogs gate the lib version, and dir-helper users require v4" {
     # SDD-061 D-6 / SDD-063: a watchdog that sources module-lib must refuse to
     # run against a too-old lib (the version gate `SELFDEF_MODULE_LIB_VERSION
