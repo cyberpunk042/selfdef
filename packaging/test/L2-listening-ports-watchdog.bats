@@ -179,3 +179,80 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         bash "${WD}" && fail "enforce + 1 added listener should exit non-zero"
     cap | grep -q '"event":"new_listener"'
 }
+
+@test "boundary: 2 new listeners → warn (1..2 INCLUSIVE on the high end)" {
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:4444,0.0.0.0:5555')"
+    mk_ss "${tcp}" ""
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"new_listener"'
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"added":2'
+}
+
+@test "INVARIANT (UDP detection): new UDP listener is detected (not just TCP)" {
+    # Locks that the script captures BOTH protocols. A regression
+    # that drops the UDP scan would let an attacker run a reverse
+    # DNS / SOCKS / UDP-tunnel listener undetected.
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    udp="$(mk_ss_lines '0.0.0.0:5353')"
+    mk_ss "${tcp}" "${udp}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"warn"'                   # 1 added → warn
+    cap | grep -q '5353'                                # surfaces in sample
+}
+
+@test "added_sample surfaces specific port:addr pairs (operator triage)" {
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:4444')"
+    mk_ss "${tcp}" ""
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '4444'                                # the added port surfaces
+}
+
+@test "removed_sample surfaces specific port:addr pairs (operator-cleanup visibility)" {
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:9999')"
+    mk_ss "${tcp}" ""
+    run_wd
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '9999'                                # the removed port surfaces
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-listening-ports -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (no auto-trust): listening-ports-watchdog does NOT refresh the baseline on delta — alert STAYS until operator updates" {
+    # CONTRAST against the auto-trust family. New listeners are
+    # NEVER routine; the alert must STAY visible until operator
+    # review. Joins ssh-authkeys, pam-config, sudoers-integrity,
+    # account, cron-job, systemd-unit, dns-resolver, file-
+    # capabilities, suid-sgid in the no-auto-trust group.
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:4444')"
+    mk_ss "${tcp}" ""
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"new_listener"'
+    cap | grep -q '"severity":"warn"'
+}
