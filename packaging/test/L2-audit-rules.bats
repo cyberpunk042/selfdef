@@ -166,3 +166,53 @@ run_wd() {
     [ -f "${RULES_DIR}/50-selfdef-base.rules" ]
     ! [ -f "${RULES_DIR}/50-selfdef-paranoid.rules" ]
 }
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves rule-file mtime" {
+    write_config "base"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${RULES_DIR}/50-selfdef-base.rules")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${RULES_DIR}/50-selfdef-base.rules")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (profile upgrade base → paranoid): writes paranoid + fires augenrules" {
+    # Reverse direction of the downgrade test — locks bidirectional.
+    write_config "base"
+    run_wd
+    ! [ -f "${RULES_DIR}/50-selfdef-paranoid.rules" ]
+    write_config "paranoid"
+    : > "${AUGEN_LOG}"
+    run_wd
+    [ -f "${RULES_DIR}/50-selfdef-paranoid.rules" ]
+    grep -q 'augenrules --load' "${AUGEN_LOG}"
+}
+
+@test "INVARIANT (paranoid rule-file content): paranoid carries /var/log + /etc/audit watches" {
+    write_config "paranoid"
+    run_wd
+    grep -qE '/var/log' "${RULES_DIR}/50-selfdef-paranoid.rules"
+    grep -qE '/etc/audit' "${RULES_DIR}/50-selfdef-paranoid.rules"
+}
+
+@test "INVARIANT (base rule-file content): base carries identity-file watches (passwd + shadow + group)" {
+    write_config "base"
+    run_wd
+    grep -qE '/etc/passwd' "${RULES_DIR}/50-selfdef-base.rules"
+    grep -qE '/etc/shadow' "${RULES_DIR}/50-selfdef-base.rules"
+    grep -qE '/etc/group' "${RULES_DIR}/50-selfdef-base.rules"
+}
+
+@test "INVARIANT (paranoid file is chmod 0640 too — convention matches base)" {
+    write_config "paranoid"
+    run_wd
+    [ "$(stat -c '%a' "${RULES_DIR}/50-selfdef-paranoid.rules")" = "640" ]
+}
+
+@test "INVARIANT (no render-timestamp in rule files): defeats cmp -s idempotency" {
+    write_config "paranoid"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${RULES_DIR}/50-selfdef-base.rules"
+    ! grep -qE '^# Generated [0-9]{4}-' "${RULES_DIR}/50-selfdef-paranoid.rules"
+}
