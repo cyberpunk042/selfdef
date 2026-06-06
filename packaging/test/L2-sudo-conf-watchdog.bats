@@ -154,3 +154,68 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+# ============================================================
+# Writable-root expansion — Plugin axis (T1574)
+# ============================================================
+
+@test "INVARIANT (Plugin .so under /var/tmp): writable-root expansion on Plugin axis" {
+    printf 'Plugin policy /var/tmp/.x.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (Plugin .so under /dev/shm): writable-root expansion on Plugin axis" {
+    printf 'Plugin policy /dev/shm/.x.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# Writable-root expansion — Path plugin_dir axis
+# ============================================================
+
+@test "INVARIANT (Path plugin_dir under /var/tmp): writable-root expansion on Path axis" {
+    printf 'Path plugin_dir /var/tmp/sudo-plugins\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# SDD-063 bare-root variants on plugin_dir axis
+# ============================================================
+
+@test "INVARIANT (bare /var/tmp as plugin_dir): SDD-063 bare-root variant on Path axis" {
+    printf 'Path plugin_dir /var/tmp\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (bare /dev/shm as plugin_dir): SDD-063 bare-root variant on Path axis" {
+    printf 'Path plugin_dir /dev/shm\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# Case-insensitive grammar (sudo's actual parser is case-tolerant)
+# ============================================================
+
+@test "INVARIANT (case-insensitive keyword PLUGIN under writable root → alert)" {
+    # sudo.conf grammar accepts mixed-case Plugin/Path. Attackers
+    # may use case variation to evade naive grep-only detection.
+    printf 'PLUGIN policy /tmp/evil.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# JSON record contract (SDD-062 single-line consumer)
+# ============================================================
+
+@test "INVARIANT (JSON record is emitted as a SINGLE main logger line — SDD-062 downstream JSON-line consumer contract)" {
+    printf 'Plugin sudoers_policy sudoers.so\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-sudo-conf -- ')
+    [ "${main_count}" = "1" ]
+}

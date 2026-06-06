@@ -86,8 +86,12 @@ for f in "${files[@]}"; do
     while IFS= read -r line; do
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
         read -r kw a b _rest <<< "$line"
-        case "$kw" in
-            [Pp]lugin)
+        # sudo's own parser uses strcasecmp on keywords (Plugin / PLUGIN
+        # / pLuGin all valid). Downcase the keyword token so mixed-case
+        # attacker variants don't slip past the case statement.
+        kw_lc="${kw,,}"
+        case "$kw_lc" in
+            plugin)
                 # a=symbol name, b=.so path
                 [[ -z "$b" ]] && continue
                 printf 'plugin\t%s\t%s:%s\n' "$f" "$a" "$b" >> "$current"
@@ -97,7 +101,7 @@ for f in "${files[@]}"; do
                     suspicious+=("${base}:plugin-relative-path($a=$b)")
                 fi
                 ;;
-            [Pp]ath)
+            path)
                 # a=name (e.g. plugin_dir), b=value
                 [[ -z "$b" ]] && continue
                 printf 'pathdir\t%s\t%s:%s\n' "$f" "$a" "$b" >> "$current"
