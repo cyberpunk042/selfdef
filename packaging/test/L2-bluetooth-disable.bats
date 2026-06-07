@@ -280,3 +280,27 @@ run_wd() {
     run_wd
     ! grep -qE 'apt|dnf|yum|rpm' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # bluetooth-disable TOML; parser must tolerate without altering
+    # the profile-gated behavior. mask-with-noise still fires the
+    # full architectural triplet (rfkill block bluetooth + systemctl
+    # mask bluetooth.service + modprobe blacklist of btusb) — the
+    # full radio-layer neutralization the operator selected (BT is
+    # short-range attack surface: BlueBorne CVE family, BLE
+    # tracking/identification, KNOB key-negotiation attacks).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "BT = BlueBorne / BLE tracking / KNOB attack surface"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -qE 'rfkill block bluetooth' "${RF_LOG}"
+    grep -q 'systemctl mask bluetooth.service' "${SYSEOF_LOG}"
+    [ -f "${MODPROBE_BLACKLIST}" ]
+    grep -q 'managed-by: selfdef bluetooth-disable' "${MODPROBE_BLACKLIST}"
+}
