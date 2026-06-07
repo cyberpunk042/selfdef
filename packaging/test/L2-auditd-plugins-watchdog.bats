@@ -291,3 +291,21 @@ seed_benign() {
     run_wd
     cap | grep -q 'distinctive-attacker-plugin'
 }
+
+@test "INVARIANT (plugin path under /home — user-writable persistence vector → alert; writable-root axis-symmetric expansion)" {
+    # Sister to /tmp + /var/tmp + /dev/shm writable-root INVARIANTs
+    # already locked. /home/<user> is writable by the owning user
+    # without privilege; an attacker who pivots into a user account
+    # plants a binary there + sets an auditd plugin path pointing
+    # at it for root-exec via the dispatcher. Locks the /home axis
+    # on the auditd dispatcher-plugin writable-root coverage
+    # (T1562.001 — Impair Defenses: auditd's plugin dispatcher
+    # feeds the event stream to attacker code AS ROOT, evading
+    # SIEM correlation by intercepting at the source).
+    seed_benign
+    run_wd
+    printf 'active = yes\npath = /home/alice/.audisp\ntype = always\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
