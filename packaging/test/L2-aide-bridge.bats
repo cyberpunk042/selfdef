@@ -278,3 +278,25 @@ Changed entries: 4"
     cap | grep -q '"severity":"alert"'
 }
 
+@test "INVARIANT (high-volume adds-only: 100 adds still warn — adds-only never escalates to alert; bit-mask precedence holds at scale)" {
+    # Sister to suid-sgid 4-add boundary INVARIANT and many other
+    # watchdog count-vs-bit precedence INVARIANTs across the
+    # brain. AIDE's bitmask (1=added, 2=removed, 4=changed)
+    # determines severity REGARDLESS of count magnitude. A
+    # 100-add scan rc=1 (adds-only bit set) MUST stay warn — the
+    # adds-only bit defines the severity ceiling. If the wrapper
+    # silently escalated to alert at high counts, the operator
+    # would lose the change/remove signal (which is qualitatively
+    # different: changes/removes are tamper signals, adds are
+    # legit-ops signals at any scale). Locks the bit-precedence-
+    # over-count invariant on the file-integrity surveillance
+    # surface (T1565.001 — Stored Data Manipulation tamper class).
+    mk_aide 1 "Added entries: 100
+Removed entries: 0
+Changed entries: 0"
+    run_wd
+    cap | grep -q '"event":"diff_added_only"'
+    cap | grep -q '"severity":"warn"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
