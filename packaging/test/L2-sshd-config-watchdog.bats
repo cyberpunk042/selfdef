@@ -341,3 +341,19 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (AuthorizedKeysCommand under /var/tmp — writable-root axis-symmetric expansion on sshd AKCmd substrate)" {
+    # Sister to /home AKCmd writable-root + relative-with-slash
+    # INVARIANTs already locked. /var/tmp is writable by ALL
+    # users AND persists across reboots — attackers prefer for
+    # boot-survival persistence. sshd executes AuthorizedKeysCommand
+    # AS the configured user (often AuthorizedKeysCommandUser
+    # = nobody, often root by misconfig) to retrieve keys from
+    # external auth — an attacker who plants a binary in
+    # /var/tmp + flips AKCmd to it gets remote code-exec on
+    # EVERY ssh login attempt. T1556 Modify Authentication
+    # Process via AKCmd hijack.
+    eff "permitrootlogin no" "passwordauthentication no" "authorizedkeyscommand /var/tmp/.evil-getkeys"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
