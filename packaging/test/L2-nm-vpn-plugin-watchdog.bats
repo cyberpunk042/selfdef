@@ -325,3 +325,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # nm-vpn-plugin-watchdog runs ON the timer's scheduled fire
+    # — scans NetworkManager VPN plugin name files for .so paths
+    # in writable roots, emits a verdict, then exits. Type=
+    # simple would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the nm-vpn-plugin-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/nm-vpn-plugin-watchdog/systemd/selfdef-nm-vpn-plugin.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
