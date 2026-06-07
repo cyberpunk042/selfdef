@@ -673,3 +673,18 @@ assert 'install' in data, 'install missing'
         ! grep -qE '^Restart=on-failure' "${s}"
     done
 }
+
+@test "INVARIANT (cron-job-watchdog service unit declares Description= — systemctl-status operator-readable label)" {
+    # Sister to brain-wide systemd Description= INVARIANT
+    # family. The Description= directive surfaces in
+    # `systemctl status` output + journalctl unit-filter
+    # labels. A unit with no Description is opaque to
+    # operators triaging service activity. Locks the
+    # Description-present discipline on the cron-job-watchdog
+    # service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/cron-job-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^Description=' "${s}"
+    done
+}
