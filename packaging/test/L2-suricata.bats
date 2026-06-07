@@ -197,3 +197,19 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/check.sh"
     grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/uninstall.sh"
 }
+
+@test "INVARIANT (no auto-uninstall: suricata module NEVER emits package-remove commands on suricata)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The suricata installer wires NFQUEUE
+    # interception + ruleset config but MUST NEVER emit shell
+    # commands that uninstall the suricata package itself
+    # (apt/dpkg/dnf/rpm/yum remove|purge|uninstall suricata).
+    # Silent auto-removal of suricata during install/check
+    # would leave NFQUEUE rules pointing at a no-longer-
+    # listening queue — packets dropped or bypassed without
+    # IDS. Locks anti-package-removal contract on the network-
+    # IDS sentinel substrate.
+    for f in "${MODULE_DIR}/install/apply.sh" "${MODULE_DIR}/install/check.sh" "${MODULE_DIR}/install/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+suricata' "${f}"
+    done
+}
