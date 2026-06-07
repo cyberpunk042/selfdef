@@ -341,3 +341,20 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"coredump-suid-restrict"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: coredump-suid-restrict NEVER emits package-remove commands)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The coredump-suid-restrict installer writes a
+    # sysctl drop-in to lock fs.suid_dumpable=0 + an optional
+    # limits.d drop-in but MUST NEVER emit shell commands that
+    # uninstall kernel-related packages or systemd-coredump
+    # (apt/dpkg/dnf/rpm/yum remove|purge|uninstall systemd-
+    # coredump|libpam-modules). Auto-removal would be
+    # categorically wrong: catastrophic at the substrate level.
+    # Locks anti-package-removal contract on the suid-coredump
+    # restriction substrate.
+    write_config "suid-only"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)'
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${SYSCTL_DROPIN}"
+}
