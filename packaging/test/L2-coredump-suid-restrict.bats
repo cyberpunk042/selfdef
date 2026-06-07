@@ -378,3 +378,20 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: coredump-suid-restrict installer NEVER deletes operator-pre-existing sysctl/limits configs — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # coredump-suid-restrict writes its own sysctl drop-in +
+    # limits.d drop-in; it MUST NEVER rm/find-delete an
+    # operator's pre-existing /etc/sysctl.conf or
+    # /etc/security/limits.conf or limits.d entries not owned
+    # by THIS module. Locks no-auto-delete on the coredump-
+    # suid-restrict installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/sysctl\.conf' "${f}"
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/security/limits\.conf' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/(sysctl|security/limits)\.d.*-delete' "${f}"
+    done
+}
