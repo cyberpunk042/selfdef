@@ -318,3 +318,16 @@ TOMLEOF
     [ ! -f "${DROPIN_DIR}/50-selfdef.conf" ]
     ! grep -qE 'systemctl (restart|reload) systemd-journald' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (paranoid carries SystemMaxUse cap — disk-bound retention floor)" {
+    # Sister to standard SystemMaxFileSize INVARIANT.
+    # SystemMaxUse caps total journal disk usage on the host —
+    # without it on paranoid, a busy host's journal can fill
+    # /var/log/journal indefinitely, eventually triggering disk
+    # exhaustion (denial-of-availability via log-volume).
+    write_config "paranoid"
+    run_wd
+    drop_in="${DROPIN_DIR}/50-selfdef.conf"
+    [ -f "${drop_in}" ]
+    grep -qE '^SystemMaxUse[[:space:]]*=' "${drop_in}"
+}
