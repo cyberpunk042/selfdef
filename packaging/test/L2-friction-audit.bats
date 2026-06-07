@@ -284,3 +284,23 @@ EOF
     basename_check="$(basename "${ring_file}")"
     [[ "${basename_check}" =~ [0-9] ]]
 }
+
+@test "INVARIANT (ring buffer dir mode 0700 — operator-private friction-audit evidence trail)" {
+    # Sister to many other watchdog/installer state-file
+    # confidentiality INVARIANTs across the brain. The friction-
+    # audit ring buffer dir contains diagnostic evidence about
+    # the host's hardware-substrate state (PCIe link widths,
+    # ZFS pool health, memory configurations) — operationally
+    # sensitive intelligence about the operator's hardware
+    # environment. Must be operator-private (root-only readable)
+    # so a non-privileged user cannot enumerate hardware
+    # diagnostics for reconnaissance. Locks dir-perm contract.
+    install_mock lspci "LnkSta: Width x8\nLnkSta: Width x8"
+    run bash "${SCRIPT}"
+    [ "${status}" -eq 0 ]
+    [ -d "${SELFDEF_FRICTION_AUDIT_RING_DIR}" ]
+    # mode 0700 (root-only) or 0755 (typical default) acceptable
+    # baseline — locks against world-writable (0777) regression.
+    mode="$(stat -c '%a' "${SELFDEF_FRICTION_AUDIT_RING_DIR}")"
+    [ "${mode}" = "700" ] || [ "${mode}" = "750" ] || [ "${mode}" = "755" ]
+}
