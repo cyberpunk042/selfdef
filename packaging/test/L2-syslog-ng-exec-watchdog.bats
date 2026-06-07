@@ -298,3 +298,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (program() under /var/tmp — writable-root axis-symmetric expansion on syslog-ng surface)" {
+    # Sister to /home + /dev/shm + /tmp syslog-ng program()
+    # writable-root INVARIANTs. /var/tmp writable + persistent.
+    # Closes axis-symmetric coverage on T1037/T1546 syslog-ng
+    # program() log-event-trigger root-exec surface.
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'destination d_evil { program("/var/tmp/.evil-collector"); };\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
