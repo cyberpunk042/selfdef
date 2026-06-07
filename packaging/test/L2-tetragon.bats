@@ -181,3 +181,32 @@ EOF
     unset SELFDEF_DRY_RUN SELFDEF_TETRAGON_CONFIG
     [ "${status}" -ne 0 ]
 }
+
+@test "check.sh uses set -euo pipefail (script hygiene)" {
+    grep -qE '^set -euo pipefail' "${INSTALL_DIR}/check.sh"
+}
+
+@test "uninstall.sh uses set -euo pipefail (script hygiene)" {
+    grep -qE '^set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
+}
+
+@test "INVARIANT (substrate phase=pre: tetragon installs BEFORE consumers — agent-guard MS017, perimeter MS047, guardian MS044)" {
+    # phase=pre is the load-bearing scheduling contract. Locks that
+    # the module.toml metadata isn't accidentally changed in a way
+    # that breaks the dependent module install ordering.
+    grep -qE '^phase[[:space:]]*=[[:space:]]*"pre"' "${MODULE_DIR}/module.toml"
+    # Also check that tetragon-tracing and tetragon-policies are
+    # provided contracts (downstream depends_on slots).
+    grep -q 'tetragon-tracing' "${MODULE_DIR}/module.toml"
+    grep -q 'tetragon-policies' "${MODULE_DIR}/module.toml"
+}
+
+@test "INVARIANT (signed-policy contract: require_signed_policies surfaces in both apply.sh AND default.toml — operator-toggleable from config)" {
+    # SDD-004 F-2026-024 + F-2027-006 contract: the signed-policy
+    # batch verification is operator-toggleable via TOML config.
+    # Lock that BOTH the apply.sh code path AND the default.toml
+    # schema declare the key — without both, the toggle is
+    # silently broken.
+    grep -q 'require_signed_policies' "${INSTALL_DIR}/apply.sh"
+    grep -q 'require_signed_policies' "${PROFILES_DIR}/default.toml"
+}
