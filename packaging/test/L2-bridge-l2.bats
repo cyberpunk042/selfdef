@@ -284,3 +284,17 @@ assert 'install' in data, 'install missing'
         ! grep -qE 'find[[:space:]]+/etc/nftables(\.d)?.*-delete' "${f}"
     done
 }
+
+@test "INVARIANT (lib.sh sources module-lib.sh — SDD-006 5-helper contract relayed via shared lib substrate)" {
+    # Sister to brain-wide SDD-006 module-lib relay INVARIANT.
+    # bridge-l2's install/lib.sh consumes the canonical 5
+    # helpers (log/emit_status/die/run/toml_get) provided by
+    # packaging/lib/module-lib.sh; an install script that
+    # accidentally redefined log/emit_status locally would
+    # break the operator-dashboard JSON-line consumer contract
+    # because two different emit_status implementations would
+    # ship distinct schemas. Locks the module-lib relay
+    # discipline on the bridge-l2 install/lib.sh substrate.
+    [ -f "${INSTALL_DIR}/lib.sh" ]
+    grep -qE 'module-lib\.sh|SELFDEF_MODULE_LIB' "${INSTALL_DIR}/lib.sh"
+}
