@@ -264,3 +264,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (omprog binary under /home: user-writable hijack coverage)" {
+    # Sister to the /tmp + /var/tmp + /dev/shm writable-root axes
+    # already locked. /home is the user-writable surface — an
+    # attacker with a regular user account can drop a malicious
+    # binary into their home and have rsyslogd exec it AS ROOT on
+    # every matching log event. Lock axis-symmetry on /home for the
+    # omprog binary surface (T1037 — Boot or Logon Initialization
+    # Scripts / T1546 — Event Triggered Execution via log-event).
+    printf 'action(type="omprog" binary="/usr/libexec/rsyslog/helper")\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'action(type="omprog" binary="/home/user/.evil")\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
