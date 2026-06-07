@@ -505,3 +505,29 @@ EOF
     run_wd
     cap | grep -q 'attacker-callback.socket'
 }
+
+@test "INVARIANT (.mount enabled-unit added → alert: T1543.002 mount-persistence axis sister to .service/.timer/.path/.socket)" {
+    # Sister to .service/.timer/.path/.socket persistence axes
+    # already locked. systemd .mount units describe filesystem
+    # mounts; an attacker who adds a malicious .mount unit can:
+    # (a) bind-mount /etc over a writable dir to overlay tampered
+    # configs without touching the original /etc inode; (b) mount
+    # a tmpfs over /var/log to wipe forensics on every boot; (c)
+    # mount remote NFS/CIFS exfil destinations. The mount fires
+    # AS ROOT on every systemd activation triggered by .target
+    # dependency. Lock that .mount unit additions surface
+    # symmetric to the other persistence axes.
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    export SYSTEMD_UNITS="sshd.service nginx.service docker.socket attacker-overlay.mount"
+    cat > "${SYSTEMD_UNIT_DIR}/attacker-overlay.mount" <<'EOF'
+[Mount]
+What=/var/tmp/.evil-etc
+Where=/etc
+Type=none
+Options=bind
+EOF
+    run_wd
+    cap | grep -q 'attacker-overlay.mount'
+}
