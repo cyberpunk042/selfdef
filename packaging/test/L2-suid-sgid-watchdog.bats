@@ -259,3 +259,39 @@ mk_suid() { printf 'ELF-%s' "$1" > "${ROOT}/$1"; chmod 4755 "${ROOT}/$1"; }
     [ "${status}" = "0" ]
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (multi-root scan: setuid binary in any of ROOTS detected — symmetric to file-capabilities multi-root)" {
+    # Operator may watch multiple roots. Sister to file-capabilities-
+    # watchdog multi-root INVARIANT.
+    ROOT2="${TMP}/scan2"; mkdir -p "${ROOT2}"
+    mk_suid sudo
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_SUIDSGID_PROFILE="report" \
+    SELFDEF_SUIDSGID_ROOTS="${ROOT} ${ROOT2}" \
+    SELFDEF_SUIDSGID_BASELINE="${BASELINE}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'ELF-sneaky' > "${ROOT2}/sneaky-suid"
+    chmod 4755 "${ROOT2}/sneaky-suid"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_SUIDSGID_PROFILE="report" \
+    SELFDEF_SUIDSGID_ROOTS="${ROOT} ${ROOT2}" \
+    SELFDEF_SUIDSGID_BASELINE="${BASELINE}" \
+        bash "${WD}"
+    cap | grep -q 'sneaky-suid'
+}
+
+@test "INVARIANT (4-add boundary lock: exactly 4 adds → alert bulk_delta; 3 adds → warn suid_drift)" {
+    # Sister to listening-ports-watchdog 3-add boundary lock. This
+    # one locks the 4-vs-3 boundary. Regression that bumps threshold
+    # to 5+ would trip here.
+    mk_suid sudo
+    run_wd
+    # Exactly 4 added — alert boundary.
+    mk_suid a1; mk_suid a2; mk_suid a3; mk_suid a4
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"bulk_delta"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"added":4'
+}
