@@ -404,3 +404,25 @@ EOF
     [ "${pre_sha}" = "${post_sha}" ]
     [ ! -f "${PAM_D}/login.selfdef-nullok-backup" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # One installer run must emit EXACTLY ONE emit_status JSON
+    # record on stdout — not zero (silent run invisible to
+    # operator dashboard) and not multiple (duplicate records
+    # corrupt the dashboard's apply-count + last-status
+    # invariants). Locks single-record discipline on the
+    # PAM-nullok-disable installer surface across multi-file
+    # PAM stacks (login, sshd, su, sudo, etc.).
+    cat > "${PAM_D}/login" <<'EOF'
+auth sufficient pam_unix.so nullok
+EOF
+    cat > "${PAM_D}/sshd" <<'EOF'
+auth sufficient pam_unix.so nullok
+EOF
+    write_config "enforce"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"nullok-disable"')
+    [ "${count}" = "1" ]
+}
