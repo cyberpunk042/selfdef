@@ -310,3 +310,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (weakener-detect: rd.break / single boot-edit → alert): rescue-shell drop weakener axis" {
+    # Sister to init= weakener axis already locked above. rd.break
+    # is the dracut/systemd hook that drops to a rescue shell
+    # during early-boot before mounting the real root — same
+    # physical-access boot-edit attack class, different argument
+    # name. systemd-boot accepts 'single' to similar effect. Lock
+    # axis coverage of rescue-shell drop weakeners on the live-
+    # cmdline observation surface alongside init= (T1542 physical-
+    # access boot-edit).
+    write_cmdline "BOOT_IMAGE=/vmlinuz ro rd.break"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
