@@ -330,3 +330,18 @@ run_wd() {
     # in the file (full content scan, not just first match).
     ! grep -q 'Sigkill' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
 }
+
+@test "INVARIANT (policy file is chmod 0644 — Tetragon/kubectl-style read convention)" {
+    # Sister to many other installer module's file-perm INVARIANTs
+    # across the brain. The host-sentinel policy YAML files land
+    # in /etc/tetragon/policies/ (or operator-overridden path) +
+    # are sourced by tetragon-operator at startup. 0644 is the
+    # standard read-everyone, write-root convention — operator
+    # systemd-unit-readable + selfdef-watch-tool-readable; never
+    # world-writable (would let attacker silently rewrite the
+    # active policy to allow their own ld.so.preload mutation).
+    write_config "audit"
+    run_wd
+    [ -f "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml" ]
+    [ "$(stat -c '%a' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml")" = "644" ]
+}
