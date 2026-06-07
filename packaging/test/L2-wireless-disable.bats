@@ -320,3 +320,13 @@ TOMLEOF
     ! grep -qE 'rfkill block wifi' "${RF_LOG}"
     ! [ -f "${MODPROBE_FILE}" ]
 }
+
+@test "INVARIANT (modprobe blacklist file mode 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs. The modprobe
+    # blacklist must be world-readable for modprobe at boot, and
+    # root-write-only to prevent silent unblock.
+    write_config "mask"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    [ "$(stat -c '%a' "${MODPROBE_FILE}")" = "644" ]
+}
