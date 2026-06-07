@@ -329,3 +329,22 @@ mk_suid() { printf 'ELF-%s' "$1" > "${ROOT}/$1"; chmod 4755 "${ROOT}/$1"; }
     baseline_mode="$(stat -c '%a' "${BASELINE}")"
     [ "${baseline_mode}" = "600" ] || [ "${baseline_mode}" = "640" ] || [ "${baseline_mode}" = "644" ]
 }
+
+@test "INVARIANT (hash-change detection: existing suid binary content swap → alert despite path-existence)" {
+    # Sister to ADD detection INVARIANTs. The watchdog must
+    # also detect content-swap: an attacker who replaces
+    # /usr/bin/passwd content with their own setuid binary
+    # keeps the path but changes the content. The hash field
+    # in TSV catches this — the same path with different
+    # hash MUST surface as content-change. Locks
+    # content-integrity detection on T1574 binary substitution.
+    mk_suid sudo
+    mk_suid passwd
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Replace passwd content (same path, different content).
+    printf 'attacker-replacement-content\n' > "${ROOT}/passwd"
+    chmod 4755 "${ROOT}/passwd"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
