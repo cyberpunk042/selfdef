@@ -483,3 +483,23 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"ssh-moduli-harden"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: ssh-moduli-harden NEVER emits package-remove commands on /etc/ssh)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The moduli-harden installer filters /etc/ssh/
+    # moduli content but MUST NEVER emit shell commands that
+    # uninstall the openssh-server package (apt/dpkg/dnf/rpm/yum
+    # remove|purge|uninstall openssh*). Auto-removal of openssh
+    # during moduli-hardening would lock the operator out of the
+    # host — sister to refuse-to-brick discipline. Locks
+    # anti-package-removal contract on the SSH KEX hardening
+    # substrate.
+    write_config "strong"
+    cat > "${MODULI_FILE}" <<'EOF'
+20260101000000 2 6 100 1024
+20260101000000 2 6 100 3072
+EOF
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+openssh'
+    ! grep -qE 'openssh' "${MODULI_FILE}"
+}
