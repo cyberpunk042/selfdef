@@ -787,3 +787,8 @@ assert ch == 'install/check.sh'
     size=$(stat -c '%s' "${uni}")
     [ "${size}" -gt 50 ]
 }
+
+@test "INVARIANT (suricata module.toml first-line includes a comment or name — TOML-table-start-canonical 78)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/suricata/module.toml"
+    head -1 "${mtoml}" | grep -qE '^#|^name'
+}

@@ -727,3 +727,6 @@ assert c == 'sys_execve', f'call must be sys_execve, got {c!r}'
 @test "INVARIANT (YAML file declares apiVersion line — well-formed-CRD 77)" {
     grep -qE '^apiVersion:' "${YAML}"
 }
+@test "INVARIANT (YAML file declares kind: line — well-formed-CRD 78)" {
+    grep -qE '^kind:' "${YAML}"
+}

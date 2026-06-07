@@ -879,3 +879,6 @@ assert isinstance(data, dict)
     size=$(stat -c '%s' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh")
     [ "${size}" -gt 50 ]
 }
+@test "INVARIANT (slm-cpu-loop module.toml first-line is comment OR declaration — TOML-canonical-start 78)" {
+    head -1 "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml" | grep -qE '^#|^name'
+}

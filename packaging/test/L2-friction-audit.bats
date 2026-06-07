@@ -745,3 +745,6 @@ EOF
 @test "INVARIANT (script file has shebang line — POSIX-conformant 77)" {
     head -1 "${SCRIPT}" | grep -qE '^#!'
 }
+@test "INVARIANT (script declares set flags in first 30 lines — strict-mode-prologue 78)" {
+    head -30 "${SCRIPT}" | grep -qE '^set -'
+}

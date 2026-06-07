@@ -890,3 +890,8 @@ assert isinstance(data, dict)
     size=$(stat -c '%s' "${uni}")
     [ "${size}" -gt 50 ]
 }
+
+@test "INVARIANT (wasm-aot-cache module.toml first-line includes a comment or name — TOML-table-start-canonical 78)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
+    head -1 "${mtoml}" | grep -qE '^#|^name'
+}

@@ -625,3 +625,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     size=$(stat -c '%s' "${TIMER}")
     [ "${size}" -gt 100 ]
 }
+@test "INVARIANT (.timer file uses [Unit] header — INI-section-canonical 78)" {
+    grep -qE '^\[Unit\]' "${TIMER}"
+}

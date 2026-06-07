@@ -792,3 +792,6 @@ assert isinstance(data, dict)
 @test "INVARIANT (detect-host module.toml declares name= field — TOML-table-start 77)" {
     head -10 "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml" | grep -qE '^name'
 }
+@test "INVARIANT (detect-host module.toml first-line is comment OR declaration — TOML-canonical-start 78)" {
+    head -1 "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml" | grep -qE '^#|^name'
+}
