@@ -356,3 +356,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (bind-mount shadowing /lib — runtime-library shadow axis — sister to /usr/lib)" {
+    # Sister to /etc + /bin + /sbin + /usr + /var + /home +
+    # /boot + /root/.ssh bind-mount shadow INVARIANTs. /lib
+    # contains essential shared libraries (libc.so.6, ld-linux.
+    # so) — any binary on the system that dynamic-links against
+    # /lib gets attacker-controlled libc. T1574 Hijack Execution
+    # Flow via library shadow at the most-foundational level.
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/data/fake-lib /lib none bind 0 0\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
