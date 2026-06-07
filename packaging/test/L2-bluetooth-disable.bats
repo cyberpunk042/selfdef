@@ -379,3 +379,22 @@ TOMLEOF
     bad=$(printf '%s\n' "${output}" | grep -oE '"severity":"[^"]+"' | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (mask is sticky: downgrade mask → stop preserves mask state — anti-silent-unmask)" {
+    # Sister to brain-wide mask-sticky-downgrade INVARIANTs
+    # across L2 service-disable suites (avahi, nscd, ctrlaltdel,
+    # rpcbind, at-disable). The bluetooth-disable mask profile
+    # sets bluetooth.service to masked state; a subsequent
+    # profile downgrade to stop MUST NOT emit systemctl unmask.
+    # The operator's mask decision is sticky — they explicitly
+    # chose hard-disable over soft-stop. Silent unmask would
+    # re-enable the bluetooth attack surface after operator
+    # chose to hard-disable it. Locks mask-stickiness contract
+    # on the bluetooth-disable substrate.
+    write_config "mask"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    ! grep -qE 'systemctl unmask bluetooth' "${SYSEOF_LOG}"
+}
