@@ -357,3 +357,19 @@ TOMLEOF
     LEGACY_PRESENT=1 run_wd
     ! grep -qE 'systemctl unmask' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (no auto-uninstall: rsh-telnet-disable NEVER emits package-remove commands on rsh/telnet)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The rsh-telnet-disable installer neutralizes
+    # rshd/telnetd via stop+disable+mask but MUST NEVER emit
+    # shell commands that uninstall the rsh-server/telnetd
+    # packages themselves (apt/dpkg/dnf/rpm/yum remove|purge|
+    # uninstall rsh-server|telnetd|inetutils-telnetd). Operator
+    # may legitimately need rsh/telnet for legacy lab access
+    # later; the module's job is neutralize-not-uninstall.
+    # Locks anti-package-removal contract on the rsh-telnet-
+    # disable substrate.
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(rsh|telnet|inetutils)' "${SYSEOF_LOG}"
+}
