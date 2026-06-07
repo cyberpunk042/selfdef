@@ -543,3 +543,17 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: ssh-moduli-harden installer NEVER deletes operator-pre-existing configs in target dir — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # ssh-moduli-harden writes its own drop-in/config; it MUST NEVER
+    # rm/find-delete operator-pre-existing entries not owned by
+    # THIS module. Locks no-auto-delete on the ssh-moduli-harden
+    # installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/install"
+    for sh in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${sh}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/etc/(selinux|passwd|shadow|cups|profile\.d|login\.defs|ssh|sudoers|sudoers\.d|suricata)[/[:space:]]' "${sh}"
+        ! grep -qE 'find[[:space:]]+/etc/(selinux|cups|profile\.d|ssh|sudoers|sudoers\.d|suricata).*-delete' "${sh}"
+    done
+}
