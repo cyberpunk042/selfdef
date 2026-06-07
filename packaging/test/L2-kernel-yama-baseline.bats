@@ -295,3 +295,18 @@ TOMLEOF
     [ -f "${DROPIN}" ]
     grep -qE '^kernel\.yama\.ptrace_scope[[:space:]]*=[[:space:]]*[123]$' "${DROPIN}"
 }
+
+@test "INVARIANT (drop-in is chmod 0644 — sysctl.d convention)" {
+    # Sister to many other installer module's chmod 0644 INVARIANT
+    # across the brain (sysctl drop-ins, limits.d, ssh-hardening
+    # drop-in). The kernel-yama sysctl.d drop-in must be world-
+    # readable (systemd-sysctl reads it at boot) and root-write-
+    # only — any other perm would let an attacker silently
+    # downgrade ptrace_scope to 0 (allow all ptrace) which would
+    # re-expose the memory-scraper / password-sniffer attack
+    # surface that strict / paranoid profiles defend against.
+    write_config "strict"
+    run_wd
+    [ -f "${DROPIN}" ]
+    [ "$(stat -c '%a' "${DROPIN}")" = "644" ]
+}
