@@ -298,3 +298,18 @@ Scanned files: 1"
     cap | grep -qE '"severity":"(high|alert)"'
     cap | grep -q '"clamscan_rc":2'
 }
+
+@test "INVARIANT (DELTA detect — distinctive-attacker-named malware FOUND surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When clamscan reports a FOUND
+    # malware hit, the file path MUST surface in the JSON sample
+    # so operator dashboard routes triage to the right path —
+    # operators MUST be able to tell WHICH file got infected
+    # without scrolling through scanner log history. Locks the
+    # found-file-sample contract on the malware-discovery surface
+    # (T1499.001 — Resource Hijacking by planted-malware crypto-
+    # miners + arbitrary RCE class).
+    mk_clam 1 "/tmp/distinctive-attacker-malware.elf: Win.Trojan.Test FOUND"
+    run_wd
+    cap | grep -q 'distinctive-attacker-malware'
+}
