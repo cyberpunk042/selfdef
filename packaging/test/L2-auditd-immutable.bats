@@ -344,3 +344,14 @@ EOF
     mode="$(stat -c '%a' "${file}")"
     [ "${mode}" = "640" ] || [ "${mode}" = "600" ] || [ "${mode}" = "644" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on auditd-immutable installer
+    # surface across rule-file + augenrules-reload phases.
+    write_config "enforce" "true"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"auditd-immutable"')
+    [ "${count}" = "1" ]
+}
