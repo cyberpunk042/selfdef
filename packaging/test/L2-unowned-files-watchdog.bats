@@ -244,3 +244,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -qE '"severity":"(warn|alert)"'
     cap | grep -qE '"event":"(unowned_found|bulk_unowned)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named orphan surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an unowned (deleted-user-
+    # remnant or sloppy-archive-extraction) file appears, the file
+    # path MUST surface in the JSON sample so operator dashboard
+    # routes triage to the right path. Locks the new-file-
+    # discovered operator-visibility contract on the ownership-
+    # confusion surface (post-uid-deletion lingering files +
+    # post-incident remediation traceability).
+    printf 'x' > "${ROOT}/distinctive-attacker-orphan"
+    chown 99999:99999 "${ROOT}/distinctive-attacker-orphan"
+    run_wd
+    cap | grep -q 'distinctive-attacker-orphan'
+}
