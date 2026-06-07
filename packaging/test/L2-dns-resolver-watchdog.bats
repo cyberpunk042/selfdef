@@ -426,3 +426,22 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-dns-resolver -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker IP surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker adds a
+    # distinctive IP (RFC 5737 documentation range / non-standard
+    # /16 / etc) to the nameserver list, the IP MUST surface in
+    # the JSON sample so operator dashboard routes triage to the
+    # right resolver. Locks the operator-visibility contract on
+    # the DNS-redirection surveillance surface (T1556.004 —
+    # Impair Defenses: Modify DNS Resolver).
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 198.51.100.42
+EOF
+    run_wd
+    cap | grep -q '198.51.100.42'
+}
