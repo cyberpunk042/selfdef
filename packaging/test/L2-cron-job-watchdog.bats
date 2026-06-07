@@ -465,3 +465,22 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-cron-jobs -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on cron-job surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The cron-job-watchdog MUST only emit severity values from
+    # the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1053.003 cron-scheduled-task persistence
+    # alert. Locks parser contract on the cron-job inventory
+    # delta detection surface.
+    write_cron_inventory
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    echo '@daily root /tmp/.evil' > "${CRON_D}/99-attacker"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
