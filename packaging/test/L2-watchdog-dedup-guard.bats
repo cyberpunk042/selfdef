@@ -219,3 +219,32 @@ scan_scripts() { compgen -G "${SCRIPTS_GLOB}"; }
         return 1
     fi
 }
+
+@test "INVARIANT (shellcheck shebang invariant — every watchdog scan script declares #!/usr/bin/env bash header)" {
+    # Sister to the inventory-capture + routing-blind + baseline-leak +
+    # module-lib-fail-loud + version-gate structural invariants already
+    # locked. Locks: every watchdog scan script MUST declare a portable
+    # `#!/usr/bin/env bash` shebang (not /bin/bash hardcoded path, not
+    # /bin/sh which lacks bashisms the watchdogs rely on like
+    # [[ ... ]], arrays, mapfile, and not missing entirely which would
+    # require systemd's ExecStart to spell out the interpreter and
+    # breaks manual `bash <script>` invocation discovery). A scan
+    # script that drops the shebang silently breaks the systemd-unit
+    # ExecStart=/path/script.sh contract — the unit fails to start
+    # and the watchdog never runs, a silent surveillance gap. Locks
+    # the structural shebang discipline across the fleet.
+    bad=()
+    for f in $(scan_scripts); do
+        first_line="$(head -1 "$f")"
+        if [[ "${first_line}" != "#!/usr/bin/env bash" ]]; then
+            bad+=("$(basename "$f"):$(printf '%s' "${first_line}" | head -c 32)")
+        fi
+    done
+    if [ "${#bad[@]}" -gt 0 ]; then
+        printf 'watchdog scan script with non-canonical shebang: %s\n' "${bad[*]}" >&2
+        printf 'FIX: first line MUST be exactly `#!/usr/bin/env bash`\n' >&2
+        printf '     — portable across distros + supports the bashisms\n' >&2
+        printf '     watchdogs rely on ([[ ]], arrays, mapfile, $current).\n' >&2
+        return 1
+    fi
+}
