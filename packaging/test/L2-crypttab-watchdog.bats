@@ -348,3 +348,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on crypttab surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The crypttab-watchdog MUST only emit severity values from
+    # the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1611 boot-time-disk-decrypt hijack alert.
+    # Locks parser contract on the /etc/crypttab keyfile/
+    # keyscript detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd                                              # ok path
+    printf 'data /dev/sda2 /tmp/.evil-key luks\n' > "${CRYPTTAB}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
