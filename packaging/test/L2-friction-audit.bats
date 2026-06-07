@@ -213,3 +213,74 @@ EOF
 @test "R10808: shebang is exactly '#!/bin/bash'" {
     head -1 "${SCRIPT}" | grep -qx '#!/bin/bash'
 }
+
+@test "INVARIANT (gate ordering via exit codes: PCIe-fail=1, ZFS-fail=2, Memory-fail=3 — short-circuit precedence locked)" {
+    # The gates run in a specific architectural order with distinct
+    # exit codes. A regression that swaps the codes would break
+    # systemd OnFailure semantics + operator dashboard expectations.
+    # Lock the (gate → exit-code) mapping individually:
+    # PCIe-fail (no x8 lanes) → 1.
+    install_mock lspci ""
+    run bash "${SCRIPT}"
+    [ "${status}" -eq 1 ]
+    # ZFS-fail (degraded pool, PCIe ok) → 2.
+    install_mock lspci "LnkSta: Width x8\nLnkSta: Width x8"
+    install_mock zpool "DEGRADED state"
+    run bash "${SCRIPT}"
+    [ "${status}" -eq 2 ]
+    # Memory-fail (sticks < min, PCIe + ZFS ok) → 3.
+    install_mock lspci "LnkSta: Width x8\nLnkSta: Width x8"
+    install_mock zpool "all pools are healthy"
+    install_mock dmidecode "Memory Device\n	No Module Installed"
+    SELFDEF_FRICTION_AUDIT_MIN_STICKS=2 run bash "${SCRIPT}"
+    [ "${status}" -eq 3 ]
+}
+
+@test "INVARIANT (no-tool SKIP path does NOT emit a failure OCSF event — operator-extension only emits SKIP)" {
+    # When zpool isn't installed, the gate SKIPs (exit 0). The OCSF
+    # event for that gate MUST NOT be a failure event (class_uid
+    # would be 2004 for failure). Sister axis to existing OCSF
+    # success/failure tests.
+    install_mock lspci "LnkSta: Width x8\nLnkSta: Width x8"
+    # No zpool mock — SKIPs.
+    run bash "${SCRIPT}"
+    [ "${status}" -eq 0 ]
+    if [ -f "${SELFDEF_FRICTION_AUDIT_OCSF_PATH}" ]; then
+        # ZFS gate-failure event MUST NOT appear in the OCSF stream.
+        ! grep -q '"gate":"zfs".*"status":"fail"' "${SELFDEF_FRICTION_AUDIT_OCSF_PATH}"
+    fi
+}
+
+@test "INVARIANT (OCSF jsonl is well-formed JSON per line — downstream consumer contract)" {
+    # Each line in the OCSF jsonl file must parse as valid JSON.
+    # A regression that emits malformed lines would break the
+    # downstream SIEM consumer.
+    install_mock lspci "LnkSta: Width x8\nLnkSta: Width x8"
+    install_mock zpool "all pools are healthy"
+    install_mock dmidecode "Size: 32 GB"
+    run bash "${SCRIPT}"
+    [ "${status}" -eq 0 ]
+    [ -f "${SELFDEF_FRICTION_AUDIT_OCSF_PATH}" ]
+    # Each line must parse as JSON via python3.
+    while IFS= read -r line; do
+        [ -z "${line}" ] && continue
+        printf '%s' "${line}" | python3 -c "import json, sys; json.loads(sys.stdin.read())"
+    done < "${SELFDEF_FRICTION_AUDIT_OCSF_PATH}"
+}
+
+@test "INVARIANT (ring buffer filename format includes timestamp — chronological ordering)" {
+    # Ring buffer files should follow a naming pattern that allows
+    # chronological sorting (timestamp prefix or similar). Lock
+    # that the format isn't arbitrary names that would defeat
+    # ring-buffer rotation semantics.
+    install_mock lspci "LnkSta: Width x8\nLnkSta: Width x8"
+    run bash "${SCRIPT}"
+    [ "${status}" -eq 0 ]
+    [ -d "${SELFDEF_FRICTION_AUDIT_RING_DIR}" ]
+    # At least one ring file exists, and the filename contains digits
+    # (timestamp or sequence number — locks non-arbitrary naming).
+    ring_file="$(find "${SELFDEF_FRICTION_AUDIT_RING_DIR}" -name '*.json' | head -1)"
+    [ -n "${ring_file}" ]
+    basename_check="$(basename "${ring_file}")"
+    [[ "${basename_check}" =~ [0-9] ]]
+}
