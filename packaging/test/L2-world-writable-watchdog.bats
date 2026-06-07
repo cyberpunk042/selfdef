@@ -303,3 +303,26 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (no auto-chmod: world-writable-watchdog NEVER chmods detected files — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-remediation / surveillance-
+    # not-destruction INVARIANTs across L2 watchdog suites. The
+    # world-writable-watchdog DETECTS T1222 file-permission-
+    # modification surveillance but MUST NEVER emit chmod
+    # commands to auto-strip the world-writable bit. The
+    # detected world-writable file may be operator-legitimate
+    # (shared log file, multi-user state file, sysadmin
+    # collaboration scratchpad) — silent auto-chmod would
+    # break operator workflow. Forensic evidence value of the
+    # original mode is high (analysis of when the mode was
+    # changed). Surveillance, never remediation. Locks anti-
+    # data-loss contract on the world-writable surveillance
+    # substrate.
+    printf 'x' > "${ROOT}/ww-target"
+    chmod 0666 "${ROOT}/ww-target"
+    run_wd
+    # Detected file retains 0666 mode after detection.
+    mode=$(stat -c '%a' "${ROOT}/ww-target")
+    [ "${mode}" = "666" ]
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*chmod[[:space:]]+(o-w|go-w|0[0-7][0-7][0-7])'
+}
