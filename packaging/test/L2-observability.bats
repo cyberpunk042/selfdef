@@ -199,3 +199,16 @@ teardown_dry_run() {
     unset SELFDEF_DRY_RUN SELFDEF_OBSERVABILITY_CONFIG
     [ "${status}" -ne 0 ]
 }
+
+@test "INVARIANT (uninstall.sh uses set -euo pipefail — fail-loud invariant across full module surface)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # apply.sh + check.sh fail-loud already locked above;
+    # uninstall.sh is the THIRD operator-facing script in the
+    # module surface. Silent uninstall.sh failure during
+    # package purge would leave the observability stack (alerts
+    # + dashboard + scrape configs) in half-removed state —
+    # operator dashboard shows phantom alerts or missing data
+    # without obvious cause. Locks fail-loud contract on the
+    # full module-script surface (apply + check + uninstall).
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
+}
