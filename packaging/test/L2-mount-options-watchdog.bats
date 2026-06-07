@@ -426,3 +426,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '/dev/shm:nodev'
     cap | grep -qE '"severity":"(warn|alert)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on mount-options surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The mount-options-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1574 mount-options-tamper / device-
+    # hardening-bypass alert. Locks parser contract on the
+    # findmnt detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    mk_findmnt
+    write_fixture $'/tmp\tnosuid,nodev,noexec,relatime'  # all hardened
+    run_wd                                              # ok / baseline
+    write_fixture $'/tmp\trelatime'                     # missing 3 flags → alert
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
