@@ -260,3 +260,24 @@ run_wd() {
     grep -qE '^Description=.*selfdef|^Documentation=.*selfdef' "${TIMER_DST}"
     grep -qE '^Description=.*selfdef|^Documentation=.*selfdef' "${SVC_DST}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # swap-encryption-detect TOML; parser must tolerate without
+    # altering the profile-gated behavior. enforce-with-noise still
+    # writes the SELFDEF_SWAPENC_PROFILE=enforce drop-in (escalates
+    # unencrypted-swap from log-only to systemd-failure-recorded —
+    # the operator-dashboard signal for RAM-to-disk exfiltration
+    # surface surveillance).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "enforce"
+operator_note = "unencrypted swap = RAM-to-disk exfil at decommission"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q '^Environment=SELFDEF_SWAPENC_PROFILE=enforce$' "${DROPIN_PROFILE}"
+    ! grep -q '^Environment=SELFDEF_SWAPENC_PROFILE=report$' "${DROPIN_PROFILE}"
+}
