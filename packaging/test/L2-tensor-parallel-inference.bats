@@ -279,3 +279,16 @@ teardown_real_run() {
     teardown_real_run
     [[ "${first_nonblank}" == *"tensor-parallel-inference"* ]]
 }
+
+@test "INVARIANT (module.toml provides tensor-parallel-runtime contract — downstream-consumer interface lock)" {
+    # Sister to many other installer module's provides-contract
+    # INVARIANT across the brain (suricata ids+eve-json, slm-
+    # cpu-loop slm-loop-runtime, wasm-aot-cache wasm-aot-cache-
+    # dir). The tensor-parallel-inference module's provides
+    # field names the downstream-visible interface — every
+    # tensor-parallel-runtime consumer module (inference
+    # workloads requiring multi-GPU tensor split) lists this
+    # in their depends_on. A silent rename of the provides
+    # token would break every downstream consumer module.
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"tensor-parallel-runtime"' "${MODULE_DIR}/module.toml"
+}
