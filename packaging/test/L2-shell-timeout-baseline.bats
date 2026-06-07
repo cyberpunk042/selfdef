@@ -259,3 +259,23 @@ run_wd() {
     ! grep -qE 'TMOUT=.*[\$\`]\(' "${DROPIN}"
     ! grep -qE 'TMOUT=.*[\$\`]\{' "${DROPIN}"
 }
+
+@test "INVARIANT (strict TMOUT <= standard TMOUT — profile-rank monotonic tightening)" {
+    # Sister to pam-history + pam-pwquality profile-rank
+    # monotonic INVARIANTs already locked. The strict profile
+    # MUST hold at MOST the same TMOUT as standard (smaller =
+    # tighter / shorter idle window before automatic logout).
+    # If strict had a LARGER TMOUT than standard, operator's
+    # intent ("tighten idle-session window for unattended-
+    # workstation defense") would be silently inverted.
+    # Locks the monotonic ordering: strict_tmout <= standard_tmout.
+    write_config "standard"
+    run_wd
+    standard_n="$(grep -oE 'TMOUT=[0-9]+' "${DROPIN}" | grep -oE '[0-9]+$' | head -1)"
+    write_config "strict"
+    run_wd
+    strict_n="$(grep -oE 'TMOUT=[0-9]+' "${DROPIN}" | grep -oE '[0-9]+$' | head -1)"
+    [ -n "${standard_n}" ]
+    [ -n "${strict_n}" ]
+    [ "${strict_n}" -le "${standard_n}" ]
+}
