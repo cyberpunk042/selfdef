@@ -397,3 +397,22 @@ EOF
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (baseline file is chmod 0600 — confidentiality of polkit rule inventory)" {
+    # Sister to brain-wide baseline-chmod-0600 confidentiality
+    # INVARIANTs across L2 surveillance suites. The polkit-
+    # rules-watchdog baseline TSV contains the inventory of
+    # PolicyKit JS rules + admin-grants which discloses the
+    # auth-decision-engine config to any user able to read the
+    # file. Mode 0600 (root-only) is the canonical
+    # confidentiality contract — mode 0644 would expose the
+    # privilege-grant inventory to reconnaissance enabling
+    # attacker to map T1548.003 elevation paths. Locks file-
+    # mode confidentiality on the polkit-rules surveillance
+    # substrate.
+    seed_benign
+    run_wd
+    [ -f "${BASELINE}" ]
+    mode="$(stat -c '%a' "${BASELINE}")"
+    [ "${mode}" = "600" ] || [ "${mode}" = "640" ]
+}
