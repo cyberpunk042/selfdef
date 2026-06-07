@@ -334,3 +334,42 @@ EOF
     cap | grep -q '"event":"new_privileged_account"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (multi-uid0-impostor: two new uid=0 accounts in same scan → still single alert; consolidation)" {
+    # When attacker stacks multiple uid=0 impostors in one drop,
+    # single alert JSON record fires with new_uid0=2. Locks
+    # consolidation discipline + observability accuracy.
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat >> "${PASSWD_FILE}" <<'EOF'
+evil1:x:0:0:Evil1:/root:/bin/bash
+evil2:x:0:0:Evil2:/root:/bin/bash
+EOF
+    run_wd
+    cap | grep -q '"event":"new_privileged_account"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"new_uid0":[2-9]'
+    main_count=$(cap | grep -cE '^-t selfdef-accounts -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (sudo-group axis: a non-attacker user moved INTO sudo via group-member field still triggers alert — privilege-elevation is alert-grade regardless of operator-intent)" {
+    # Even if operator is the one adding bob to sudo (legitimate
+    # promotion), the watchdog MUST surface it as new_privileged_
+    # account because privilege-grant changes are by design alert-
+    # grade. Operator re-baselines after legitimate promotion.
+    # Locks operator-vs-attacker symmetric treatment: the surface
+    # IS what's tracked.
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    sed -i 's|^sudo:x:27:alice|sudo:x:27:alice,carol|' "${GROUP_FIXTURE}"
+    # carol doesn't exist in passwd — sudo group has phantom member;
+    # locks that watchdog detects the group-member delta REGARDLESS
+    # of whether the user account exists yet (attacker may add user
+    # AFTER seeding sudo membership).
+    run_wd
+    cap | grep -q '"event":"new_privileged_account"'
+    cap | grep -q '"severity":"alert"'
+}
