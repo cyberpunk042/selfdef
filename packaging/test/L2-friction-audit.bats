@@ -539,3 +539,17 @@ EOF
     # friction-audit script substrate.
     grep -qE '^set -euo pipefail' "${SCRIPT}"
 }
+
+@test "INVARIANT (emit_ocsf uses printf '%d' for class_uid + severity_id — OCSF numeric type-fidelity contract)" {
+    # Sister to brain-wide OCSF type-fidelity INVARIANT family.
+    # OCSF schema mandates class_uid + severity_id as integers
+    # (not strings). The printf format MUST use %d (not %s) so
+    # the emitted JSON has numeric values not quoted strings.
+    # A regression that swapped %d for %s would emit
+    # "class_uid":"1003" instead of "class_uid":1003, breaking
+    # OCSF-conformant consumers that type-check via `jq '.
+    # class_uid | numbers'`. Locks the OCSF numeric type-
+    # fidelity discipline on the friction-audit emit_ocsf
+    # substrate.
+    grep -qE 'printf.*"class_uid":%d,"severity_id":%d' "${SCRIPT}"
+}

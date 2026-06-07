@@ -454,3 +454,24 @@ assert data.get('apiVersion') == 'cilium.io/v1alpha1', f'apiVersion must be cili
 assert data.get('kind') == 'TracingPolicy', f'kind must be TracingPolicy, got {data.get(\"kind\")!r}'
 "
 }
+
+@test "INVARIANT (YAML metadata.name = \"sovereign-kernel-fence\" — verbatim sain-01 §6 dump-line transposition contract)" {
+    # Sister to brain-wide verbatim-source-transposition
+    # INVARIANT family. The TracingPolicy metadata.name is
+    # verbatim from sain-01 §6 dump lines 380-411 (operator-
+    # canonical, must not drift). The Tetragon CRD operator
+    # references policies by metadata.name in events + logs;
+    # operators triaging a sigkill event grep for "sovereign-
+    # kernel-fence" verbatim. A regression that renamed to a
+    # variant ("sovereign-perimeter", "kernel-fence") would
+    # break operator event-correlation muscle memory + decouple
+    # the policy from the sain-01 source-of-truth dump.
+    # Locks the verbatim metadata.name discipline on the
+    # perimeter YAML substrate.
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+name = data.get('metadata', {}).get('name', '')
+assert name == 'sovereign-kernel-fence', f'metadata.name must be sovereign-kernel-fence (sain-01 §6 verbatim), got {name!r}'
+"
+}

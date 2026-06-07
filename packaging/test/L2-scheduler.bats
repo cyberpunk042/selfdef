@@ -437,3 +437,18 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^Restart=always' "${UNIT}"
     grep -qE '^RestartSec=' "${UNIT}"
 }
+
+@test "INVARIANT (.service does NOT declare RemainAfterExit — daemon long-running semantics contract)" {
+    # Sister to brain-wide systemd-unit-kind INVARIANT family.
+    # The scheduler is Type=simple long-running daemon — it
+    # MUST NOT declare RemainAfterExit= (which is a Type=
+    # oneshot concept). A regression that added
+    # RemainAfterExit=yes would conflict with Restart=always:
+    # systemd would interpret the unit as "completed
+    # successfully" on exit-0 + skip restart, defeating the
+    # supervisor-restart contract. RemainAfterExit is
+    # exclusively a oneshot-companion directive. Locks the
+    # daemon-vs-oneshot semantic discipline on the scheduler
+    # unit substrate.
+    ! grep -qE '^RemainAfterExit=' "${UNIT}"
+}

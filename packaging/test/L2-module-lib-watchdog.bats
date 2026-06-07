@@ -472,3 +472,17 @@ setup() {
     # discipline on the module-lib log() substrate.
     awk '/^log\(\)/,/^}/' "${LIB}" | grep -qE '>&2'
 }
+
+@test "INVARIANT (die() helper exits with non-zero rc — fail-loud-not-silent contract)" {
+    # Sister to brain-wide library-helper-rc INVARIANT family.
+    # The module-lib's die() helper is the fail-loud channel:
+    # apply.sh / check.sh call `die "reason"` when an
+    # unrecoverable condition is hit. The helper MUST: (a)
+    # log to stderr via log(), (b) call exit with a non-zero
+    # status. A regression that called `exit 0` or omitted the
+    # exit would let apply.sh continue past a fatal
+    # precondition + leave the host in a half-installed state.
+    # Locks the fail-loud exit-non-zero discipline on the
+    # die() substrate.
+    awk '/^die\(\)/,/^}/' "${LIB}" | grep -qE 'exit [1-9]'
+}

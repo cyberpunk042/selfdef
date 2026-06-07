@@ -412,3 +412,24 @@ kind = (data.get('install') or {}).get('kind', '')
 assert kind == 'debian-package', f'install.kind must be debian-package, got {kind!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml declares category field — module-taxonomy canonical contract)" {
+    # Sister to brain-wide module.toml category INVARIANT
+    # family. The selfdefctl module browser groups modules by
+    # category in `selfdefctl modules list` output. The
+    # category field MUST be present + non-empty so detect-host
+    # surfaces in the right grouping (canonically "detection").
+    # A regression that dropped category would leave detect-
+    # host categorized as "(uncategorized)" + scatter operator
+    # navigation. Locks the module-taxonomy discipline on the
+    # detect-host substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+cat = data.get('category', '')
+assert cat, f'category field must be non-empty, got {cat!r}'
+"
+}

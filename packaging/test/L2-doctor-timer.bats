@@ -385,3 +385,17 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qE '^Description=' "${TIMER}"
     grep -qiE 'Description=.*(hourly|periodic|health)' "${TIMER}"
 }
+
+@test "INVARIANT (.timer Documentation= references man:selfdefctl(1) — operator-timer-doc-path contract)" {
+    # Sister to .service Documentation= INVARIANT already
+    # locked. The doctor.timer's Documentation= MUST also
+    # reference the selfdefctl(1) man page so operators
+    # triaging timer fires from `systemctl list-timers` can
+    # jump directly to the docs without crossing-referencing
+    # the service unit. A regression that left Documentation=
+    # off the .timer (while present on .service) would force
+    # operators to guess which man page applies. Locks the
+    # timer-Documentation-man-page discipline on the doctor.
+    # timer substrate.
+    grep -qE '^Documentation=man:selfdefctl' "${TIMER}"
+}

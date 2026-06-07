@@ -560,3 +560,26 @@ ap = inst.get('apply', '')
 assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {ap!r}'
 "
 }
+
+@test "INVARIANT (time-skew-watchdog service unit declares SystemCallFilter= — syscall-allowlist hardening contract)" {
+    # Sister to brain-wide systemd SystemCallFilter= INVARIANT
+    # family. The time-skew-watchdog probes chronyc tracking
+    # output — its syscall footprint is small + bounded. The
+    # service MUST declare SystemCallFilter= (canonically
+    # @system-service set) so an exploited chronyc parse
+    # cannot pivot to esoteric syscalls (process_vm_writev,
+    # ptrace, BPF). The canonical companion directive is
+    # SystemCallErrorNumber=EPERM to fail-loud on a blocked
+    # call rather than SIGSYS-kill the watchdog (operator
+    # forensic-clarity). A regression dropping SystemCallFilter=
+    # would leave the watchdog with full syscall surface,
+    # defeating the defense-in-depth posture this small
+    # one-shot was explicitly hardened with. Locks the
+    # syscall-allowlist hardening discipline on the time-skew-
+    # watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^SystemCallFilter=' "${s}"
+    done
+}

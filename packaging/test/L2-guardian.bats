@@ -260,3 +260,16 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # guardian unit substrate.
     grep -qE '^RestartSec=2s$' "${UNIT}"
 }
+
+@test "INVARIANT (guardian.service ExecStart points at /usr/local/bin/selfdef-guardian — operator-extension binary-path contract)" {
+    # Sister to brain-wide ExecStart binary-path INVARIANT
+    # family. The selfdef-guardian daemon lives in /usr/local/
+    # bin (operator-extension path, not the /usr/bin Debian
+    # package path) so operators building a local-debug
+    # variant can override without rebuilding the .deb. A
+    # regression to /usr/bin would force a full package
+    # rebuild for any operator-extension iteration. Locks the
+    # operator-extension /usr/local/bin path discipline on the
+    # guardian unit substrate.
+    grep -qE '^ExecStart=/usr/local/bin/selfdef-guardian' "${UNIT}"
+}

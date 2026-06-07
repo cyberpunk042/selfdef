@@ -537,3 +537,27 @@ kind = (data.get('install') or {}).get('kind', '')
 assert kind == 'script', f'install.kind must be script, got {kind!r}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml declares depends_on as TOML list — cycle-3 hardware-tune-cache dependency contract)" {
+    # Sister to brain-wide module.toml depends_on INVARIANT
+    # family. slm-cpu-loop consumes hardware-tune-cache (the
+    # SD-R64 hardware-feature predicate set) for its zmm_int8_
+    # lanes_min + host_features_required gating. The depends_
+    # on field MUST be a TOML list type (not a string, not a
+    # comma-separated string) so the dependency resolver can
+    # iterate the list correctly. A regression that swapped
+    # to a comma-separated string would silently match
+    # "hardware-tune-cache,other" as a single module name +
+    # fail to find either. Locks the TOML-list depends_on
+    # discipline on the slm-cpu-loop substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+dep = data.get('depends_on')
+assert isinstance(dep, list), f'depends_on must be a TOML list, got {type(dep).__name__}'
+assert 'hardware-tune-cache' in dep, f'depends_on must include hardware-tune-cache (SD-R64 substrate), got {dep!r}'
+"
+}
