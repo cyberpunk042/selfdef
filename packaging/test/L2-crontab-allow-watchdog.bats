@@ -551,3 +551,24 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (crontab-allow-watchdog timer Unit= field references its companion .service — timer-to-service binding contract)" {
+    # Sister to brain-wide systemd timer-Unit INVARIANT family.
+    # The .timer file MUST declare Unit=<companion>.service so
+    # systemd knows which .service to fire on timer-elapse. By
+    # default systemd matches timer-name to service-name, but
+    # explicit Unit= is required when names differ + makes the
+    # binding self-documenting. A regression dropping Unit= +
+    # renaming either file would silently break the link.
+    # Locks the timer-to-service binding discipline on the
+    # crontab-allow-watchdog substrate.
+    timer="${BATS_TEST_DIRNAME}/../../modules/crontab-allow-watchdog/systemd"
+    found=0
+    for t in "${timer}"/*.timer; do
+        [ -f "${t}" ] || continue
+        if grep -qE '^Unit=.*\.service' "${t}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
