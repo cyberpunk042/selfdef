@@ -334,3 +334,8 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # Sister to brain-wide [Install] WantedBy INVARIANT family.
     grep -qE '^WantedBy=multi-user.target' "${UNIT}"
 }
+
+@test "INVARIANT (guardian unit lives at canonical packaging/systemd/ path — packaging tree-layout contract)" {
+    real_unit="$(readlink -f "${UNIT}")"
+    case "${real_unit}" in */packaging/systemd/*) ;; *) false ;; esac
+}

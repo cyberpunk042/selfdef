@@ -552,3 +552,11 @@ setup() {
     awk '/^emit_status\(\)/,/^}/' "${LIB}" | grep -qE 'local status="\$1"'
     awk '/^emit_status\(\)/,/^}/' "${LIB}" | grep -qE 'message="\$2"'
 }
+
+@test "INVARIANT (lib defines log + emit_status + die + run + toml_get as bash functions — SDD-006 5-helper contract verified at function-table)" {
+    declare -F log >/dev/null
+    declare -F emit_status >/dev/null
+    declare -F die >/dev/null
+    declare -F run >/dev/null
+    declare -F toml_get >/dev/null
+}

@@ -477,3 +477,12 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     # Verify the doctor unit specifically targets /lib not /etc
     grep -qE 'selfdef-doctor\.(service|timer).*lib/systemd/system' "${DAEMON_CARGO}"
 }
+
+@test "INVARIANT (.timer + .service have no leading whitespace before section header — INI parser strictness)" {
+    # Sister to brain-wide INI strictness INVARIANT family.
+    # systemd's INI parser rejects leading-whitespace section
+    # headers. A regression that mis-indented [Service] or
+    # [Unit] would silently render the directives unparsed.
+    ! grep -qE '^[[:space:]]+\[(Unit|Service|Install|Timer)\]' "${SERVICE}"
+    ! grep -qE '^[[:space:]]+\[(Unit|Service|Install|Timer)\]' "${TIMER}"
+}

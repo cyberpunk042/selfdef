@@ -541,3 +541,15 @@ n = data.get('name', '')
 assert n == 'detect-host', f'name must match dir, got {n!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml [install_paths] block present — SDD-026 install-path manifest)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths')
+assert ip is not None, 'install_paths must be present per SDD-026'
+"
+}

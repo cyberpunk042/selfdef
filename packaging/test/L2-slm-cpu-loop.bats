@@ -660,3 +660,15 @@ n = data.get('name', '')
 assert n == 'slm-cpu-loop', f'name must match dir, got {n!r}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml [install_paths] block present — SDD-026 install-path manifest)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths')
+assert ip is not None, 'install_paths must be present per SDD-026'
+"
+}

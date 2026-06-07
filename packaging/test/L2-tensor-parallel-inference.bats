@@ -676,3 +676,16 @@ n = data.get('name', '')
 assert n == 'tensor-parallel-inference', f'name must match dir, got {n!r}'
 "
 }
+
+@test "INVARIANT (tensor-parallel-inference module.toml [install].kind field present + canonical value — install-dispatch canonical contract)" {
+    # Sister to brain-wide module.toml [install].kind family.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+k = (data.get('install') or {}).get('kind', '')
+assert k in {'script', 'debian-package', 'compose', 'ansible'}, f'install.kind must be canonical, got {k!r}'
+"
+}

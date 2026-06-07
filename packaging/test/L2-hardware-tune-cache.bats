@@ -640,3 +640,16 @@ n = data.get('name', '')
 assert n == 'hardware-tune-cache', f'name must match dir, got {n!r}'
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml [install].kind field present + canonical value — install-dispatch canonical contract)" {
+    # Sister to brain-wide module.toml [install].kind family.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+k = (data.get('install') or {}).get('kind', '')
+assert k in {'script', 'debian-package', 'compose', 'ansible'}, f'install.kind must be canonical, got {k!r}'
+"
+}

@@ -554,3 +554,8 @@ assert 'namespace' not in meta, f'metadata.namespace must be absent (cluster-sco
     [ -n "${rm_line}" ]
     [ "${chattr_line}" -lt "${rm_line}" ]
 }
+
+@test "INVARIANT (postinst pre-creates /etc/selfdef/perimeter-extensions directory — operator-extension config-staging contract)" {
+    # Sister to brain-wide operator-extension staging INVARIANT family.
+    grep -qE '/etc/selfdef/perimeter-extensions' "${POSTINST}"
+}

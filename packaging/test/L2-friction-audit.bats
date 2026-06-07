@@ -611,3 +611,8 @@ EOF
     # Sister to operator-config-env-var INVARIANT family.
     grep -qE 'SELFDEF_FRICTION_AUDIT_RING_DIR' "${SCRIPT}"
 }
+
+@test "INVARIANT (script's overall verdict line emits with status=pass on all-gates-pass — operator-success-signal contract)" {
+    # Sister to brain-wide operator-success-signal INVARIANT family.
+    grep -qE 'emit_ocsf 1003 1 "overall"' "${SCRIPT}"
+}
