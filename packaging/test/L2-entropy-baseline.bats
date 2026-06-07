@@ -254,3 +254,23 @@ run_wd() {
     grep -qE '^#.*selfdef|^#.*managed-by' "${SYSTEMD_DIR}/selfdef-entropy.timer"
     grep -qE '^#.*selfdef|^#.*managed-by' "${SYSTEMD_DIR}/selfdef-entropy.service"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # entropy-baseline TOML; parser must tolerate without altering
+    # the profile-gated behavior. enforce-with-noise still writes
+    # the SELFDEF_ENTROPY_PROFILE=enforce drop-in (escalates low-
+    # entropy from log-only to systemd-failure-recorded — the
+    # operator-dashboard signal).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "enforce"
+operator_note = "kernel-RNG starvation = weak TLS / SSH host keys / ASLR"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q 'SELFDEF_ENTROPY_PROFILE=enforce' "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf"
+    ! grep -q 'SELFDEF_ENTROPY_PROFILE=report' "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf"
+}
