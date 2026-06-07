@@ -228,3 +228,39 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=safe-subset'* ]]
 }
+
+@test "INVARIANT (filename follows 50-selfdef-* convention — tracking + uninstall identification)" {
+    # Sister to many other modules' filename-convention INVARIANT.
+    write_config "off"
+    run_wd
+    case "${DROPIN}" in
+        */50-selfdef-*.conf) : ;;
+        *) fail "drop-in filename must follow 50-selfdef-*.conf pattern" ;;
+    esac
+}
+
+@test "INVARIANT (drop-in is sysctl-parseable: each non-comment line matches key=value shape)" {
+    # The drop-in is sourced by sysctl --system. Every non-comment
+    # non-blank line MUST match the sysctl key=value grammar.
+    # Sister to file-protections-baseline + sysctl-network-baseline
+    # sysctl-parseable INVARIANT.
+    write_config "safe-subset"
+    run_wd
+    awk '/^[[:space:]]*#/ || /^[[:space:]]*$/ {next} /^[a-zA-Z_][a-zA-Z0-9_.]*[[:space:]]*=[[:space:]]*[0-9]+/ {next} {bad=1; print "malformed: " $0} END{exit bad?1:0}' "${DROPIN}"
+}
+
+@test "INVARIANT (profile-rank monotonic: off (0) ≤ safe-subset (132 = sync+reboot) ≤ full (1 means ALL — distinct mode)) — locks bitmask values)" {
+    # Lock the THREE specific bitmask values for the THREE
+    # profiles. Operator can dashboard-verify the active value
+    # against expectations. A regression that swaps values
+    # would change the security posture silently.
+    write_config "off"
+    run_wd
+    grep -qE 'kernel\.sysrq\s*=\s*0' "${DROPIN}"
+    write_config "safe-subset"
+    run_wd
+    grep -qE 'kernel\.sysrq\s*=\s*132' "${DROPIN}"
+    write_config "full"
+    run_wd
+    grep -qE 'kernel\.sysrq\s*=\s*1' "${DROPIN}"
+}
