@@ -360,3 +360,29 @@ TOMLEOF
     [ -f "${svc}" ]
     grep -qE '^Type=oneshot' "${svc}"
 }
+
+@test "INVARIANT (no auto-fix: detect module NEVER mutates GRUB config — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-{delete,uninstall,restore,
+    # chmod,fix} family. bootloader-password-detect is a DETECT
+    # module: it MUST surface verdicts (ok/warn/alert) about
+    # GRUB password posture, NEVER auto-edit grub.cfg, NEVER
+    # invoke grub-mkpasswd-pbkdf2, NEVER tee/sed-i into
+    # /boot/grub*/grub.cfg or /etc/grub.d/*. Auto-remediation
+    # on bootloader config is operator-domain (physical-access
+    # threat model demands operator-conscious password choice
+    # + GRUB regen via grub2-mkconfig). Surveillance-not-
+    # remediation is the canonical selfdef DETECT-module
+    # contract. Locks no-auto-fix on the bootloader-password-
+    # detect substrate.
+    libexec="modules/bootloader-password-detect/systemd/bootloader-password-detect.sh"
+    [ -f "${libexec}" ]
+    # Filter comments before pattern-matching to avoid false-
+    # positives from severity-vocabulary docstrings that may
+    # mention mutation verbs in prose.
+    ! grep -vE '^[[:space:]]*#' "${libexec}" | grep -qE 'sed[[:space:]]+-i.*grub'
+    ! grep -vE '^[[:space:]]*#' "${libexec}" | grep -qE '>[[:space:]]*/boot/grub'
+    ! grep -vE '^[[:space:]]*#' "${libexec}" | grep -qE '>[[:space:]]*/etc/grub\.d'
+    ! grep -vE '^[[:space:]]*#' "${libexec}" | grep -qE 'tee[[:space:]].*grub\.cfg'
+    ! grep -vE '^[[:space:]]*#' "${libexec}" | grep -qE 'grub-?mkpasswd'
+    ! grep -vE '^[[:space:]]*#' "${libexec}" | grep -qE 'grub2?-set-password'
+}
