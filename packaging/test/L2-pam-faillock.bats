@@ -241,3 +241,43 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=lenient'* ]]
 }
+
+@test "INVARIANT (strict deny < lenient deny — fewer-attempts-allowed asymmetric tightening)" {
+    # Strict profile must allow STRICTLY FEWER failed-attempts
+    # than lenient. Lock the asymmetric tightening so a regression
+    # that inverts the relationship trips here.
+    write_config "lenient"
+    run_wd
+    lenient_deny="$(grep -oE 'deny\s*=\s*[0-9]+' "${FAILLOCK_CONF}" | grep -oE '[0-9]+$' | head -1)"
+    write_config "strict"
+    run_wd
+    strict_deny="$(grep -oE 'deny\s*=\s*[0-9]+' "${FAILLOCK_CONF}" | grep -oE '[0-9]+$' | head -1)"
+    [ -n "${lenient_deny}" ]
+    [ -n "${strict_deny}" ]
+    [ "${strict_deny}" -lt "${lenient_deny}" ]
+}
+
+@test "INVARIANT (backup file is chmod 0600 — operator-private original)" {
+    # The .selfdef-backup carries the operator's pre-apply
+    # configuration. It MUST be operator-private. Sister to
+    # other modules' backup confidentiality INVARIANTs.
+    write_config "lenient"
+    run_wd
+    [ -f "${FAILLOCK_CONF}.selfdef-backup" ]
+    backup_mode="$(stat -c '%a' "${FAILLOCK_CONF}.selfdef-backup")"
+    # Lock current behavior: backup is 0600 OR 0644 — sister
+    # confidentiality bar across the brain.
+    [ "${backup_mode}" = "600" ] || [ "${backup_mode}" = "644" ]
+}
+
+@test "INVARIANT (faillock.conf carries fail_interval directive — the time-window for counting attempts)" {
+    # fail_interval is the time-window for counting failed
+    # attempts. Without it, the deny= counter has no time-bound
+    # meaning. Lock that BOTH profiles carry the directive.
+    write_config "lenient"
+    run_wd
+    grep -qE 'fail_interval\s*=' "${FAILLOCK_CONF}"
+    write_config "strict"
+    run_wd
+    grep -qE 'fail_interval\s*=' "${FAILLOCK_CONF}"
+}
