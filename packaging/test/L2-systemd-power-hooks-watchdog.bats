@@ -286,3 +286,16 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: power hook invoking binary from /var/tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # power-event-trigger root-exec persistence — workstation
+    # suspend/resume + shutdown fires hooks AS ROOT multiple
+    # times per day.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/var/tmp/staged_payload\n' > "${HOOKD}/grub-common"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
