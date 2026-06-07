@@ -276,3 +276,22 @@ seed_benign() {
     run_wd
     ! cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (no_subtree_check + no_root_squash combined: BOTH dangerous-flag families compound — alert wins)" {
+    # Sister to the no_root_squash + insecure compound case already
+    # locked. Some NFSv3 daemons treat no_subtree_check as a
+    # security-relevant flag (subtree-check enforces export-tree
+    # boundaries; disabling it lets clients walk outside the
+    # exported subtree via path manipulation). When BOTH
+    # no_subtree_check AND no_root_squash are set, severity must
+    # stay alert (not warn) — the combination is a multi-axis
+    # compromise. Locks compound-flag severity precedence (alert
+    # wins, single record).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/srv/data *(rw,no_root_squash,no_subtree_check)\n' > "${EXPORTS}"
+    run_wd
+    cap | grep -q '"event":"nfs_exports_dangerous"'
+    cap | grep -q '"severity":"alert"'
+}
