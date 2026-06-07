@@ -259,3 +259,23 @@ teardown_real_run() {
     teardown_real_run
     [ "${re_armed}" = "1" ]
 }
+
+@test "INVARIANT (runtime.env carries tensor-parallel-inference self-identifying header — head -1 stale-cleanup discipline)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain (slm-cpu-loop / ssh-hardening /
+    # hardware-tune-cache). The runtime.env lands at
+    # /etc/selfdef/tensor-parallel-inference/runtime.env alongside
+    # operator-hand-authored / vendor / packaging-provided env
+    # files. A stale-cleanup pass (operator housekeeping or
+    # uninstall path) inspects the first non-blank comment line to
+    # identify selfdef-rendered config from operator config.
+    # Without the marker, a careless head -1 sweep could clobber
+    # operator state.
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    [ -f "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/runtime.env" ]
+    first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/runtime.env")"
+    teardown_real_run
+    [[ "${first_nonblank}" == *"tensor-parallel-inference"* ]]
+}
