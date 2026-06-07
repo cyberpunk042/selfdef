@@ -313,3 +313,14 @@ teardown_real_run() {
         || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
         || skip "no tomllib/tomli available; parser-contract check skipped"
 }
+
+@test "INVARIANT (no auto-uninstall: bitnet-gpu-inference installer NEVER emits package-remove commands on cuda/llama.cpp/python-runtime)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANT family.
+    # bitnet-gpu-inference wires the GPU-side bitnet runtime
+    # config; package-removal of those runtimes is operator-
+    # domain (not installed by THIS module). Locks no-auto-
+    # uninstall on the bitnet-gpu-inference substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum|pip|pip3|cargo)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(cuda|llama-cpp|python3?)' "${f}"
+    done
+}
