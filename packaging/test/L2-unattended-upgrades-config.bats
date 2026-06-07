@@ -343,3 +343,22 @@ EOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"unattended-upgrades-config"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (drop-in chmod 0644 — apt.conf.d sourcing convention; world-readable required for apt to parse)" {
+    # Sister to brain-wide drop-in chmod 0644 INVARIANTs across
+    # L2 suites. The unattended-upgrades-config drop-in lives in
+    # /etc/apt/apt.conf.d/50selfdef-unattended-upgrades and MUST
+    # be world-readable mode 0644 because apt-daily systemd
+    # timer runs unattended-upgrades package AS ROOT but apt
+    # itself reads /etc/apt/apt.conf.d/ with hardened apparmor
+    # profile that drops capabilities — mode 0600 would defeat
+    # the canonical apt-conf.d sourcing semantics on apparmor-
+    # confined apt deployments. Locks file-mode contract on the
+    # unattended-upgrades apt-conf.d drop-in substrate.
+    write_config "security-only"
+    run_wd
+    dropin="${APT_CONFD}/50selfdef-unattended-upgrades"
+    [ -f "${dropin}" ]
+    mode="$(stat -c '%a' "${dropin}")"
+    [ "${mode}" = "644" ]
+}
