@@ -136,3 +136,37 @@ TEMPLATES_DIR="${MODULE_DIR}/templates"
     grep -qE '50-selfdef-presence' "${TEMPLATES_DIR}/50-selfdef-presence"
     grep -qE '50-prefix|50.*prefix' "${TEMPLATES_DIR}/50-selfdef-presence"
 }
+
+@test "INVARIANT (issue.txt cites monitoring + recording — CFAA banner notice axis)" {
+    # CFAA-compliant banner standard requires: (1) AUTHORIZED USE ONLY,
+    # (2) monitoring/recording notice, (3) statutory citation. Items 1 + 3
+    # are locked in existing tests; lock item 2 here (monitoring notice).
+    # Refinement opportunity: explicit no-expectation-of-privacy clause
+    # is not yet present — tracked separately, does not block this suite.
+    grep -qE 'monitor|monitoring|monitored|recorded' "${TEMPLATES_DIR}/issue.txt"
+}
+
+@test "INVARIANT (issue.net.txt distinct from issue.txt — distinct content for network-vs-local banner discipline)" {
+    # /etc/issue and /etc/issue.net SHOULD have distinct content because
+    # they serve distinct attack contexts: /etc/issue covers physical-
+    # console access; /etc/issue.net covers remote ssh/telnet. They MAY
+    # share legal text but should not be byte-identical (otherwise the
+    # network-banner discipline collapses to local-banner).
+    ! cmp -s "${TEMPLATES_DIR}/issue.txt" "${TEMPLATES_DIR}/issue.net.txt"
+}
+
+@test "INVARIANT (apply.sh installs all 4 templates to correct paths — install_paths fidelity)" {
+    # The apply.sh script MUST install each template to its declared path.
+    # Locks the install_paths manifest <-> apply.sh consistency.
+    grep -q '/etc/issue' "${INSTALL_DIR}/apply.sh"
+    grep -q '/etc/issue.net' "${INSTALL_DIR}/apply.sh"
+    grep -q '/etc/motd' "${INSTALL_DIR}/apply.sh"
+    grep -q '/etc/update-motd.d' "${INSTALL_DIR}/apply.sh"
+}
+
+@test "INVARIANT (50-selfdef-presence script handles missing MODULES_DIR gracefully — defensive contract)" {
+    # If /etc/selfdef/modules doesn't exist (selfdef partially installed
+    # or test environment), the dynamic motd MUST NOT crash. Lock that
+    # the script carries some form of existence-check.
+    grep -qE '\[ -d|test -d|\[\[ -d|if.*-d' "${TEMPLATES_DIR}/50-selfdef-presence"
+}
