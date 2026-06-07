@@ -906,3 +906,15 @@ assert 'install' in data, 'install missing'
         grep -qE 'severity=' "${s}"
     done
 }
+
+@test "INVARIANT (nfs-mount-watchdog .sh script tag selfdef-nfs-mount matches module name — SDD-062 tag-canonical contract)" {
+    # Sister to brain-wide SDD-062 logger-tag INVARIANT family.
+    # The tag passed to logger -t MUST exactly match selfdef-nfs-mount
+    # so operator triage via journalctl _SYSTEMD_UNIT or
+    # SYSLOG_IDENTIFIER filtering surfaces the right module.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/nfs-mount-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'logger -t selfdef-' "${s}"
+    done
+}

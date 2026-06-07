@@ -846,3 +846,15 @@ assert 'install' in data, 'install missing'
         grep -qE 'severity=' "${s}"
     done
 }
+
+@test "INVARIANT (hidden-process-watchdog .sh script tag selfdef-hidden-process matches module name — SDD-062 tag-canonical contract)" {
+    # Sister to brain-wide SDD-062 logger-tag INVARIANT family.
+    # The tag passed to logger -t MUST exactly match selfdef-hidden-process
+    # so operator triage via journalctl _SYSTEMD_UNIT or
+    # SYSLOG_IDENTIFIER filtering surfaces the right module.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/hidden-process-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'logger -t selfdef-' "${s}"
+    done
+}

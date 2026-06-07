@@ -1033,3 +1033,15 @@ setup_baseline_state() {
         grep -qE '"severity":"(ok|warn|alert)"' "${s}"
     done
 }
+
+@test "INVARIANT (audit-config-watchdog .sh script tag selfdef-audit-config matches module name — SDD-062 tag-canonical contract)" {
+    # Sister to brain-wide SDD-062 logger-tag INVARIANT family.
+    # The tag passed to logger -t MUST exactly match selfdef-audit-config
+    # so operator triage via journalctl _SYSTEMD_UNIT or
+    # SYSLOG_IDENTIFIER filtering surfaces the right module.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/audit-config-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'logger -t selfdef-' "${s}"
+    done
+}

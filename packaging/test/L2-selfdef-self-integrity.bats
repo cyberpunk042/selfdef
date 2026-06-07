@@ -946,3 +946,10 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     uni="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/install/uninstall.sh"
     [ -x "${uni}" ]
 }
+
+@test "INVARIANT (selfdef-self-integrity install scripts apply+check+uninstall all exist as files — 3-script lifecycle contract)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/install"
+    [ -f "${inst_dir}/apply.sh" ]
+    [ -f "${inst_dir}/check.sh" ]
+    [ -f "${inst_dir}/uninstall.sh" ]
+}
