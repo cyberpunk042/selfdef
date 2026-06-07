@@ -303,3 +303,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (pipe to /var/tmp — writable-root axis-symmetric expansion on coredump-handler axis)" {
+    # Sister to /run + /tmp + /dev/shm pipe-handler writable-
+    # root INVARIANTs. /var/tmp writable + persistent. core_
+    # pattern pipe-handler runs AS ROOT on every kernel crash;
+    # an attacker who plants in /var/tmp + triggers a crash
+    # gets root-exec at the kernel-crash point. T1546 crash-
+    # event-trigger root-exec persistence.
+    write_pattern "|/var/tmp/.evil-handler %p"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
