@@ -325,3 +325,24 @@ EOF
     output="$(run_wd 2>&1)"
     [[ "${output}" == *'modified=0'* ]]
 }
+
+@test "INVARIANT (nullok_secure token also removed — sister axis to bare nullok)" {
+    # Sister axis to the bare nullok removal already locked. PAM
+    # supports the nullok_secure variant which permits empty
+    # passwords only when the user is connected from a "secure"
+    # tty per /etc/securetty. From a defense standpoint, both are
+    # the same empty-password-allowed posture — and attackers
+    # routinely set nullok_secure and then chmod a malicious entry
+    # into /etc/securetty to bypass the gate. Lock that
+    # nullok_secure is removed under enforce profile too.
+    cat > "${PAM_D}/login" <<'EOF'
+auth sufficient pam_unix.so nullok_secure try_first_pass
+account required pam_unix.so
+EOF
+    write_config "enforce"
+    run_wd
+    ! grep -qE '\bnullok_secure\b' "${PAM_D}/login"
+    grep -q 'pam_unix\.so'         "${PAM_D}/login"
+    grep -q 'try_first_pass'       "${PAM_D}/login"
+    [ -f "${PAM_D}/login.selfdef-nullok-backup" ]
+}
