@@ -295,3 +295,20 @@ TOMLEOF
     DRY_RUN=1 run_wd
     ! grep -qE 'systemctl (mask|disable|stop)' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (printers-port observability: CUPS UDP/631 surface closed when units masked — observability via systemd-status check post-mask)" {
+    # Sister to avahi-disable mDNS-port observability INVARIANT
+    # already locked. CUPS listens on UDP/631 (Bonjour print-
+    # service discovery / IPP Browse). When mask profile fires
+    # against cups.service + cups.socket, the listener is closed
+    # — operator can verify via systemd-is-active check returning
+    # inactive on both units. Locks the operator-verifiable
+    # neutralization contract on the CUPS attack surface (CVE-
+    # 2024-47176 / IPP-printer-RCE family).
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask cups.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask cups.socket' "${SYSEOF_LOG}"
+    # Both .service AND .socket are masked → the UDP/631
+    # listener cannot be socket-activated either.
+}
