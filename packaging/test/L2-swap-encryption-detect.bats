@@ -281,3 +281,15 @@ TOMLEOF
     grep -q '^Environment=SELFDEF_SWAPENC_PROFILE=enforce$' "${DROPIN_PROFILE}"
     ! grep -q '^Environment=SELFDEF_SWAPENC_PROFILE=report$' "${DROPIN_PROFILE}"
 }
+
+@test "INVARIANT (libexec is shell-sourceable: bash -n parses cleanly — service ExecStart contract)" {
+    # Sister to many other installer module's shell-sourceable
+    # INVARIANT across the brain. The libexec script runs from
+    # systemd ExecStart. bash -n must parse cleanly. A syntax
+    # regression would silently break the surveillance every fire
+    # (timer scheduled; service can't ExecStart; unencrypted-swap
+    # RAM-to-disk exfil surface goes unmonitored).
+    write_config "report"
+    run_wd
+    bash -n "${SCRIPT_DST}"
+}
