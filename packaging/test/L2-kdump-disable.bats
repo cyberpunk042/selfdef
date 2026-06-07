@@ -287,3 +287,19 @@ TOMLEOF
     DRY_RUN=1 KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd
     ! grep -qE 'systemctl (mask|disable|stop)' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (no package-uninstall: kexec/kdump packages NEVER auto-removed — module neutralizes, doesn't uninstall)" {
+    # Sister to apport-disable / avahi-disable / at-disable no-
+    # auto-uninstall INVARIANTs across the brain. The kdump-
+    # disable module neutralizes the kernel-memory-dump exfil
+    # surface via stop+disable+mask. The kexec-tools and kdump-
+    # tools packages MUST stay installed — operator may
+    # legitimately need them for emergency crash debugging or
+    # may unmask them temporarily for incident response.
+    # Auto-removing the packages would prevent that recovery
+    # path. Locks the neutralize-don't-uninstall boundary on
+    # the kernel-memory-leak via crash-dump substrate.
+    write_config "mask"
+    KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd
+    ! grep -qE '(apt-get|dpkg|dnf|rpm)[[:space:]]+(remove|purge|uninstall)' "${SYSEOF_LOG}"
+}
