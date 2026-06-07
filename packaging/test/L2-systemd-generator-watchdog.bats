@@ -361,3 +361,16 @@ seed_benign() {
     ! grep -qE 'find[[:space:]].*-delete' "${WD}"
     ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(GEND|GENERATOR|FILE|file)' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # systemd-generator-watchdog runs ON the timer's scheduled
+    # fire — scans /etc/systemd/system-generators + /usr/lib/
+    # systemd/system-generators for boot-time-injection patterns,
+    # emits a verdict, then exits. Type=simple would break
+    # timer OnUnitActiveSec semantics. Locks oneshot-probe
+    # contract on the systemd-generator-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/systemd-generator-watchdog/systemd/selfdef-systemd-generator.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
