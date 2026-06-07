@@ -224,3 +224,17 @@ with open('${MODULE_DIR}/profiles/${p}.toml', 'rb') as f:
         || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
         || skip "no tomllib/tomli available; parser-contract check skipped"
 }
+
+@test "INVARIANT (no auto-delete: vpn-bridge installer NEVER deletes operator-pre-existing tunnel configs — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # vpn-bridge writes its own wg/tailscale/cloudflared config
+    # files; it MUST NEVER `rm -rf` an operator's existing
+    # /etc/wireguard/* / /etc/tailscale/* dir or delete an
+    # operator-named tunnel config not owned by THIS module.
+    # Locks no-auto-delete on the vpn-bridge installer
+    # substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/(wireguard|tailscale|cloudflared)' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/(wireguard|tailscale|cloudflared).*-delete' "${f}"
+    done
+}
