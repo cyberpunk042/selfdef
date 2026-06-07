@@ -392,3 +392,21 @@ EOF
     ! [ -s "${CHSH_LOG}" ]
     ! [ -s "${PASSWD_LOG}" ]
 }
+
+@test "INVARIANT (sample/operator-readable account count surfaces in JSON — operator dashboard tracks scope)" {
+    # Sister to many other installer module's acted=N JSON
+    # INVARIANTs across the brain. The service-account-lock
+    # apply emit_status JSON MUST carry a numeric count of how
+    # many accounts were neutralized so operator dashboard
+    # tracks scope of action. Without it, operators cannot
+    # distinguish a zero-action no-op run from a successful
+    # multi-account lockdown — both look identical in the
+    # output. Locks operator observability contract on the
+    # cleartext-shell-lockdown substrate.
+    write_synth_passwd
+    write_config "enforce"
+    run_wd
+    # emit_status JSON OR the output carries an acted/locked
+    # numeric count surface.
+    cap | grep -qE '("locked"|"acted"|locked=|acted=)[[:space:]]*:?[[:space:]]*[0-9]'
+}
