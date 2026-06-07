@@ -321,3 +321,25 @@ TOMLEOF
     ! [ -f "${MODPROBE_BLACKLIST}" ]
     ! grep -q 'systemctl mask bluetooth.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO systemctl mask/disable/stop AND NO rfkill block AND NO blacklist render fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain (acct-baseline / aslr-baseline / apport-
+    # disable / at-disable / avahi-disable / many others). Operator's
+    # exploratory --dry-run MUST preview without firing systemctl
+    # stop/disable/mask against bluetooth.service AND without firing
+    # rfkill block bluetooth AND without rendering the modprobe
+    # blacklist. Without strict DRY_RUN gating, a previewed dry-run
+    # would silently kill BlueTooth on a host where operator
+    # legitimately uses it (BlueTooth keyboard/mouse, audio
+    # headset). Locks the dry-run-preserves-state contract on the
+    # BlueTooth radio neutralization substrate.
+    write_config "mask"
+    : > "${SYSEOF_LOG}"
+    : > "${RF_LOG}"
+    rm -f "${MODPROBE_BLACKLIST}"
+    DRY_RUN=1 run_wd
+    ! grep -q 'systemctl mask bluetooth.service' "${SYSEOF_LOG}"
+    ! grep -qE 'rfkill block bluetooth' "${RF_LOG}"
+    [ ! -f "${MODPROBE_BLACKLIST}" ]
+}
