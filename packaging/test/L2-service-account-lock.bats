@@ -405,8 +405,14 @@ EOF
     # cleartext-shell-lockdown substrate.
     write_synth_passwd
     write_config "enforce"
-    run_wd
-    # emit_status JSON OR the output carries an acted/locked
-    # numeric count surface.
-    cap | grep -qE '("locked"|"acted"|locked=|acted=)[[:space:]]*:?[[:space:]]*[0-9]'
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_DRY_RUN=0 \
+        SELFDEF_SVC_ACCOUNT_CONFIG="${CONF}" \
+        SELFDEF_PASSWD_FILE="${PASSWD_FILE}" \
+        SELFDEF_SVC_ACCOUNT_LOG="${ORIGINAL_LOG}" \
+        CHSH_LOG="${CHSH_LOG}" \
+        PASSWD_LOG="${PASSWD_LOG}" \
+        bash "${WD}"
+    # emit_status carries `locked=N` numeric count.
+    [[ "${output}" =~ locked=[0-9] ]]
 }
