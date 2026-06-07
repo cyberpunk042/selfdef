@@ -262,3 +262,19 @@ seed_benign() {
     run_wd
     cap | grep -q "$(basename "${EQUIV}")"
 }
+
+@test "INVARIANT (pre-existing wildcard: baseline_initial fires alert at install-time — install-time-vet contract)" {
+    # Sister to every other watchdog pre-existing-broad-condition
+    # baseline_initial INVARIANT across the brain. The install-time-
+    # vet contract: if /etc/hosts.equiv ALREADY carries a wildcard
+    # trust entry (+ or user-wildcard) when selfdef first installs
+    # the watchdog, the first run MUST raise alert (or at least
+    # warn) — not silently baseline a broken security posture.
+    # Closes the install-time-vet axis on the rsh/rlogin/hostbased-
+    # auth trust surface (T1199 — Trusted Relationship via legacy
+    # rcommand wildcard backdoor account).
+    printf 'trusted.example.com\n+\n' > "${EQUIV}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
