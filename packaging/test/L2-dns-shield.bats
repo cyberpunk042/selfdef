@@ -313,3 +313,24 @@ EOF
     n=$(grep -c '^0\.0\.0\.0 analytics\.example$' "${HOSTS_FILE}")
     [ "${n}" = "1" ]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # dns-shield TOML; parser must tolerate without altering the
+    # profile-gated behavior. strict-with-noise still renders BOTH
+    # base + strict domains AND preserves operator /etc/hosts content
+    # outside the BEGIN/END marker block (operator entries
+    # sacrosanct).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "strict"
+operator_note = "broader inclusion — may produce false positives"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q '^0\.0\.0\.0 ads\.example$' "${HOSTS_FILE}"
+    grep -q '^0\.0\.0\.0 analytics\.example$' "${HOSTS_FILE}"
+    grep -q '^127\.0\.0\.1 localhost$' "${HOSTS_FILE}"
+}
