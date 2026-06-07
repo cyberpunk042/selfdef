@@ -402,3 +402,15 @@ assert 'install' in data, 'install missing'
         ! grep -qE 'find[[:space:]]+/etc/(apt|pam\.d|security|systemd|sysctl\.d|modprobe\.d|polarproxy|rkhunter|rpcbind|inetd).*-delete' "${sh}"
     done
 }
+
+@test "INVARIANT (install scripts use set -euo pipefail — anti-half-installed-state contract across full lifecycle)" {
+    # Sister to brain-wide set -euo pipefail INVARIANT family.
+    # proc-hidepid install/check/uninstall scripts MUST fail-loud on
+    # first error so a partial-install state is detectable.
+    # Locks fail-loud invariant on the proc-hidepid lifecycle substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/proc-hidepid/install"
+    for sh in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${sh}" ] || continue
+        grep -qE '^set[[:space:]]+-euo[[:space:]]+pipefail' "${sh}"
+    done
+}

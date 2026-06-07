@@ -532,3 +532,15 @@ assert 'install' in data, 'install missing'
         ! grep -qE 'find[[:space:]]+/etc/(selinux|cups|profile\.d|ssh|sudoers|sudoers\.d|suricata).*-delete' "${sh}"
     done
 }
+
+@test "INVARIANT (install scripts use set -euo pipefail — anti-half-installed-state contract across full lifecycle)" {
+    # Sister to brain-wide set -euo pipefail INVARIANT family.
+    # service-account-lock install/check/uninstall scripts MUST fail-loud on
+    # first error so a partial-install state is detectable.
+    # Locks fail-loud invariant on the service-account-lock lifecycle substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/service-account-lock/install"
+    for sh in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${sh}" ] || continue
+        grep -qE '^set[[:space:]]+-euo[[:space:]]+pipefail' "${sh}"
+    done
+}
