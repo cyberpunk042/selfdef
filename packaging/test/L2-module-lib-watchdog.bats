@@ -264,3 +264,23 @@ setup() {
     selfdef_is_writable_path '/home/bob/payload.sh'
     selfdef_is_writable_path '/home/operator/.evil'
 }
+
+@test "INVARIANT (lib exports the canonical 5 helpers: log + emit_status + die + run + toml_get — SDD-006 contract)" {
+    # Sister to brain-wide library-contract INVARIANT family.
+    # module-lib.sh ships the 5 byte-identical helpers that
+    # previously lived in every module's install/lib.sh per
+    # SDD-006 consolidation: log (stderr), emit_status (final
+    # JSON record), die (failed JSON + exit 1), run (DRY_RUN-
+    # aware exec), toml_get (config-file accessor). Downstream
+    # modules' apply.sh/check.sh/uninstall.sh source the lib
+    # AFTER setting MODULE + DRY_RUN, then rely on these names
+    # verbatim — renaming any one breaks every module. Locks
+    # the canonical 5-helper export discipline on the module-
+    # lib substrate.
+    # Lib is sourced in setup() — helpers are in scope.
+    declare -F log         >/dev/null
+    declare -F emit_status >/dev/null
+    declare -F die         >/dev/null
+    declare -F run         >/dev/null
+    declare -F toml_get    >/dev/null
+}
