@@ -276,3 +276,23 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # the scheduler unit substrate.
     grep -qE '^Documentation=.*sdd/031-goldilocks-scheduler' "${UNIT}"
 }
+
+@test "INVARIANT (unit does NOT declare Requires=tetragon.service — tetragon is ordering-only via After=, scheduler must run even when tetragon absent)" {
+    # Sister to the Wants=selfdef-guardian.service soft-bind
+    # INVARIANT. The scheduler is After=tetragon.service for
+    # ordering (start tetragon's eBPF surface first if it's
+    # present so PSI + tracing-policy hooks resolve cleanly)
+    # but MUST NOT Requires= or Wants= tetragon — that would
+    # collapse the host's IPS-quattuordectet onto tetragon
+    # being installed, defeating SDD-031's design intent of
+    # graceful degradation on hosts where tetragon is opted
+    # out (the backpressure monitor will log degraded-mode
+    # via its missing-source JSON record). A regression adding
+    # Requires=tetragon.service would surface as "scheduler
+    # fails to start on hosts without tetragon" — exactly the
+    # tight-coupling failure SDD-031 forbids. Locks tetragon-
+    # decoupling discipline on the scheduler unit substrate.
+    ! grep -qE '^Requires=tetragon\.service' "${UNIT}"
+    ! grep -qE '^Wants=tetragon\.service' "${UNIT}"
+    grep -qE '^After=tetragon\.service' "${UNIT}"
+}
