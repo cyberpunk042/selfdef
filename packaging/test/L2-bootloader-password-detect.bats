@@ -266,3 +266,24 @@ run_wd() {
     run_wd
     bash -n "${LIBEXEC_DIR}/bootloader-password-detect.sh"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # bootloader-password-detect TOML; parser must tolerate without
+    # altering the profile-gated behavior. enforce-with-noise still
+    # writes the SELFDEF_BOOTLOADER_PASSWORD_PROFILE=enforce drop-in
+    # (escalates missing-bootloader-password from log-only to
+    # systemd-failure-recorded — the operator-dashboard signal for
+    # physical-access boot-edit surveillance).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "enforce"
+operator_note = "bootloader pwless = physical-access kernel-cmdline edit"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q 'SELFDEF_BOOTLOADER_PASSWORD_PROFILE=enforce' "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf"
+    ! grep -q 'SELFDEF_BOOTLOADER_PASSWORD_PROFILE=report' "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf"
+}
