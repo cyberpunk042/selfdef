@@ -864,3 +864,9 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/loopback-only-dns/install/check.sh"
     [ -x "${chk}" ]
 }
+
+@test "INVARIANT (loopback-only-dns install/uninstall.sh uses set -euo pipefail — Bash strict-mode contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/loopback-only-dns/install/uninstall.sh"
+    [ -f "${uni}" ]
+    grep -qE '^set -euo pipefail' "${uni}"
+}

@@ -894,3 +894,12 @@ assert 'install' in data, 'install missing'
         head -1 "${s}" | grep -qE '#!/.*bash|#!/usr/bin/env bash'
     done
 }
+
+@test "INVARIANT (sudoers-defaults-watchdog .sh script uses logger -t selfdef- canonical tag — SDD-062 logger-tag contract)" {
+    # Sister to brain-wide SDD-062 logger-tag INVARIANT family.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/sudoers-defaults-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'logger -t selfdef-' "${s}"
+    done
+}

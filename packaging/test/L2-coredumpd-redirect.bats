@@ -925,3 +925,9 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/install/check.sh"
     [ -x "${chk}" ]
 }
+
+@test "INVARIANT (coredumpd-redirect install/uninstall.sh uses set -euo pipefail — Bash strict-mode contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/install/uninstall.sh"
+    [ -f "${uni}" ]
+    grep -qE '^set -euo pipefail' "${uni}"
+}
