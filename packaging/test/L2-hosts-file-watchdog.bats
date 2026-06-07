@@ -341,3 +341,22 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on hosts-file surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The hosts-file-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1195.001 supply-chain compromise via DNS-
+    # pin alert. Locks parser contract on the /etc/hosts
+    # sensitive-domain detection surface.
+    seed_benign
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    printf '127.0.0.1 localhost\n0.0.0.0 docker.io\n' > "${HOSTS}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
