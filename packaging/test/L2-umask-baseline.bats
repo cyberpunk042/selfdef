@@ -345,3 +345,19 @@ TOMLEOF
     [ "${mode_sh}" = "644" ]
     [ "${mode_conf}" = "644" ]
 }
+
+@test "INVARIANT (no auto-uninstall: umask-baseline NEVER emits package-remove commands on libpam-modules/shadow-utils)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The umask-baseline installer writes dual drop-
+    # ins (/etc/profile.d/50-selfdef-umask.sh + /etc/login.defs.
+    # d/50-selfdef-umask.conf) but MUST NEVER emit shell
+    # commands that uninstall libpam-modules / shadow-utils
+    # packages themselves (apt/dpkg/dnf/rpm/yum remove|purge|
+    # uninstall libpam-modules|shadow-utils|passwd). Silent
+    # auto-removal would tear down the user-management +
+    # auth substrate. Locks anti-package-removal contract on
+    # the umask-baseline substrate.
+    write_config "strict"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(libpam|shadow|passwd)'
+}
