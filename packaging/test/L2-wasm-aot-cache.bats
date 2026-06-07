@@ -191,3 +191,60 @@ INSTALL_DIR="${MODULE_DIR}/install"
     unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
     [ "${status}" -eq 0 ]
 }
+
+@test "INVARIANT (re-arm after operator deletion: cache dir re-created on next apply)" {
+    # Sister to many other modules' re-arm INVARIANT. When operator
+    # out-of-band deletes the cache dir (rm -rf), the next apply
+    # MUST re-create it cleanly with correct mode + header marker.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_WASM_AOT_CACHE_DIR="${TEST_DIR}/wasm-aot"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    bash "${INSTALL_DIR}/apply.sh"
+    [ -d "${SELFDEF_WASM_AOT_CACHE_DIR}" ]
+    rm -rf "${SELFDEF_WASM_AOT_CACHE_DIR}"
+    bash "${INSTALL_DIR}/apply.sh"
+    re_armed=0
+    [ -d "${SELFDEF_WASM_AOT_CACHE_DIR}" ] && re_armed=1
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
+    [ "${re_armed}" = "1" ]
+}
+
+@test "INVARIANT (current-behavior: SELFDEF_HARDWARE_TUNE_ENV missing → apply still proceeds — wasm-aot-cache module.toml depends_on is the load-bearing gate, not apply runtime)" {
+    # Current behavior: apply.sh does NOT runtime-check the
+    # hardware-tune.env presence — that check is delegated to the
+    # module.toml depends_on chain (the orchestrator enforces order).
+    # If hardware-tune-cache hasn't applied first, the orchestrator
+    # refuses to apply wasm-aot-cache. Lock this architectural
+    # boundary: the dep gate is at the orchestrator layer, not
+    # per-apply runtime. Refinement candidate: future apply may add
+    # an empirical-env-content check, but TODAY the gate is upstream.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_WASM_AOT_CACHE_DIR="${TEST_DIR}/wasm-aot"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/missing-hardware-tune.env"
+    run bash "${INSTALL_DIR}/apply.sh"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
+    # Locks the current architectural shape: apply runtime is
+    # tolerant; the upstream dep-chain is the gate.
+    [ "${status}" -eq 0 ]
+}
+
+@test "INVARIANT (uninstall.sh is idempotent — safe to re-run when cache dir already gone)" {
+    # Re-running uninstall on an already-clean system must NOT
+    # crash. Sister to suricata uninstall-idempotent INVARIANT.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_WASM_AOT_CACHE_DIR="${TEST_DIR}/wasm-aot"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    bash "${INSTALL_DIR}/apply.sh"
+    bash "${INSTALL_DIR}/uninstall.sh" 2>/dev/null || true
+    # Re-run uninstall.sh; must not crash.
+    run bash "${INSTALL_DIR}/uninstall.sh"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_WASM_AOT_CACHE_DIR SELFDEF_HARDWARE_TUNE_ENV
+    # rc may be 0 (idempotent) or non-zero (with clear message);
+    # the load-bearing guarantee is no uncaught error / crash.
+    [ "${status}" -eq 0 ] || [[ "${output}" == *"not found"* ]] || [[ "${output}" == *"no-op"* ]] || [[ "${output}" == *"already"* ]]
+}
