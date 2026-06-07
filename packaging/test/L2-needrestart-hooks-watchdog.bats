@@ -308,3 +308,14 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: needrestart hook invoking binary from /dev/shm → alert)" {
+    # Sister to /tmp needrestart-hook writable-root-exec. /dev/shm
+    # tmpfs in-RAM: no on-disk forensic trace.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/dev/shm/staged_payload\n' > "${HOOKD}/10-dpkg"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
