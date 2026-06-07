@@ -330,3 +330,18 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: aliases pipe invoking binary from /var/tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # MTA mail-delivery-triggered root-exec persistence — alias
+    # pipe= target fires AS recipient/root on every email
+    # delivered to the alias. Beyond inline rev-shell, attackers
+    # stage benign-looking aliases that invoke a binary in
+    # writable-root.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'evil: |/var/tmp/staged_payload\n' > "${ALIASES}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
