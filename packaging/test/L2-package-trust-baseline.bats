@@ -315,3 +315,24 @@ EOF
     first_nonblank="$(grep -m1 -v '^[[:space:]]*$' "${DST}")"
     [[ "${first_nonblank}" == *"selfdef"* ]] || [[ "${first_nonblank}" == *"managed-by"* ]]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # package-trust-baseline TOML; parser must tolerate without
+    # altering the profile-gated behavior. strict-with-noise
+    # still installs the strict apt drop-in (AllowUnauthenticated
+    # = false + AllowDowngradeToInsecureRepositories = false +
+    # SecureBoot enforcement — anti-supply-chain-attack on the
+    # apt-get update transaction).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "strict"
+operator_note = "supply-chain MITM defense via apt secure-by-default"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${DST}" ]
+    grep -qE 'AllowUnauthenticated|AllowDowngradeToInsecure|Verify-Peer|secure' "${DST}"
+}
