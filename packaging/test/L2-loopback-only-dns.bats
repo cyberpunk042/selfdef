@@ -283,3 +283,21 @@ TOMLEOF
     [ -f "${DST}" ]
     grep -qE '^DNSStubListener=yes' "${DST}" || grep -qE 'DNSStubListenerAddress.*127\.0\.0\.1' "${DST}" || grep -qE 'DNSStubListener=127\.0\.0\.1' "${DST}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in render AND NO systemctl restart fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/systemd/resolved.conf.d/
+    # 50-selfdef.conf AND without restarting systemd-resolved.
+    # A silent dry-run that committed would re-bind the DNS
+    # stub listener on a host under investigation, breaking
+    # any host that uses systemd-resolved as DNS-server-for-
+    # containers (Docker bridge networks etc). Locks dry-run-
+    # preserves-state on the DNS-stub-binding substrate.
+    write_config "loopback"
+    rm -f "${DST}"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DST}" ]
+    ! grep -qE 'systemctl (restart|reload) systemd-resolved' "${SYSEOF_LOG}"
+}
