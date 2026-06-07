@@ -341,3 +341,22 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"bootloader-password-detect"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family
+    # for timer-driven scheduled probes (entropy-baseline,
+    # secure-boot-status, swap-encryption-detect). The
+    # bootloader-password-detect probe runs ON the timer's
+    # scheduled fire — executes ONCE, emits a verdict, then
+    # exits. Type=simple would leave systemd thinking the probe
+    # is a long-running daemon, breaking timer's OnSuccess /
+    # OnUnitActiveSec semantics (which depend on the service
+    # reaching inactive(dead) before the next fire). Locks
+    # oneshot-probe contract on the bootloader-password-detect
+    # substrate.
+    write_config "report"
+    run_wd
+    svc="${SYSTEMD_DIR}/selfdef-bootloader-password.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
