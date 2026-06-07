@@ -378,3 +378,23 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"audit-rules"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (canonical source rule files carry 'selfdef' self-identifying header — head-grep stale-cleanup discipline)" {
+    # Sister to brain-wide header-marker discipline INVARIANTs
+    # across L2 drop-in suites. The canonical audit-rules source
+    # files at modules/audit-rules/rules/{base,paranoid}.rules
+    # MUST carry a comment marker identifying them as selfdef-
+    # managed so when they land at /etc/audit/rules.d/50-selfdef-
+    # *.rules a stale-cleanup head -5 grep at uninstall time can
+    # identify which files selfdef owns vs which is operator-
+    # original. Without a marker, a subsequent uninstaller could
+    # not tell apart operator baseline audit rules from selfdef-
+    # injected ones — risking accidental rollback of operator
+    # custom rules. Locks marker-discipline on the source-of-
+    # truth audit-rules substrate.
+    SRC_DIR="${BATS_TEST_DIRNAME}/../../modules/audit-rules/rules"
+    [ -d "${SRC_DIR}" ]
+    for f in "${SRC_DIR}"/*.rules; do
+        head -5 "${f}" | grep -qE '^#.*(selfdef|audit-rules|managed)'
+    done
+}
