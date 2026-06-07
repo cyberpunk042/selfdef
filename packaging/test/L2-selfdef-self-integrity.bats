@@ -345,3 +345,21 @@ seed_trust_root() {
     run_wd
     cap | grep -qE '"tracked":3'
 }
+
+@test "INVARIANT (tamper-on-baseline-file fires alert event — meta-trust-root protection on baseline-file class)" {
+    # Sister to the brain-wide tamper-fires-alert INVARIANT family.
+    # The selfdef-self-integrity watchdog is the META-trust-root
+    # protection layer (it watches all the OTHER watchdog
+    # baselines + the manifest itself). When a baseline file is
+    # tampered, the watchdog MUST fire alert (or warn at minimum)
+    # — this is the load-bearing detection that protects the
+    # whole audit chain from silent attacker rewrites. Locks the
+    # tamper-detect contract on the baseline-file class.
+    seed_trust_root
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Tamper one baseline file
+    echo "TAMPERED" >> "${STATE}/account-baseline.tsv"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|high)"'
+}
