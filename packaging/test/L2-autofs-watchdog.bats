@@ -338,3 +338,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*auto'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # autofs-watchdog runs ON the timer's scheduled fire — scans
+    # /etc/auto.master + auto.master.d for program: map references
+    # in writable roots, emits a verdict, then exits. Type=
+    # simple would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the autofs-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/autofs-watchdog/systemd/selfdef-autofs.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
