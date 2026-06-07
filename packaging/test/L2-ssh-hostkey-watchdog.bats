@@ -334,3 +334,32 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"host_keys":3'
 }
+
+@test "INVARIANT (re-arm after operator deletion of baseline: re-creates from current keydir on next run)" {
+    # When operator out-of-band rm the baseline (forensics, lost
+    # state), the next run treats as fresh baseline_initial. Sister
+    # to many other modules' re-arm INVARIANT.
+    mk_key ed25519 "ssh-ed25519 AAAAAAAA root@host"
+    run_wd
+    [ -f "${BASELINE}" ]
+    rm -f "${BASELINE}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    [ -f "${BASELINE}" ]
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (RSA fingerprint swap also alerts — not only ED25519 axis)" {
+    # The MITM/reinstall signature must fire across ALL key types,
+    # not just ed25519. Sister axis to existing ed25519 + ecdsa
+    # changed tests. Lock the RSA path specifically.
+    mk_key rsa "ssh-rsa ORIGINAL root@host"
+    run_wd
+    mk_key rsa "ssh-rsa SWAPPED root@host"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"hostkey_changed"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE 'RSA'
+}
