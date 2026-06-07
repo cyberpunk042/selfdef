@@ -276,3 +276,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (pipe to /run — writable-root axis-symmetric expansion on coredump-handler axis)" {
+    # Sister to /tmp + /var/tmp + /dev/shm + /home + /root pipe-
+    # handler writable-root INVARIANTs already locked. /run is a
+    # tmpfs (boot-recreated, like /dev/shm) writable by systemd-
+    # units running as various uids — attacker who pivots via a
+    # unit-owned process can plant a handler in /run/<svc>/ and
+    # have the kernel pipe coredumps to it AS ROOT. /run often
+    # slips past tmpfs surveillance because operators think only
+    # /dev/shm is the tmpfs writable-root. Locks the /run axis
+    # on the coredump pipe-handler writable-root coverage
+    # symmetric to the other writable-root family members on
+    # the T1547 SIGSEGV-trigger root-exec surface.
+    write_pattern "|/run/.evil-handler %p"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
