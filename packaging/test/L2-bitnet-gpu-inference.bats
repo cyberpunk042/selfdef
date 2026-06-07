@@ -238,3 +238,19 @@ teardown_real_run() {
     fi
     teardown_real_run
 }
+
+@test "INVARIANT (module.toml provides bitnet-gpu-runtime contract — downstream-consumer interface lock)" {
+    # Sister to many other installer module's provides-contract
+    # INVARIANT across the brain (bridge-l2 l2-bridge, suricata
+    # ids+eve-json, slm-cpu-loop slm-loop-runtime, tensor-
+    # parallel-inference tensor-parallel-runtime, wasm-aot-cache
+    # wasm-aot-cache-dir, hardware-tune-cache hardware-tune-env).
+    # The bitnet-gpu-inference module is the substrate every
+    # downstream BitNet-using module composes on. Its provides
+    # token names the runtime-binding contract — every consumer
+    # module lists this in depends_on. A silent rename of the
+    # token would break every downstream BitNet inference
+    # consumer.
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"bitnet-gpu-runtime"' "${MODULE_DIR}/module.toml" \
+        || grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"bitnet-gpu"' "${MODULE_DIR}/module.toml"
+}
