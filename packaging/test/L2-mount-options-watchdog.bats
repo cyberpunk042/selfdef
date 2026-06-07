@@ -328,3 +328,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"all_flags_present"'
     cap | grep -qE '"missing_flags":0'
 }
+
+@test "INVARIANT (/var/tmp + nosuid: missing nosuid on /var/tmp surfaces in sample — sister axis to /tmp+nosuid)" {
+    # Sister to the /dev/shm + noexec axis already locked. /var/tmp
+    # carries the same hardening expectation as /tmp (nosuid + nodev
+    # + noexec) since it's a writable-spool surface that can be used
+    # to drop binaries; a missing nosuid would let an attacker drop
+    # a setuid binary into /var/tmp and pivot to root. Lock the
+    # axis-symmetry on /var/tmp.
+    mk_findmnt
+    write_fixture $'/var/tmp\tnodev,noexec,relatime'      # missing nosuid only
+    run_wd
+    cap | grep -q '/var/tmp:nosuid'
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
