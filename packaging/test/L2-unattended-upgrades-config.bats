@@ -954,3 +954,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/unattended-upgrades-config/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (unattended-upgrades-config module dir is at canonical path modules/unattended-upgrades-config/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/unattended-upgrades-config"
+    [ -d "${mod_dir}" ]
+}

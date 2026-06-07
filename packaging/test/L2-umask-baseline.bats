@@ -934,3 +934,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/umask-baseline/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (umask-baseline module dir is at canonical path modules/umask-baseline/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/umask-baseline"
+    [ -d "${mod_dir}" ]
+}

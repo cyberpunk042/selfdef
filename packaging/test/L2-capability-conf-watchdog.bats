@@ -1004,3 +1004,8 @@ seed_benign() {
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (capability-conf-watchdog module.toml exists at canonical path modules/capability-conf-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/capability-conf-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

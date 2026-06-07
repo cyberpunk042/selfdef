@@ -943,3 +943,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mtoml="${BATS_TEST_DIRNAME}/../../modules/entropy-baseline/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (entropy-baseline module dir is at canonical path modules/entropy-baseline/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/entropy-baseline"
+    [ -d "${mod_dir}" ]
+}

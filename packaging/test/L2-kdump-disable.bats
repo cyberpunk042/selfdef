@@ -935,3 +935,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/kdump-disable/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (kdump-disable module dir is at canonical path modules/kdump-disable/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/kdump-disable"
+    [ -d "${mod_dir}" ]
+}

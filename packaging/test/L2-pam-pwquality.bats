@@ -915,3 +915,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-pwquality/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (pam-pwquality module dir is at canonical path modules/pam-pwquality/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/pam-pwquality"
+    [ -d "${mod_dir}" ]
+}

@@ -961,3 +961,8 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (autofs-watchdog module.toml exists at canonical path modules/autofs-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/autofs-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

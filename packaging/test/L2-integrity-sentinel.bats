@@ -987,3 +987,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/integrity-sentinel/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (integrity-sentinel module dir is at canonical path modules/integrity-sentinel/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/integrity-sentinel"
+    [ -d "${mod_dir}" ]
+}

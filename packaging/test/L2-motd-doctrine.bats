@@ -844,3 +844,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/motd-doctrine/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (motd-doctrine module dir is at canonical path modules/motd-doctrine/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/motd-doctrine"
+    [ -d "${mod_dir}" ]
+}

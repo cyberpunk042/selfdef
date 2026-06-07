@@ -1069,3 +1069,8 @@ assert 'install' in data, 'install missing'
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (sudoers-integrity-watchdog module.toml exists at canonical path modules/sudoers-integrity-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/sudoers-integrity-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

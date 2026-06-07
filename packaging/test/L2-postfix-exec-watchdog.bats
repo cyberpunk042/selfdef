@@ -958,3 +958,8 @@ assert 'install' in data, 'install missing'
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (postfix-exec-watchdog module.toml exists at canonical path modules/postfix-exec-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/postfix-exec-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

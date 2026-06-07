@@ -949,3 +949,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/journal-tune/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (journal-tune module dir is at canonical path modules/journal-tune/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/journal-tune"
+    [ -d "${mod_dir}" ]
+}

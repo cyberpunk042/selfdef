@@ -1013,3 +1013,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/tmpfs-baseline/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (tmpfs-baseline module dir is at canonical path modules/tmpfs-baseline/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/tmpfs-baseline"
+    [ -d "${mod_dir}" ]
+}

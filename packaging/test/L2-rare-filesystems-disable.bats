@@ -948,3 +948,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/rare-filesystems-disable/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (rare-filesystems-disable module dir is at canonical path modules/rare-filesystems-disable/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/rare-filesystems-disable"
+    [ -d "${mod_dir}" ]
+}

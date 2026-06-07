@@ -843,3 +843,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/tetragon/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (tetragon module dir is at canonical path modules/tetragon/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/tetragon"
+    [ -d "${mod_dir}" ]
+}

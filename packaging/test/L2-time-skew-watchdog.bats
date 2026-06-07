@@ -966,3 +966,8 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (time-skew-watchdog module.toml exists at canonical path modules/time-skew-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

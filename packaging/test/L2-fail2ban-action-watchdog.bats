@@ -938,3 +938,8 @@ assert 'install' in data, 'install missing'
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (fail2ban-action-watchdog module.toml exists at canonical path modules/fail2ban-action-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/fail2ban-action-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

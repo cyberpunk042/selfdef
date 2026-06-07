@@ -937,3 +937,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/sysctl-network-baseline/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (sysctl-network-baseline module dir is at canonical path modules/sysctl-network-baseline/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/sysctl-network-baseline"
+    [ -d "${mod_dir}" ]
+}

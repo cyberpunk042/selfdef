@@ -957,3 +957,8 @@ assert 'install' in data, 'install missing'
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (shell-init-watchdog module.toml exists at canonical path modules/shell-init-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/shell-init-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

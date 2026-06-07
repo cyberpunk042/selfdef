@@ -971,3 +971,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/home-perms-baseline/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (home-perms-baseline module dir is at canonical path modules/home-perms-baseline/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/home-perms-baseline"
+    [ -d "${mod_dir}" ]
+}

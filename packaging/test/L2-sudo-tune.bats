@@ -960,3 +960,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/sudo-tune/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (sudo-tune module dir is at canonical path modules/sudo-tune/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/sudo-tune"
+    [ -d "${mod_dir}" ]
+}

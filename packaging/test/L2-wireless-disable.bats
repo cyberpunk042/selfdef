@@ -949,3 +949,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/wireless-disable/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (wireless-disable module dir is at canonical path modules/wireless-disable/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/wireless-disable"
+    [ -d "${mod_dir}" ]
+}

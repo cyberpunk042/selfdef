@@ -1004,3 +1004,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/audit-rules/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (audit-rules module dir is at canonical path modules/audit-rules/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/audit-rules"
+    [ -d "${mod_dir}" ]
+}

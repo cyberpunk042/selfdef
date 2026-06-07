@@ -1014,3 +1014,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/cron-baseline/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (cron-baseline module dir is at canonical path modules/cron-baseline/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/cron-baseline"
+    [ -d "${mod_dir}" ]
+}

@@ -948,3 +948,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/rsh-telnet-disable/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (rsh-telnet-disable module dir is at canonical path modules/rsh-telnet-disable/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/rsh-telnet-disable"
+    [ -d "${mod_dir}" ]
+}

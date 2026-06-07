@@ -937,3 +937,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/dnf-automatic-config/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (dnf-automatic-config module dir is at canonical path modules/dnf-automatic-config/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/dnf-automatic-config"
+    [ -d "${mod_dir}" ]
+}

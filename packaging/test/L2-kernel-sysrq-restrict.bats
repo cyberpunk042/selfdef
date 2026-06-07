@@ -928,3 +928,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/kernel-sysrq-restrict/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (kernel-sysrq-restrict module dir is at canonical path modules/kernel-sysrq-restrict/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/kernel-sysrq-restrict"
+    [ -d "${mod_dir}" ]
+}

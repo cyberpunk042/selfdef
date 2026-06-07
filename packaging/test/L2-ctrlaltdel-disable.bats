@@ -953,3 +953,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/ctrlaltdel-disable/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (ctrlaltdel-disable module dir is at canonical path modules/ctrlaltdel-disable/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/ctrlaltdel-disable"
+    [ -d "${mod_dir}" ]
+}

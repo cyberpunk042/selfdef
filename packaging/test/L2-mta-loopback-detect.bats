@@ -949,3 +949,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mtoml="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (mta-loopback-detect module dir is at canonical path modules/mta-loopback-detect/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect"
+    [ -d "${mod_dir}" ]
+}

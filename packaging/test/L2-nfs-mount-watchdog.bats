@@ -989,3 +989,8 @@ assert 'install' in data, 'install missing'
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (nfs-mount-watchdog module.toml exists at canonical path modules/nfs-mount-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/nfs-mount-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

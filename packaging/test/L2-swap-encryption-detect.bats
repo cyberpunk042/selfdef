@@ -939,3 +939,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mtoml="${BATS_TEST_DIRNAME}/../../modules/swap-encryption-detect/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (swap-encryption-detect module dir is at canonical path modules/swap-encryption-detect/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/swap-encryption-detect"
+    [ -d "${mod_dir}" ]
+}

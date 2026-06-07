@@ -796,3 +796,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/vpn-bridge/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (vpn-bridge module dir is at canonical path modules/vpn-bridge/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/vpn-bridge"
+    [ -d "${mod_dir}" ]
+}

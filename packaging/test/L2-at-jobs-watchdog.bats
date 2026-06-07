@@ -965,3 +965,8 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (at-jobs-watchdog module.toml exists at canonical path modules/at-jobs-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/at-jobs-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

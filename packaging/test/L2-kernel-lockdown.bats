@@ -978,3 +978,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/kernel-lockdown/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (kernel-lockdown module dir is at canonical path modules/kernel-lockdown/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/kernel-lockdown"
+    [ -d "${mod_dir}" ]
+}

@@ -958,3 +958,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/kernel-yama-baseline/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (kernel-yama-baseline module dir is at canonical path modules/kernel-yama-baseline/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/kernel-yama-baseline"
+    [ -d "${mod_dir}" ]
+}

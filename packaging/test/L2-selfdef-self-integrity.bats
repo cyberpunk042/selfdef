@@ -1002,3 +1002,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mtoml="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (selfdef-self-integrity module dir is at canonical path modules/selfdef-self-integrity/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity"
+    [ -d "${mod_dir}" ]
+}

@@ -933,3 +933,8 @@ assert 'install' in data, 'install missing'
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (needrestart-hooks-watchdog module.toml exists at canonical path modules/needrestart-hooks-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/needrestart-hooks-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

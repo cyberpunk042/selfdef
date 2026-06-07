@@ -955,3 +955,8 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (coredump-pattern-watchdog module.toml exists at canonical path modules/coredump-pattern-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

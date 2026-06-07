@@ -932,3 +932,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mtoml="${BATS_TEST_DIRNAME}/../../modules/secure-boot-status/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (secure-boot-status module dir is at canonical path modules/secure-boot-status/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/secure-boot-status"
+    [ -d "${mod_dir}" ]
+}

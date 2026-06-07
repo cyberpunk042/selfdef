@@ -977,3 +977,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mtoml="${BATS_TEST_DIRNAME}/../../modules/bootloader-password-detect/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (bootloader-password-detect module dir is at canonical path modules/bootloader-password-detect/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/bootloader-password-detect"
+    [ -d "${mod_dir}" ]
+}

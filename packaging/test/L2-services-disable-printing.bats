@@ -949,3 +949,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (services-disable-printing module dir is at canonical path modules/services-disable-printing/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing"
+    [ -d "${mod_dir}" ]
+}

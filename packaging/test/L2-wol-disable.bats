@@ -927,3 +927,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mtoml="${BATS_TEST_DIRNAME}/../../modules/wol-disable/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (wol-disable module dir is at canonical path modules/wol-disable/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/wol-disable"
+    [ -d "${mod_dir}" ]
+}

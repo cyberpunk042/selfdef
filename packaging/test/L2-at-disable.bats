@@ -978,3 +978,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/at-disable/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (at-disable module dir is at canonical path modules/at-disable/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/at-disable"
+    [ -d "${mod_dir}" ]
+}

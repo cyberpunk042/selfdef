@@ -1119,3 +1119,8 @@ setup_baseline_state() {
     n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (audit-config-watchdog module.toml exists at canonical path modules/audit-config-watchdog/ — module-manifest existence 72-cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/audit-config-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+}

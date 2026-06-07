@@ -952,3 +952,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/unprivileged-userns-baseline/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (unprivileged-userns-baseline module dir is at canonical path modules/unprivileged-userns-baseline/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/unprivileged-userns-baseline"
+    [ -d "${mod_dir}" ]
+}

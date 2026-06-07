@@ -1031,3 +1031,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/nullok-disable/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (nullok-disable module dir is at canonical path modules/nullok-disable/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/nullok-disable"
+    [ -d "${mod_dir}" ]
+}

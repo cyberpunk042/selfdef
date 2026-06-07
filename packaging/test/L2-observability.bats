@@ -802,3 +802,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/observability/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (observability module dir is at canonical path modules/observability/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/observability"
+    [ -d "${mod_dir}" ]
+}

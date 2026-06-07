@@ -914,3 +914,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/rpcbind-disable/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (rpcbind-disable module dir is at canonical path modules/rpcbind-disable/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/rpcbind-disable"
+    [ -d "${mod_dir}" ]
+}

@@ -977,3 +977,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (fail2ban-bridge module dir is at canonical path modules/fail2ban-bridge/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge"
+    [ -d "${mod_dir}" ]
+}

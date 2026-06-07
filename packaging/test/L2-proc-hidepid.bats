@@ -943,3 +943,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/proc-hidepid/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (proc-hidepid module dir is at canonical path modules/proc-hidepid/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/proc-hidepid"
+    [ -d "${mod_dir}" ]
+}

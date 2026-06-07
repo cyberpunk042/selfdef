@@ -965,3 +965,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (coredump-suid-restrict module dir is at canonical path modules/coredump-suid-restrict/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict"
+    [ -d "${mod_dir}" ]
+}

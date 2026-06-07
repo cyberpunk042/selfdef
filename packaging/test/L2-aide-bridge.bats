@@ -986,3 +986,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mtoml="${BATS_TEST_DIRNAME}/../../modules/aide-bridge/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (aide-bridge module dir is at canonical path modules/aide-bridge/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/aide-bridge"
+    [ -d "${mod_dir}" ]
+}

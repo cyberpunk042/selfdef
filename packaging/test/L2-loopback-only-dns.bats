@@ -930,3 +930,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/loopback-only-dns/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (loopback-only-dns module dir is at canonical path modules/loopback-only-dns/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/loopback-only-dns"
+    [ -d "${mod_dir}" ]
+}

@@ -872,3 +872,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mtoml="${BATS_TEST_DIRNAME}/../../modules/rkhunter-cron/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (rkhunter-cron module dir is at canonical path modules/rkhunter-cron/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/rkhunter-cron"
+    [ -d "${mod_dir}" ]
+}
