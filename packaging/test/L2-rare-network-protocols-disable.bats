@@ -220,3 +220,47 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=baseline'* ]]
 }
+
+@test "INVARIANT (downgrade preserves header-marker — downgrade does not strip ownership marker)" {
+    # Sister to rare-filesystems-disable downgrade-preserves-header.
+    # strict→baseline rewrites the file with fewer modules but MUST
+    # still carry managed-by header so stale-detection head -1
+    # still identifies the file as selfdef-owned.
+    write_config "strict"
+    run_wd
+    write_config "baseline"
+    run_wd
+    first_line="$(head -1 "${MODPROBE_FILE}")"
+    [ "${first_line}" = "# managed-by: selfdef rare-network-protocols-disable" ]
+    grep -q 'profile=baseline' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (each legacy strict-only protocol has BOTH blacklist + install lines — same hardening shape as baseline)" {
+    # Sister to rare-filesystems-disable strict-shape-symmetry. The
+    # 9 legacy strict-only protocols (atm/can/appletalk/decnet/ipx/
+    # netrom/ax25/rose/x25) must receive the SAME canonical
+    # hardening treatment as the baseline 4 (dccp/sctp/rds/tipc).
+    # Otherwise strict is structurally weaker per-protocol despite
+    # covering more.
+    write_config "strict"
+    run_wd
+    for m in atm can appletalk decnet ipx netrom ax25 rose x25; do
+        grep -q "blacklist ${m}" "${MODPROBE_FILE}"
+        grep -qE "^install[[:space:]]+${m}[[:space:]]+/bin/(true|false)" "${MODPROBE_FILE}"
+    done
+}
+
+@test "INVARIANT (current behavior: write target is overwritten — selfdef-prefixed filename means file is owned by selfdef)" {
+    # Sister to rare-filesystems-disable overwrite-current-behavior.
+    # The file path is explicitly selfdef-prefixed
+    # (/etc/modprobe.d/selfdef-rare-network-protocols-blacklist.conf)
+    # — any file at that path is treated as selfdef-owned. Operators
+    # wanting custom modprobe blacklists use different filenames.
+    # Lock current contract; future refinement could add header-
+    # marker guard before overwrite.
+    printf '%s\n' '# managed-by: somebody-else' 'blacklist some-other-protocol' > "${MODPROBE_FILE}"
+    write_config "baseline"
+    run_wd
+    grep -q 'managed-by: selfdef rare-network-protocols-disable' "${MODPROBE_FILE}"
+    ! grep -q 'somebody-else' "${MODPROBE_FILE}"
+}
