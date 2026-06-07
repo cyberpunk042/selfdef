@@ -268,3 +268,25 @@ run_wd() {
     grep -q '^install cfg80211 /bin/true' "${MODPROBE_FILE}"
     grep -q '^install mac80211 /bin/true' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # wireless-disable TOML; parser must tolerate without altering
+    # the profile-gated behavior. mask-with-noise still fires rfkill
+    # block wifi AND writes the persistent modprobe blacklist with
+    # header marker (the full radio-neutralization the operator
+    # selected — Wi-Fi stack is pure attack surface on sovereign
+    # endpoint: KARMA/evil-AP/captive-portal MITM/KRACK).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "Wi-Fi = KARMA/evil-AP/MITM surface — kill it dead"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -qE 'rfkill block wifi' "${RF_LOG}"
+    [ -f "${MODPROBE_FILE}" ]
+    grep -q 'managed-by: selfdef wireless-disable' "${MODPROBE_FILE}"
+}
