@@ -422,3 +422,18 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: host-sentinel installer NEVER deletes operator-pre-existing tetragon TracingPolicies — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # host-sentinel writes its own selfdef-prefixed TracingPolicy
+    # YAMLs; it MUST NEVER rm/find-delete operator-pre-existing
+    # /etc/tetragon/tracing-policies/*.yaml entries not owned by
+    # THIS module. Locks no-auto-delete on the host-sentinel
+    # installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/host-sentinel/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/tetragon([[:space:]]|$)' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/tetragon.*-delete' "${f}"
+    done
+}
