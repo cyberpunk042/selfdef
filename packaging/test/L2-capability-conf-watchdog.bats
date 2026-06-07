@@ -291,3 +291,23 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (dangerous-cap detect): cap_sys_ptrace grant → alert (T1055 process-injection / ptrace-escape axis)" {
+    # Sister to cap_setuid + cap_dac_override + cap_sys_admin +
+    # cap_audit_control + cap_kill + cap_chown dangerous-cap
+    # axes already locked. cap_sys_ptrace lets a granted user
+    # attach to ANY process (including PID-1 systemd) via ptrace
+    # for memory inspection/modification — process-injection
+    # primitive (T1055) and credential-theft (attach to a
+    # privileged process, read /proc/<pid>/mem for secrets). On
+    # containerized hosts, cap_sys_ptrace is a container-escape
+    # primitive too (ptrace the host's kthreadd). Locks coverage
+    # of the ptrace-grade capability alongside the other
+    # dangerous-cap families on the pam_cap surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'cap_net_raw netuser\ncap_sys_ptrace evil\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
