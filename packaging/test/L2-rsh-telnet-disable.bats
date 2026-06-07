@@ -330,3 +330,20 @@ TOMLEOF
     [[ "${output}" == *'profile=mask'* ]]
     [[ "${output}" =~ acted=[1-9] ]]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on rsh-telnet-disable installer
+    # surface despite acting on 14 legacy units (rsh, rlogin,
+    # rexec, telnet families × .service + .socket).
+    write_config "mask"
+    run -0 env PATH="${BIN}:${PATH}" \
+        SYSEOF_LOG="${SYSEOF_LOG}" \
+        SELFDEF_DRY_RUN=0 \
+        SELFDEF_LEGACY_CONFIG="${CONF}" \
+        LEGACY_PRESENT=1 \
+        bash "${WD}"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"rsh-telnet-disable"')
+    [ "${count}" = "1" ]
+}
