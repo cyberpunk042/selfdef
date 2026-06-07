@@ -313,3 +313,19 @@ TOMLEOF
     # source).
     [[ "${first_line}" == *"selfdef"* ]] || [[ "${first_line}" == *"[Coredump]"* ]]
 }
+
+@test "INVARIANT (drop-in carries Storage=none on disabled profile — actually neutralizes coredump capture)" {
+    # Sister to disabled-profile content-check INVARIANTs already
+    # locked. The 'disabled' profile is the operator's chosen
+    # neutralization of systemd-coredump (kernel-memory exfil
+    # surface via crash dumps to /var/lib/systemd/coredump/).
+    # Locks that the drop-in actually carries Storage=none — NOT
+    # just absence of Storage=external. A regression that emitted
+    # an empty drop-in would silently leave the default Storage=
+    # external behavior intact (the very thing operator wanted
+    # neutralized).
+    write_config "disabled"
+    run_wd
+    [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    grep -qE '^Storage=none' "${DROPIN_DIR}/50-selfdef.conf"
+}
