@@ -334,3 +334,10 @@ Scanned files: 1"
     main_count=$(cap | grep -cE '^-t selfdef-clamav -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_CLAMAV_PROFILE)" {
+    # Sister to brain-wide profile-echo INVARIANTs.
+    mk_clam 0 "no warnings"
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
