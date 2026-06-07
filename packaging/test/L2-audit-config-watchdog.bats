@@ -478,3 +478,25 @@ setup_baseline_state() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-restore: audit-config-watchdog NEVER auto-reverts auditd config tamper — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-restore / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # audit-config-watchdog DETECTS T1562.001 Impair Defenses:
+    # auditd tamper but MUST NEVER emit auditctl/sed/cp
+    # commands to auto-restore the audit config from baseline.
+    # Auto-restore would destroy forensic evidence (operator
+    # cannot analyze the attacker tamper if silently reverted)
+    # AND could overwrite operator-legitimate auditd config
+    # updates (operator may have intentionally adjusted rules
+    # but forgot to re-baseline). Surveillance, never auto-
+    # remediation. Locks anti-evidence-destruction contract
+    # on the audit-config substrate.
+    # Auto-restore would be `cp $BASELINE /etc/audit/...` —
+    # i.e., BASELINE as SOURCE arg. The current cp $current
+    # $BASELINE writes-TO baseline (safe; that's baseline-
+    # update, not auto-restore). Lock by pattern: cp where
+    # BASELINE is the first non-flag arg.
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*auditctl[[:space:]]+-(R|w|a)'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*cp[[:space:]]+(-[a-z]+[[:space:]]+)?"?\$\{?BASELINE\}?"?[[:space:]]+/'
+}
