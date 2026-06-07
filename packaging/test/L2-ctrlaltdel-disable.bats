@@ -265,3 +265,19 @@ TOMLEOF
     grep -q 'systemctl mask ctrl-alt-del.target' "${SYSEOF_LOG}"
     ! [ -f "${LOGIND_DROPIN}" ]
 }
+
+@test "INVARIANT (mask profile does NOT fire logind reload — mutual-exclusion contract)" {
+    # Sister to mask-vs-burst-guard mutual-exclusion INVARIANT
+    # already locked. The mask profile fires systemctl mask on
+    # ctrl-alt-del.target — that's the SOLE mechanism. burst-guard
+    # writes a logind drop-in + fires logind reload. The two paths
+    # are mutually exclusive. Locks that mask does NOT fire the
+    # logind reload (would be a redundant + potentially confusing
+    # systemctl call that operator inspection might mis-attribute
+    # to burst-guard activation).
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask ctrl-alt-del.target' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl kill -s HUP systemd-logind' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl reload systemd-logind' "${SYSEOF_LOG}"
+}
