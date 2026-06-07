@@ -326,3 +326,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # fish-config-watchdog runs ON the timer's scheduled fire —
+    # scans fish conf.d + functions for injection patterns,
+    # emits a verdict, then exits. Type=simple would break
+    # timer OnUnitActiveSec semantics. Locks oneshot-probe
+    # contract on the fish-config-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/fish-config-watchdog/systemd/selfdef-fish-config.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
