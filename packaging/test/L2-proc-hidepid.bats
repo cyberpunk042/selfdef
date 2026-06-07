@@ -290,3 +290,17 @@ run_wd() {
     [ -n "${invisible_value}" ]
     [ "${invisible_value}" -gt "${noaccess_value}" ]
 }
+
+@test "INVARIANT (proc.mount unit carries Options=hidepid — actual mount-time effect mechanism)" {
+    # Sister to many other installer module's contract-content
+    # INVARIANTs across the brain. The proc.mount unit MUST
+    # carry Options=<...>hidepid=<N>... — that's the systemd
+    # mechanism that hands hidepid to the mount(2) syscall on
+    # /proc. If a regression emitted hidepid in a comment or
+    # Environment= line or some OTHER field, systemd would
+    # silently NOT pass it to mount + the entire profile would
+    # be a no-op. Locks the actual-effect contract.
+    write_config "noaccess"
+    run_wd
+    grep -qE '^Options=.*hidepid=' "${SYSTEMD_DIR}/proc.mount"
+}
