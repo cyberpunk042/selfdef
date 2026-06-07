@@ -331,3 +331,24 @@ TOMLEOF
     # No unmask command fires on downgrade.
     ! grep -qE 'systemctl unmask cups' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-logger
+    # INVARIANTs (SDD-062 consumer dispatch contract). The
+    # services-disable-printing installer acts on 7 print/scan
+    # units in a single sweep BUT MUST surface exactly ONE
+    # emit_status JSON record (carrying the aggregate acted=N
+    # count) — never one record per unit. Multi-record output
+    # would break operator dashboard parsers + double-count
+    # acted across units. Locks single-source-of-truth on the
+    # CUPS/IPP/saned attack-surface neutralization substrate.
+    write_config "mask"
+    run env PATH="${BIN}:${PATH}" \
+        SYSEOF_LOG="${SYSEOF_LOG}" \
+        SELFDEF_DRY_RUN=0 \
+        SELFDEF_PRINTING_CONFIG="${CONF}" \
+        PRINT_PRESENT=1 \
+        bash "${WD}"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"services-disable-printing"')
+    [ "${count}" = "1" ]
+}
