@@ -311,3 +311,18 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-kernel-hooks -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (exec-path under writable-root: kernel-install hook invoking binary from /var/tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1542
+    # Pre-OS Boot — kernel-install hooks fire AS ROOT on every
+    # kernel package install/upgrade (operator-routine package
+    # upgrades trigger). Beyond inline rev-shell payloads,
+    # attackers stage benign-looking hooks that invoke binary
+    # in writable-root.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/var/tmp/staged_payload\n' > "${HOOKD}/50-depmod.install"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
