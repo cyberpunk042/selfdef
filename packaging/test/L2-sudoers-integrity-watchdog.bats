@@ -358,3 +358,20 @@ EOF
     # rename surfaces as a real change (not silent passthrough).
     cap | grep -qE '"(added|removed)":[1-9]'
 }
+
+@test "INVARIANT (DELTA detect — ADDED dangerous grant from a distinctively-named sudoers.d drop-in surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # sudoers.d/ drop-in (e.g., 99-distinctive-attacker-grant) with
+    # NOPASSWD: ALL grant, the file path + grant content MUST
+    # surface in the JSON sample so operator dashboard routes
+    # triage to the right path. Locks the new-file-discovered
+    # operator-visibility contract — operators MUST be able to
+    # tell which sudoers.d drop-in the dangerous grant landed in.
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# distinctive-attacker grant\nevil ALL=(ALL) NOPASSWD: ALL\n' > "${SUDOERS_D_DIR}/99-distinctive-attacker-grant"
+    run_wd
+    cap | grep -qE 'evil|NOPASSWD|distinctive-attacker'
+}
