@@ -249,3 +249,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named LD_PRELOAD path surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker writes a
+    # distinctively-named .so to /etc/ld.so.preload, the path
+    # MUST surface in the JSON sample so operator dashboard
+    # routes triage to the right code-load surface (T1574.006
+    # — Dynamic Linker Hijacking via ld.so.preload). Locks the
+    # operator-visibility contract on the global-dlopen-injection
+    # surveillance surface.
+    printf '/tmp/.distinctive-attacker-preload.so\n' > "${PRELOAD}"
+    run_wd
+    cap | grep -q 'distinctive-attacker-preload'
+}
