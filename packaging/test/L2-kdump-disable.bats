@@ -304,12 +304,15 @@ TOMLEOF
     ! grep -qE '(apt-get|dpkg|dnf|rpm)[[:space:]]+(remove|purge|uninstall)' "${SYSEOF_LOG}"
 }
 
-@test "INVARIANT (downgrade mask → stop does NOT auto-unmask — mask is sticky)" {
-    # Sister to brain-wide downgrade-no-auto-unmask INVARIANTs.
+@test "INVARIANT (single emit_status JSON record per apply — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs.
     write_config "mask"
-    KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd
-    : > "${SYSEOF_LOG}"
-    write_config "stop"
-    KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd
-    ! grep -qE 'systemctl unmask k(dump|exec)' "${SYSEOF_LOG}"
+    run -0 env PATH="${BIN}:${PATH}" \
+        SYSEOF_LOG="${SYSEOF_LOG}" \
+        SELFDEF_KDUMP_CONFIG="${CONF}" \
+        KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 \
+        bash "${WD}"
+    # emit_status is a single-line JSON to stdout.
+    n_status=$(printf '%s\n' "${output}" | grep -cE '"module":"kdump-disable"')
+    [ "${n_status}" = "1" ]
 }
