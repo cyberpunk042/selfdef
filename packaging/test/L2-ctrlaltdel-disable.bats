@@ -347,3 +347,23 @@ TOMLEOF
     bad=$(printf '%s\n' "${output}" | grep -oE '"severity":"[^"]+"' | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. ctrlaltdel-disable manifest declares install +
+    # profile gating the resolver enforces at install-time; a
+    # malformed manifest would break the resolver + leave the
+    # ctrl-alt-del mask/burst-guard hardening wedged. Python's
+    # tomllib is the canonical parser. Locks anti-malformed-
+    # manifest on the ctrlaltdel-disable substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ctrlaltdel-disable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'ctrlaltdel-disable', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
