@@ -344,3 +344,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-pci-device -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (USB-controller-class device add — class=0c0330 (xHCI USB 3.0) — surfaces in sample for cold-boot evil-USB-controller detection)" {
+    # Sister to network-class detection INVARIANT already
+    # locked. USB controller PCI insertion is the canonical
+    # cold-boot evil-USB-controller-card attack vector (an
+    # attacker plugs a PCIe USB add-in card with malicious
+    # firmware that does DMA against host memory at boot
+    # time — Thunderspy / DMA-attack family). The device add
+    # MUST surface in the JSON sample so operator dashboard
+    # routes triage to physical-tamper response (T1542 —
+    # Pre-OS Boot via DMA-capable PCI device).
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    mk_device "0000:0a:00.0" "1b73" "1100" "0c0330"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '0000:0a:00.0\|0c0330'
+}
