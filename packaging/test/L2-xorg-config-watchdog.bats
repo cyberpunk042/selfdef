@@ -265,3 +265,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (world-writable xorg.conf → alert): file mode IS architectural surface for X-server module-load hijack)" {
+    # Sister to gss-mech / ld-preload / sudo-conf world-writable-config
+    # axis already locked. Even if the xorg.conf content is benign,
+    # world-writable file means any user can plant a malicious
+    # ModulePath at next X server start — file mode is the
+    # architectural surface, not just content. Locks coverage of
+    # the world-writable file axis on the X-server module-load
+    # surface (T1574 — Hijack Execution Flow via X-server module
+    # load).
+    printf 'Section "Files"\n    ModulePath "/usr/lib/xorg/modules"\nEndSection\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
