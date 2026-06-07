@@ -415,3 +415,23 @@ EOF
     run_wd
     cap | grep -q 'distinctive-attacker-acct'
 }
+
+@test "INVARIANT (T1546 — shell-flip persistence: existing nologin service-user's shell flipped to /bin/bash surfaces as a new tuple)" {
+    # Sister to the new-account / new-uid0 / new-sudo axes. The
+    # user inventory tuple keys name:uid:gid:shell — so when an
+    # attacker flips an existing service-account's shell from
+    # /usr/sbin/nologin to /bin/bash (classic T1546 persistence
+    # vector: turn an idle service account into an interactive
+    # backdoor), the old tuple "removes" silently AND the new
+    # tuple surfaces as a new_account event. Locks the
+    # shell-flip detection axis on the account-watchdog surface.
+    # daemon ships with nologin in the baseline; attacker flips
+    # to bash. Watchdog MUST see this as a new tuple — the
+    # interactive-shell-acquisition vector cannot be silent.
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    sed -i 's|^daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin|daemon:x:1:1:daemon:/usr/sbin:/bin/bash|' "${PASSWD_FILE}"
+    run_wd
+    cap | grep -qE '"event":"(new_account|new_privileged_account)"'
+}
