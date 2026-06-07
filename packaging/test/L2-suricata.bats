@@ -145,3 +145,16 @@ INSTALL_DIR="${MODULE_DIR}/install"
     # errors via || true OR explicit existence check.
     grep -qE '\|\|[[:space:]]*true|if[[:space:]]+nft[[:space:]]+list|2>/dev/null' "${INSTALL_DIR}/uninstall.sh"
 }
+
+@test "INVARIANT (module.toml provides ids + eve-json contracts — downstream-consumer interface lock)" {
+    # Sister to many other installer module's provides-contract
+    # INVARIANT across the brain. Suricata's provides field names
+    # the downstream-visible interfaces: ids (IDS surface — any
+    # IDS-consumer module composes on this), eve-json (the
+    # event-log JSON stream — operator dashboards, observability
+    # pipelines, fleet integrators all consume eve-json). A silent
+    # rename of either provides token would break every downstream
+    # consumer module. Locks the cross-module interface contract.
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"ids"' "${MODULE_DIR}/module.toml"
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"eve-json"' "${MODULE_DIR}/module.toml"
+}
