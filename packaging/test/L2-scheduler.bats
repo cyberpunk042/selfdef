@@ -347,3 +347,16 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # scheduler unit substrate.
     grep -qE 'MS039' "${UNIT}"
 }
+
+@test "INVARIANT (.service After=zfs-mount.service — ZFS-audit-log substrate ordering contract)" {
+    # Sister to brain-wide systemd ordering INVARIANT family.
+    # The scheduler appends to /mnt/vault/context/scheduler_audit.log
+    # (a ZFS-backed audit substrate per MS039 Ring-0 trust
+    # topology). If the scheduler started BEFORE zfs-mount,
+    # the audit log path would not yet exist + the scheduler
+    # would either fail-loud (set -euo) or silently write to
+    # an unmounted tmpfs path. After=zfs-mount.service is the
+    # mandatory ordering directive. Locks the ZFS-substrate
+    # ordering discipline on the scheduler unit substrate.
+    grep -qE '^After=zfs-mount\.service' "${UNIT}"
+}
