@@ -303,3 +303,18 @@ TOMLEOF
     run_wd
     bash -n "${SCRIPT_DST}"
 }
+
+@test "INVARIANT (timer unit carries Persistent=true — missed-fires catch up after long downtime)" {
+    # Sister to doctor-timer + entropy-baseline + many other
+    # selfdef timer-unit Persistent=true INVARIANTs across the
+    # brain. Without Persistent=true, systemd does NOT remember
+    # timer fires missed during host downtime — a host offline
+    # for 24+ hours misses every non-loopback-MTA-bind probe
+    # for that window. With Persistent=true, systemd fires
+    # immediately on boot if interval has elapsed since last
+    # successful fire. Locks missed-fire-catch-up contract on
+    # MTA loopback-bind surveillance substrate.
+    write_config "report"
+    run_wd
+    grep -qE '^Persistent=true' "${TIMER_DST}"
+}
