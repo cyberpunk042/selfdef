@@ -323,3 +323,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (bind-mount shadowing /home — user-data exfil / cross-user-tampering axis)" {
+    # Sister to the /etc + /bin + /sbin + /root/.ssh + /var + /usr
+    # bind-mount shadow axes already locked. /home is the user-
+    # data surface — every user account, every browser profile,
+    # every credential file, every SSH agent socket. A bind-mount
+    # shadowing /home would let an attacker (1) read all user
+    # private data including .ssh/, gnupg/, browser cookies; (2)
+    # plant lateral persistence (.bashrc / .profile) hitting
+    # users on next interactive login; (3) snapshot crypto-
+    # wallets / TOTP / password manager data. Closes the bind-
+    # mount-shadow axis on the /home substrate (T1565.001 —
+    # Stored Data Manipulation via mount-tier inversion).
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/data/fake-home /home none bind 0 0\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
