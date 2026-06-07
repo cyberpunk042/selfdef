@@ -305,3 +305,19 @@ seed_benign() {
     run_wd
     cap | grep -q 'distinctive-attacker-initramfs-hook'
 }
+
+@test "INVARIANT (exec-path under writable-root: initramfs hook invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1542
+    # Pre-OS Boot persistence via initramfs hook injection —
+    # hook runs AS ROOT in very early boot before operator can
+    # intervene. Beyond inline rev-shell payloads, attackers
+    # stage benign-looking hooks that invoke a binary in
+    # writable-root.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/tmp/staged_payload\n' > "${HOOKD}/distinctive-attacker-initramfs-hook"
+    chmod 0755 "${HOOKD}/distinctive-attacker-initramfs-hook"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
