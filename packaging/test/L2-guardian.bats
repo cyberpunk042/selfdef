@@ -466,3 +466,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postrm has shebang #!/usr/bin/env bash or #!/bin/bash — POSIX-conformant 79)" {
     head -1 "${POSTRM}" | grep -qE '^#!.*(bash|sh)'
 }
+@test "INVARIANT (postrm references guardian unit — purge-cleanup contract 80)" {
+    grep -qE 'guardian' "${POSTRM}"
+}

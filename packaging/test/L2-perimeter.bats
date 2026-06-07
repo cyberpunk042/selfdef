@@ -733,3 +733,6 @@ assert c == 'sys_execve', f'call must be sys_execve, got {c!r}'
 @test "INVARIANT (YAML file declares metadata: line — well-formed-CRD 79)" {
     grep -qE '^metadata:' "${YAML}"
 }
+@test "INVARIANT (YAML file declares spec: line — well-formed-CRD-spec 80)" {
+    grep -qE '^spec:' "${YAML}"
+}

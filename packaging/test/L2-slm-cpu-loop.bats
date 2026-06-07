@@ -886,3 +886,7 @@ assert isinstance(data, dict)
     apply="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/apply.sh"
     head -1 "${apply}" | grep -qE '^#!'
 }
+@test "INVARIANT (slm-cpu-loop install/check.sh has shebang — POSIX-conformant 80)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/check.sh"
+    head -1 "${chk}" | grep -qE '^#!'
+}

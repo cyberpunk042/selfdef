@@ -709,3 +709,6 @@ setup() {
 @test "INVARIANT (lib file uses shellcheck shell=bash — POSIX-conformant 79)" {
     head -5 "${LIB}" | grep -qE 'shellcheck shell=bash'
 }
+@test "INVARIANT (lib file readable and source-able — library-sourceability 80)" {
+    [ -r "${LIB}" ]
+}

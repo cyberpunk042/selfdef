@@ -865,3 +865,8 @@ assert isinstance(data, dict)
     apply="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install/apply.sh"
     head -1 "${apply}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (bitnet-gpu-inference install/check.sh has shebang line — POSIX-conformant 80)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install/check.sh"
+    head -1 "${chk}" | grep -qE '^#!'
+}

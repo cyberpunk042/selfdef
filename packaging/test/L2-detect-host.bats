@@ -798,3 +798,6 @@ assert isinstance(data, dict)
 @test "INVARIANT (detect-host module.toml declares depends_on field — dependency-resolver 79)" {
     grep -qE '^depends_on' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
 }
+@test "INVARIANT (detect-host module.toml declares provides field — capability-export 80)" {
+    grep -qE '^provides' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+}

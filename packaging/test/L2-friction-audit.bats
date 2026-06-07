@@ -751,3 +751,6 @@ EOF
 @test "INVARIANT (script declares ts_ms variable in emit_ring — ring-buffer-timestamp 79)" {
     awk '/^emit_ring\(\)/,/^}/' "${SCRIPT}" | grep -qE 'ts_ms'
 }
+@test "INVARIANT (script declares emit_ocsf function with class_uid+severity_id arg-pair — OCSF-emit-canonical 80)" {
+    awk '/^emit_ocsf\(\)/,/^}/' "${SCRIPT}" | grep -qE 'class_uid|severity_id'
+}

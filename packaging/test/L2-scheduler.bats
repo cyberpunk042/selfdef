@@ -645,3 +645,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postrm has shebang — POSIX-conformant 79)" {
     head -1 "${POSTRM}" | grep -qE '^#!'
 }
+@test "INVARIANT (postrm references scheduler unit — purge-cleanup contract 80)" {
+    grep -qE 'scheduler' "${POSTRM}"
+}
