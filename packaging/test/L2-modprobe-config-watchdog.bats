@@ -268,3 +268,30 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (multi-dir scan: /etc/modprobe.d + /usr/lib/modprobe.d + /run/modprobe.d axes — exec-install in EITHER → alert)" {
+    # Sister to many other watchdog multi-dir scan INVARIANTs across
+    # the brain. modprobe reads from MULTIPLE directories (/etc,
+    # /usr/lib, /run/modprobe.d) — attacker may plant the malicious
+    # install directive in ANY. Lock multi-dir axis on the module-
+    # autoload-trigger surface.
+    MODD2="${TMP}/modprobe.d2"; mkdir -p "${MODD2}"
+    printf 'install pcspkr /bin/true\n' > "${CONF}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_MODPROBE_PROFILE="report" \
+    SELFDEF_MODPROBE_BASELINE="${BASELINE}" \
+    SELFDEF_MODPROBE_DIRS="${MODD} ${MODD2}" \
+    SELFDEF_MODPROBE_FILE="${CONF}" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'install evilmod /tmp/payload\n' > "${MODD2}/99-evil.conf"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_MODPROBE_PROFILE="report" \
+    SELFDEF_MODPROBE_BASELINE="${BASELINE}" \
+    SELFDEF_MODPROBE_DIRS="${MODD} ${MODD2}" \
+    SELFDEF_MODPROBE_FILE="${CONF}" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
