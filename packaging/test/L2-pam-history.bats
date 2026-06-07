@@ -370,3 +370,20 @@ TOMLEOF
     [ -f "${PWHISTORY_CONF}" ]
     [ "$(stat -c '%a' "${PWHISTORY_CONF}")" = "644" ]
 }
+
+@test "INVARIANT (no auto-uninstall: pam-history NEVER emits package-remove commands on libpam-modules)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The pam-history installer wires pwhistory.conf
+    # but MUST NEVER emit shell commands that uninstall the
+    # libpam-modules / libpam-pwhistory packages themselves
+    # (apt/dpkg/dnf/rpm/yum remove|purge|uninstall libpam-
+    # modules|libpam-pwhistory|pam). Silent auto-removal would
+    # tear down the PAM auth substrate entirely + remove the
+    # pam_pwhistory module the installer just wired. T1556
+    # self-defeat. Locks anti-package-removal contract on the
+    # pam-history substrate.
+    write_config "strict"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(libpam-modules|libpam-pwhistory|pam)'
+    [ ! -f "${PWHISTORY_CONF}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${PWHISTORY_CONF}"
+}
