@@ -245,3 +245,24 @@ run_wd() {
     run_wd
     grep -qE 'ENCRYPT_METHOD[[:space:]]+SHA512' "${DROPIN}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # login-defs-baseline TOML; parser must tolerate without altering
+    # the profile-gated behavior. strict-with-noise still tightens
+    # PASS_MAX_DAYS to 90 + preserves SHA512 encryption (load-bearing
+    # password-hash crypto) AND legacy marker-fence written.
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "strict"
+operator_note = "60-day max + history + ucredit/lcredit policy"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE 'PASS_MAX_DAYS[[:space:]]+90' "${DROPIN}"
+    grep -qE 'ENCRYPT_METHOD[[:space:]]+SHA512' "${DROPIN}"
+    grep -q 'managed-by: selfdef login-defs-baseline' "${LEGACY_LOGIN_DEFS}"
+}
