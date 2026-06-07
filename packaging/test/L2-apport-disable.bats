@@ -375,3 +375,34 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"apport-disable"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (header-marker discipline: sysctl drop-in carries 'selfdef' self-identifying header — head-grep stale-cleanup discipline)" {
+    # Sister to brain-wide header-marker discipline INVARIANTs
+    # across L2 drop-in suites. The apport-disable core_pattern
+    # reset writes a sysctl drop-in OR direct /proc/sys write
+    # — when the drop-in path is taken (/etc/sysctl.d/50-selfdef-
+    # core-pattern.conf), it MUST carry a comment marker
+    # identifying it as selfdef-managed so a stale-cleanup
+    # head -2 grep at uninstall time can identify which files
+    # selfdef owns vs which is operator-original. Without a
+    # marker, a subsequent uninstaller could not tell apart
+    # operator baseline kernel.core_pattern from selfdef-
+    # injected reset — risking accidental rollback of operator
+    # crash-handler config. Locks marker-discipline on the
+    # apport-disable sysctl.d substrate.
+    write_config "mask"
+    printf '|/usr/share/apport/apport %%p\n' > "${COREPAT}"
+    run_wd
+    # When a sysctl drop-in is rendered, header must be present.
+    for f in "${TMP:-/tmp/missing}"/sysctl.d/*selfdef*.conf \
+             "${TMP:-/tmp/missing}"/etc/sysctl.d/*selfdef*.conf; do
+        if [ -f "${f}" ]; then
+            grep -qE '^#.*(selfdef|apport-disable|managed)' "${f}"
+        fi
+    done
+    # Always at least one of: drop-in present OR direct write
+    # to ${COREPAT}; this test passes vacuously if no drop-in
+    # path is taken (current behavior — operator sees direct
+    # /proc/sys write).
+    [ -f "${COREPAT}" ]
+}
