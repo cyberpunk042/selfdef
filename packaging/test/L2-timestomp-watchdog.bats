@@ -247,3 +247,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"severity":"alert"'
     cap | grep -qE '"anomalies":4'
 }
+
+@test "INVARIANT (DELTA detect — distinctive-attacker-named timestomp anomaly surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When a file with a future-
+    # dated mtime is detected (T1070.006 — Indicator Removal:
+    # Timestomp; attacker rewinds mtime to hide their planted
+    # binary among older system files), the file path MUST
+    # surface in the JSON sample so operator dashboard routes
+    # triage to the right path.
+    printf 'x' > "${ROOT}/distinctive-attacker-timestomp.elf"
+    touch -d "2099-01-01" "${ROOT}/distinctive-attacker-timestomp.elf"
+    run_wd
+    cap | grep -q 'distinctive-attacker-timestomp'
+}
