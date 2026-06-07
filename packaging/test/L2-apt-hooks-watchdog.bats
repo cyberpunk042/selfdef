@@ -382,3 +382,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: apt-hooks-watchdog NEVER deletes apt.conf.d entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # apt-hooks-watchdog DETECTS T1546 apt-transaction-trigger
+    # root-exec persistence via DPkg::Pre/Post-Invoke but MUST
+    # NEVER emit sed/awk/rm commands to auto-clean the hook.
+    # The detected hook may be operator-legitimate (custom apt-
+    # listchanges, debdelta-updater, apt-cacher-ng integration).
+    # Silent auto-delete would destroy operator baseline state
+    # AND could break package-management workflow.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the apt-hooks surveillance substrate.
+    printf 'DPkg::Pre-Invoke {"/tmp/.evil";};\n' > "${HOOK}"
+    run_wd
+    [ -f "${HOOK}" ]
+    grep -q 'DPkg' "${HOOK}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*apt\.conf'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+}
