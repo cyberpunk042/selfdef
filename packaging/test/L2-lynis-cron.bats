@@ -233,3 +233,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"warnings":50'
     cap | grep -q '"severity":"alert"'                      # 55 < 60
 }
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_LYNIS_PROFILE — operator-dashboard distinguishes quick from full)" {
+    # Sister to L2-aide-bridge / L2-clamav-cron / L2-rkhunter-cron
+    # / L2-listening-ports profile-echo INVARIANTs across the
+    # brain. Downstream operator dashboard / triage pipeline must
+    # see the profile value the wrapper ran under (quick scan vs
+    # full scan) so it can interpret the warnings count + sample
+    # appropriately. A 'quick' run with N warnings is a different
+    # signal than a 'full' run with the same N warnings. Closes
+    # the profile-surfacing axis on the lynis advisory wrapper.
+    mk_report 85
+    run_wd
+    cap | grep -qE '"profile":"(quick|full|report)"'
+}
