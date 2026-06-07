@@ -585,30 +585,6 @@ assert s, f'summary must be non-empty, got {s!r}'
 "
 }
 
-@test "INVARIANT (polarproxy module.toml [install] apply = \"install/apply.sh\" — install apply path canonical contract)" {
-    mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
-    [ -f "${mtoml}" ]
-    python3 -c "
-import tomllib
-with open('${mtoml}', 'rb') as fp:
-    data = tomllib.load(fp)
-ap = (data.get('install') or {}).get('apply', '')
-assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {ap!r}'
-"
-}
-
-@test "INVARIANT (polarproxy module.toml [install] check = \"install/check.sh\" — install check path canonical contract)" {
-    mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
-    [ -f "${mtoml}" ]
-    python3 -c "
-import tomllib
-with open('${mtoml}', 'rb') as fp:
-    data = tomllib.load(fp)
-ch = (data.get('install') or {}).get('check', '')
-assert ch == 'install/check.sh', f'install.check must be install/check.sh, got {ch!r}'
-"
-}
-
 @test "INVARIANT (polarproxy module.toml [install] uninstall = \"install/uninstall.sh\" — install uninstall path canonical contract)" {
     mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
     [ -f "${mtoml}" ]
@@ -691,4 +667,37 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
 @test "INVARIANT (polarproxy install/uninstall.sh declares non-empty body — non-trivial-script contract)" {
     uni="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/uninstall.sh"
     [ -s "${uni}" ]
+}
+
+@test "INVARIANT (polarproxy module.toml has TOML parser-safe structure — Python tomllib parse-success contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert isinstance(data, dict)
+"
+}
+
+@test "INVARIANT (polarproxy module.toml install apply path verified via tomllib parse — 69-cadence-cycle apply contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ap = (data.get('install') or {}).get('apply', '')
+assert ap == 'install/apply.sh'
+"
+}
+
+@test "INVARIANT (polarproxy module.toml install check path verified via tomllib parse — 70-cadence-cycle check contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ch = (data.get('install') or {}).get('check', '')
+assert ch == 'install/check.sh'
+"
 }

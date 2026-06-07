@@ -857,3 +857,14 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
     uni="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/install/uninstall.sh"
     [ -s "${uni}" ]
 }
+
+@test "INVARIANT (tensor-parallel-inference module.toml has TOML parser-safe structure — Python tomllib parse-success contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert isinstance(data, dict)
+"
+}

@@ -842,3 +842,14 @@ chk_path = os.path.join('${BATS_TEST_DIRNAME}', '..', '..', 'modules', 'slm-cpu-
     uni="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh"
     [ -s "${uni}" ]
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml has TOML parser-safe structure — Python tomllib parse-success contract for 70th cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert isinstance(data, dict)
+"
+}

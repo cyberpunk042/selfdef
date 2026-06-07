@@ -432,3 +432,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     lines=$(wc -l < "${UNIT}")
     [ "${lines}" -gt 20 ]
 }
+
+@test "INVARIANT (guardian.service has StartLimitBurst=10 — restart-storm cap)" {
+    grep -qE '^StartLimitBurst=10' "${UNIT}"
+}

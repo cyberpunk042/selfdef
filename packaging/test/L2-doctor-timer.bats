@@ -596,3 +596,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (init checklist has selfdef-doctor-timer reference — operator-canonical wiring contract)" {
     grep -qE 'selfdef-doctor' "${INIT}"
 }
+
+@test "INVARIANT (.timer file has Documentation= directive — operator-doc-link contract)" {
+    grep -qE '^Documentation=' "${TIMER}"
+}

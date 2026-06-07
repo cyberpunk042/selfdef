@@ -700,3 +700,7 @@ c = data['spec']['kprobes'][0]['call']
 assert c == 'sys_execve', f'call must be sys_execve, got {c!r}'
 "
 }
+
+@test "INVARIANT (postrm rm -f the YAML file on purge — full-cleanup contract)" {
+    grep -qE 'rm -f.*sovereign-perimeter\.yaml' "${POSTRM}"
+}

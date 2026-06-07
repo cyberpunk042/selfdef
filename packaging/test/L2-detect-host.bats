@@ -756,3 +756,14 @@ assert 'sigma-correlator' in p, f'must provide sigma-correlator, got {p!r}'
     readme="${BATS_TEST_DIRNAME}/../../modules/detect-host/README.md"
     [ -s "${readme}" ]
 }
+
+@test "INVARIANT (detect-host module.toml has TOML parser-safe structure — Python tomllib parse-success contract for 70th cycle)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert isinstance(data, dict)
+"
+}

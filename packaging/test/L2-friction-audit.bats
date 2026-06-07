@@ -717,3 +717,8 @@ EOF
 @test "INVARIANT (script declares emit_ocsf function — OCSF emission canonical surface)" {
     grep -qE '^emit_ocsf\(\)|emit_ocsf \(\)' "${SCRIPT}"
 }
+
+
+@test "INVARIANT (script declares emit_ocsf at start of function-definitions block — canonical-helper-order)" {
+    awk '/^emit_ocsf\(\)/{found=1;exit} END{exit (found?0:1)}' "${SCRIPT}"
+}

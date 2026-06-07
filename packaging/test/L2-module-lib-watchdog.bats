@@ -676,3 +676,7 @@ setup() {
 @test "INVARIANT (lib SELFDEF_MODULE_LIB_VERSION is >=1 — version-required minimum)" {
     [ "${SELFDEF_MODULE_LIB_VERSION}" -ge 1 ]
 }
+
+@test "INVARIANT (lib defines log helper — basic-diagnostic-channel contract)" {
+    declare -F log >/dev/null
+}
