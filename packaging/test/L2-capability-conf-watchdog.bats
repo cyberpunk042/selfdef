@@ -325,3 +325,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (dangerous-cap detect): cap_dac_override grant → alert (T1548 file-permission-bypass axis)" {
+    # Sister to cap_sys_admin / cap_sys_module / cap_chown /
+    # cap_sys_ptrace / cap_audit_control / cap_kill dangerous-
+    # cap INVARIANTs. cap_dac_override bypasses ALL file/dir
+    # permission checks (DAC = Discretionary Access Control) —
+    # a user with this cap can read/write any file regardless
+    # of mode/owner. T1548 — Abuse Elevation Control Mechanism
+    # via DAC bypass. Closes axis-parity on the dangerous-cap
+    # family for the DAC-bypass surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'cap_net_raw netuser\ncap_dac_override evil\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
