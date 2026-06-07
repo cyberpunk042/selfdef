@@ -338,3 +338,18 @@ TOMLEOF
     mode="$(stat -c '%a' "${libexec_path}")"
     [ "${mode}" = "755" ] || [ "${mode}" = "750" ] || [ "${mode}" = "700" ]
 }
+
+@test "INVARIANT (no auto-uninstall: wol-disable NEVER emits package-remove commands on ethtool)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The wol-disable installer wires libexec + svc
+    # + timer to invoke ethtool -s <iface> wol d but MUST NEVER
+    # emit shell commands that uninstall the ethtool package
+    # itself (apt/dpkg/dnf/rpm/yum remove|purge|uninstall
+    # ethtool). Silent auto-removal would leave the host
+    # unable to actually disable WoL on subsequent boots —
+    # defeating the whole purpose of the module. Locks anti-
+    # package-removal contract on the wol-disable substrate.
+    write_config "enforce"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+ethtool'
+}
