@@ -386,3 +386,24 @@ seed_trust_root() {
         true
     fi
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs. The
+    # selfdef-self-integrity tag MUST fire EXACTLY ONCE per scan
+    # regardless of how many trust-root files were tampered.
+    # Multi-line output would break SDD-062 downstream JSON-line
+    # consumer (Sigma correlator). Locks consolidation
+    # discipline on the meta-watchdog substrate (which itself
+    # verifies all other watchdog integrity — its single-record
+    # contract is the meta-load-bearing case).
+    seed_trust_root
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Tamper multiple files simultaneously
+    for f in $(find "${ROOT}" -type f -name '*.sh' | head -3); do
+        echo "# tamper" >> "${f}"
+    done
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-self-integrity -- ')
+    [ "${main_count}" = "1" ]
+}
