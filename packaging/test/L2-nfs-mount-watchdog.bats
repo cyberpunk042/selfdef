@@ -391,3 +391,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-nfs-mount -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-remount: nfs-mount-watchdog NEVER emits mount/umount/remount commands — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-remediation + surveillance-
+    # not-destruction INVARIANTs. The nfs-mount-watchdog DETECTS
+    # network-mounts missing nosuid/nodev (T1574 mount-options-
+    # tamper risk) but MUST NEVER emit mount -o remount or
+    # umount commands to auto-fix. Auto-remount could disconnect
+    # active sessions reading from the share + auto-umount
+    # would catastrophically break running applications +
+    # cause data-loss for in-flight writes. Surveillance, never
+    # remediation. Locks anti-auto-remediation contract on the
+    # nfs-mount surveillance substrate.
+    ! grep -qE 'mount[[:space:]]+(-o[[:space:]]+)?remount' "${WD}"
+    ! grep -qE 'umount[[:space:]]+(-f|-l)?[[:space:]]+\$' "${WD}"
+}
