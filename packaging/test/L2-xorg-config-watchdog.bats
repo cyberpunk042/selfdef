@@ -282,3 +282,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (ModulePath under /home — user-writable hijack on X-server module-load axis)" {
+    # Sister to many other watchdog's /home user-writable
+    # INVARIANT across the brain. /home is the user-writable
+    # surface — an attacker with regular user account can drop
+    # a malicious X module .so into their home and have the X
+    # server load it on next session start. T1574 — Hijack
+    # Execution Flow via shared object substitution on the
+    # graphical-session input path (X server runs with
+    # graphical-display access; planted module gets keylogging
+    # + screen-content read).
+    printf 'Section "Files"\n  ModulePath "/home/user/.evil-xorg-modules"\nEndSection\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
