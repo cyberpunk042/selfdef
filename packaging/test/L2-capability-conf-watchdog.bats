@@ -342,3 +342,23 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on capability-conf surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The capability-conf-watchdog MUST only emit severity
+    # values from the closed set {ok,warn,alert} — never custom
+    # values (critical, error, fatal, notice, info). Operator
+    # dashboard parsers branch on the literal severity string;
+    # an out-of-set value silently falls through routing and
+    # the operator never sees the T1548 Abuse Elevation Control
+    # Mechanism via capability-grant alert. Locks parser
+    # contract on the /etc/security/capability.conf detection
+    # surface.
+    seed_benign
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    printf 'cap_dac_override evil\n' > "${CONF}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
