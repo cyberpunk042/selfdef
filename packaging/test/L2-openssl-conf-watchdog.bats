@@ -277,3 +277,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive_attacker_engine\|/tmp/.evil-engine'
 }
+
+@test "INVARIANT (provider .so under /dev/shm — tmpfs in-RAM writable-root on libcrypto provider dlopen surface)" {
+    # Sister to /tmp + /var/tmp + /home provider .so writable-
+    # root INVARIANTs already locked. /dev/shm is the canonical
+    # tmpfs in-RAM writable-root that survives no on-disk
+    # forensic trace. libcrypto provider dlopen MUST recognize
+    # /dev/shm provider .so paths — locks axis-symmetric tmpfs
+    # writable-root coverage on T1574 OpenSSL-provider Hijack
+    # Execution Flow surface; provider runs in-process AS the
+    # consuming process with full TLS-key access.
+    printf '[providers]\nmodule=/dev/shm/.evil-provider.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
