@@ -375,3 +375,23 @@ EOF
     run_wd
     cap | grep -qE 'evil|NOPASSWD|distinctive-attacker'
 }
+
+@test "INVARIANT (NOPASSWD on Cmnd_Alias indirection STILL alerts — alias-resolution doesn't dodge dangerous-flag detection)" {
+    # Sister to NOPASSWD scoped-command + bare NOPASSWD axes
+    # already locked. Attackers may layer indirection via
+    # Cmnd_Alias to hide the NOPASSWD: ALL grant behind a
+    # named alias (e.g. 'Cmnd_Alias EVIL = ALL' +
+    # 'evil ALL=(ALL) NOPASSWD: EVIL'). The watchdog MUST
+    # alert regardless of the alias-resolution complexity —
+    # NOPASSWD with broad-command-resolution is the dangerous
+    # bit, not the lexical command-spec.
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SUDOERS_D_DIR}/99-alias-attacker" <<'EOF'
+Cmnd_Alias ATTACKER_CMD = ALL
+evil-via-alias ALL=(ALL) NOPASSWD: ATTACKER_CMD
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
