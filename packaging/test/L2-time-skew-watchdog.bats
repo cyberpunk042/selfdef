@@ -263,3 +263,40 @@ CCEOF
     # NOT a quoted string.
     ! cap | grep -qE '"last_offset_ms":"[0-9]'
 }
+
+@test "INVARIANT (negative offset alert tier: -0.750 should alert with abs ms surfaced — symmetric direction)" {
+    # Sister axis to the existing 'negative offset taken absolute'
+    # warn test. Lock the alert tier symmetry too — negative
+    # offsets large enough to cross alert threshold must alert.
+    mk_chronyc 0 "$(tracking_block "-0.750" "0.050" "0.001")"
+    run env PATH="${BIN}:${PATH}" bash "${WD}"
+    [ "$status" -eq 1 ]
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"last_offset_alert"'
+    cap | grep -qE '"last_offset_ms":750'
+}
+
+@test "INVARIANT (high severity exits 0 — chronyc-failed is advisory; systemd should NOT fail the unit on a query failure)" {
+    # Sister axis to 'warn exits 0' INVARIANT. high tier is
+    # chronyc-failed (query couldn't run). The watchdog logs but
+    # MUST NOT fail the systemd unit — otherwise an operator
+    # bouncing chronyd briefly would cause cascading failures.
+    cat > "${BIN}/chronyc" <<'CCEOF'
+#!/usr/bin/env bash
+printf 'Cannot connect to /run/chrony/chronyd.sock' >&2
+exit 1
+CCEOF
+    chmod +x "${BIN}/chronyc"
+    run env PATH="${BIN}:${PATH}" bash "${WD}"
+    [ "${status}" -eq 0 ]
+    cap | grep -q '"severity":"high"'
+}
+
+@test "INVARIANT (ref_id surfaces in JSON — operator dashboard sees the NTP source identifier)" {
+    # The ref_id field tells operator which NTP server is
+    # providing time. Locks observability for time-source
+    # tracking (an attacker repointing NTP source surfaces here).
+    mk_chronyc 0 "$(tracking_block "0.001" "0.001" "0.001")"
+    run_wd
+    cap | grep -qE '"ref_id":'
+}
