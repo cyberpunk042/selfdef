@@ -372,3 +372,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # capability_granted event fires.
     ! cap | grep -q '"event":"schedule_capability_granted"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger-line INVARIANTs.
+    printf 'alice\n' > "${CA}"
+    printf 'someone\n' > "${AA}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'alice\nevil1\nevil2\nevil3\n' > "${CA}"
+    printf 'someone\nevil4\n' > "${AA}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-crontab-allow -- ')
+    [ "${main_count}" = "1" ]
+}
