@@ -328,3 +328,24 @@ TOMLEOF
     # Second apply re-issues mask command (no internal skip-detect).
     grep -q 'systemctl mask apport.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO systemctl OR sysctl side-effect fires when SELFDEF_DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain (acct-baseline / apparmor-baseline / sysctl
+    # hardening / many others). The DRY_RUN scaffold lets the
+    # operator preview the apport-disable architectural triplet
+    # WITHOUT actually masking units OR resetting kernel.core_
+    # pattern — preserves the leak-surface review affordance
+    # before commit. Without strict DRY_RUN gating, an operator's
+    # exploratory --dry-run run would silently mask apport on
+    # production. Locks the dry-run-preserves-state contract on
+    # the crash-reporting-leak neutralization substrate.
+    write_config "mask"
+    printf '|/usr/share/apport/apport %%p\n' > "${COREPAT}"
+    : > "${SYSEOF_LOG}"
+    : > "${SCTL_LOG}"
+    DRY_RUN=1 run_wd
+    ! grep -q 'systemctl mask apport.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask whoopsie.service' "${SYSEOF_LOG}"
+    ! grep -q 'sysctl -w kernel.core_pattern=core' "${SCTL_LOG}"
+}
