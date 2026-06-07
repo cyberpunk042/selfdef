@@ -243,3 +243,46 @@ run_wd() {
     # No other pipe set.
     ! grep -qE 'sysctl -w kernel.core_pattern=\|' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (.path/.timer/.socket units follow stop→disable→mask order — symmetric across event-source units)" {
+    # apport-autoreport.path + apport-autoreport.timer + whoopsie.path
+    # are all event-source units that re-activate the .service. Like
+    # avahi-disable + nscd-disable, they must follow the same ordering
+    # discipline.
+    write_config "mask"
+    printf 'core\n' > "${COREPAT}"
+    run_wd
+    # Verify the .path unit follows stop→disable→mask order.
+    stop_line="$(grep -n 'systemctl stop apport-autoreport.path' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_line="$(grep -n 'systemctl disable apport-autoreport.path' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_line="$(grep -n 'systemctl mask apport-autoreport.path' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_line}" -lt "${disable_line}" ]
+    [ "${disable_line}" -lt "${mask_line}" ]
+}
+
+@test "INVARIANT (downgrade mask → stop does NOT auto-unmask — sister-pattern with avahi/nscd/ctrlaltdel)" {
+    # Mask is sticky. Once masked, downgrade to stop does NOT auto-unmask.
+    write_config "mask"
+    printf 'core\n' > "${COREPAT}"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop apport.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl unmask apport' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (architectural triplet completion: unit-mask + autoreport-unit-mask + core_pattern-reset all fire on mask profile)" {
+    # mask profile fires ALL THREE disable mechanisms:
+    # 1. systemctl mask apport.service + whoopsie.service (userspace daemons)
+    # 2. systemctl mask apport-autoreport.* (event-trigger units)
+    # 3. sysctl -w kernel.core_pattern=core (kernel-side pipe reset)
+    # Triplet completeness lock against regression dropping any mechanism.
+    write_config "mask"
+    printf '|/usr/share/apport/apport %%p\n' > "${COREPAT}"
+    run_wd
+    grep -q 'systemctl mask apport.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask apport-autoreport.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask whoopsie.service' "${SYSEOF_LOG}"
+    grep -q 'sysctl -w kernel.core_pattern=core' "${SCTL_LOG}"
+}
