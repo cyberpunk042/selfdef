@@ -266,3 +266,24 @@ TOMLEOF
     cmp -s modules/journal-tune/configs/paranoid.conf "${DROPIN_DIR}/50-selfdef.conf"
     grep -qE '^Storage=persistent' "${DROPIN_DIR}/50-selfdef.conf"
 }
+
+@test "INVARIANT (drop-in carries selfdef self-identifying header — head -1 stale-cleanup discipline)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain (ssh-hardening / slm-cpu-loop /
+    # tensor-parallel-inference / hardware-tune-cache). The drop-in
+    # lands at /etc/systemd/journald.conf.d/50-selfdef.conf
+    # alongside operator-hand-authored 60-/99- drop-ins. A stale-
+    # cleanup pass (operator housekeeping or uninstall path) inspects
+    # the first non-blank comment line to identify selfdef-rendered
+    # config from operator config. Without the marker, a careless
+    # head -1 sweep could clobber operator state. Locks the
+    # provenance contract on BOTH standard + paranoid profiles.
+    write_config "standard"
+    run_wd
+    first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${DROPIN_DIR}/50-selfdef.conf")"
+    [[ "${first_nonblank}" == *"selfdef"* ]]
+    write_config "paranoid"
+    run_wd
+    first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${DROPIN_DIR}/50-selfdef.conf")"
+    [[ "${first_nonblank}" == *"selfdef"* ]]
+}
