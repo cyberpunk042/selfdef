@@ -248,3 +248,27 @@ run_wd() {
     [ "${stop_kexec}" -lt "${disable_kexec}" ]
     [ "${disable_kexec}" -lt "${mask_kexec}" ]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # kdump-disable TOML; parser must tolerate without altering the
+    # profile-gated behavior. mask-with-noise still fires systemctl
+    # mask on all present kdump variants (kdump.service +
+    # kexec-tools.service + kdump-tools.service — the full
+    # distro-aware kernel-crash-dump pipeline neutralization —
+    # kernel-memory dump on crash captures encryption keys + RAM
+    # secrets, equivalent to coredumpd-redirect surface but at
+    # kernel level).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "kdump = kernel RAM dump exfil surface at crash"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd
+    grep -q 'systemctl mask kdump.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask kexec-tools.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask kdump-tools.service' "${SYSEOF_LOG}"
+}
