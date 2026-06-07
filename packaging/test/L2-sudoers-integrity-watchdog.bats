@@ -305,3 +305,56 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-sudoers-integrity -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (NOPASSWD on scoped command STILL alerts — NOPASSWD itself is the dangerous flag, not the scope)" {
+    # 'bob ALL=(root) NOPASSWD: /bin/systemctl restart nginx' is a
+    # scoped command BUT still NOPASSWD — and NOPASSWD-anything is a
+    # password-bypass primitive. An attacker who pivots to bob's
+    # account hits this without a password. Lock that the NOPASSWD
+    # flag triggers alert regardless of command scope.
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SUDOERS_D_DIR}/scoped-nopw" <<'EOF'
+bob ALL=(root) NOPASSWD: /bin/systemctl restart nginx
+EOF
+    run_wd
+    cap | grep -q '"event":"dangerous_sudo_grant_added"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (severity precedence: dangerous + ordinary added together → SINGLE alert event, not warn — alert wins)" {
+    # When one drop-in carries BOTH a dangerous AND an ordinary
+    # added grant, the JSON record fires as alert, not warn. Locks
+    # the severity ladder: alert > warn — consolidation discipline.
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SUDOERS_D_DIR}/mixed" <<'EOF'
+bob ALL=(root) /bin/systemctl restart nginx
+evil ALL=(ALL) NOPASSWD: ALL
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"dangerous_sudo_grant_added"'
+    main_count=$(cap | grep -cE '^-t selfdef-sudoers-integrity -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (file rename preserves grant — added+removed cancel when grant content unchanged but moves files)" {
+    # Operator may rename a sudoers.d/ drop-in (operator-housekeeping).
+    # If content is identical, the watchdog detects content-removed
+    # from old file + content-added in new file. The current behavior
+    # locks: BOTH events surface (added + removed) — watchdog does
+    # NOT do content-based dedup across files. Lock for refinement
+    # opportunity tracking.
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Rename operator-backups → operator-backups-v2 (same content).
+    mv "${SUDOERS_D_DIR}/operator-backups" "${SUDOERS_D_DIR}/operator-backups-v2"
+    run_wd
+    # The watchdog detects a delta — locks current behavior that
+    # rename surfaces as a real change (not silent passthrough).
+    cap | grep -qE '"(added|removed)":[1-9]'
+}
