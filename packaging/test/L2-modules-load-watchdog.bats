@@ -335,3 +335,24 @@ EOF
     run_wd                                              # baseline caught up
     cap | grep -qE '"severity":"(ok|warn)"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. selfdef-modules-load tag
+    # must fire EXACTLY ONCE per scan regardless of how many
+    # added/removed/changed entries surface (multi-conf added
+    # in one scan from package upgrade dropping multiple
+    # modules-load.d files). Multi-line output would break
+    # SDD-062 downstream JSON-line consumer. Locks consolidation
+    # discipline on module-autoload-list surveillance surface
+    # (T1547.006 — Kernel Modules and Extensions persistence
+    # via modules-load.d).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'evil1\nevil2\n' > "${CONFD}/99-multi-add-a.conf"
+    printf 'evil3\nevil4\nevil5\n' > "${CONFD}/99-multi-add-b.conf"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-modules-load -- ')
+    [ "${main_count}" = "1" ]
+}
