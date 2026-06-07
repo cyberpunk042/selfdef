@@ -259,3 +259,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named ld.so.conf.d drop-in surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # ld.so.conf.d/*.conf file pointing at writable lib dir, the
+    # file path/lib dir MUST surface in the JSON sample so
+    # operator dashboard routes triage to the right code-load
+    # surface (T1574 — Hijack Execution Flow via ld.so search
+    # path injection). A new drop-in is the attacker-action
+    # signature; locks the new-file-discovered operator-
+    # visibility contract.
+    printf '/opt/app/lib\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/tmp/.distinctive-attacker-evil-lib\n' > "${DROPIN}/99-distinctive-attacker.conf"
+    run_wd
+    cap | grep -q 'distinctive-attacker'
+}
