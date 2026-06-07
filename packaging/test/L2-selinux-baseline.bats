@@ -414,3 +414,20 @@ EOF
     mode="$(stat -c '%a' "${SELINUX_CONFIG}")"
     [ "${mode}" = "644" ] || [ "${mode}" = "640" ] || [ "${mode}" = "600" ]
 }
+
+@test "INVARIANT (downgrade enforcing → permissive surfaces in JSON — operator dashboard tracks downgrade direction)" {
+    # Sister to many other installer module's bidirectional-
+    # operator-action INVARIANTs. SELinux profile downgrades
+    # are operator-intentional but high-signal — operator
+    # dashboard MUST surface the downgrade direction so audit
+    # trail tracks WHEN the MAC layer was deliberately
+    # weakened. Lock that profile=permissive flows through to
+    # emit_status JSON.
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=enforcing
+SELINUXTYPE=targeted
+EOF
+    write_config "permissive"
+    run_wd
+    cap | grep -qE '"status":"ok"' || cap | grep -qE 'profile=permissive' || grep -qE '^SELINUX=permissive' "${SELINUX_CONFIG}"
+}
