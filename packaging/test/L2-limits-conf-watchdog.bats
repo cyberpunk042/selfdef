@@ -303,3 +303,29 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named limits.d drop-in fires alert when limits.d scanned via SELFDEF_LIMITS_D)" {
+    # Sister to many other watchdog DELTA-detect INVARIANTs
+    # across the brain. When an attacker drops a new limits.d/
+    # *.conf file re-enabling coredumps (T1565.001 — Stored
+    # Data Manipulation via crash-dump exfiltration), the new
+    # drop-in MUST fire alert when limits.d is included in
+    # the scan via the SELFDEF_LIMITS_D env var.
+    LIMITSD3="${TMP}/limits.d.delta"; mkdir -p "${LIMITSD3}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        SELFDEF_LIMITS_D="${LIMITSD3}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '* hard core unlimited\n' > "${LIMITSD3}/99-distinctive-attacker.conf"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        SELFDEF_LIMITS_D="${LIMITSD3}" \
+        bash "${WD}"
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
