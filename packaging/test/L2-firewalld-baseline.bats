@@ -449,3 +449,20 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: firewalld-baseline installer NEVER deletes operator-pre-existing firewalld zones — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # firewalld-baseline writes its own selfdef zone XML; it
+    # MUST NEVER rm/find-delete an operator's pre-existing
+    # /etc/firewalld/zones/*.xml entries not owned by THIS
+    # module (firewall-cmd --delete-zone outside the selfdef
+    # zone is forbidden). Locks no-auto-delete on the firewalld-
+    # baseline installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/firewalld-baseline/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/firewalld' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/firewalld.*-delete' "${f}"
+        ! grep -qE 'firewall-cmd[[:space:]]+--permanent[[:space:]]+--delete-zone[[:space:]]+(?!selfdef)' "${f}"
+    done
+}
