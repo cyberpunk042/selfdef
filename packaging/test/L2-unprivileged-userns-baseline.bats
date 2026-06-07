@@ -341,3 +341,22 @@ EOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"unprivileged-userns-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (drop-in chmod 0644 — sysctl.d sourcing convention; world-readable required for sysctl --load on early boot)" {
+    # Sister to brain-wide drop-in chmod 0644 INVARIANTs across
+    # L2 suites. The unprivileged-userns-baseline drop-in lives
+    # in /etc/sysctl.d/50-selfdef-unprivileged-userns.conf and
+    # MUST be world-readable mode 0644 because systemd-sysctl
+    # runs sysctl --load at very early boot (before /var
+    # mounted on some setups) AND may parse sysctl.d as a non-
+    # root user on hardened systems with systemd-sysctl unit
+    # confined by ProtectSystem=strict. Mode 0600 would defeat
+    # the canonical sysctl.d sourcing semantics. Locks file-
+    # mode contract on the unprivileged-userns sysctl.d drop-
+    # in substrate.
+    write_config "deny" "true"
+    run_wd
+    [ -f "${DROPIN}" ]
+    mode="$(stat -c '%a' "${DROPIN}")"
+    [ "${mode}" = "644" ]
+}
