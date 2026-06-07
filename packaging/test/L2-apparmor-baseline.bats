@@ -314,3 +314,44 @@ SCEOF
     grep -qE 'systemctl (start|enable|restart) apparmor' "${SYSEOF_LOG}" || \
         grep -qE 'systemctl is-active apparmor' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (curated list is operator-overridable: replacing CONFIGS_SRC list changes the effective set)" {
+    # Operator may customize the curated profile list. The watchdog
+    # MUST honor the operator-provided list.
+    write_config "enforce"
+    # Override with operator-only set: just firefox.
+    cat > "${CONFIGS_SRC}/selfdef-curated-profiles.list" <<'EOF'
+firefox
+EOF
+    AA_LOADED='firefox
+cupsd
+avahi-daemon' run_wd
+    # Only firefox is flipped (operator's curated set).
+    grep -q 'aa-enforce firefox' "${AAFLIP_LOG}"
+    # cupsd + avahi-daemon NOT flipped (not in operator's list).
+    ! grep -q 'aa-enforce cupsd' "${AAFLIP_LOG}"
+    ! grep -q 'aa-enforce avahi-daemon' "${AAFLIP_LOG}"
+}
+
+@test "INVARIANT (DRY_RUN preserves AA_LIST file unchanged when present)" {
+    # When AA_LIST exists, DRY_RUN must not modify its content.
+    # Pre-seed AA_LIST so the dry-run branch can read it without erroring.
+    write_config "complain"
+    cp "${CONFIGS_SRC}/selfdef-curated-profiles.list" "${AA_LIST}"
+    pre_sha="$(sha256sum "${AA_LIST}" | awk '{print $1}')"
+    DRY_RUN=1 AA_LOADED='firefox' run_wd || true
+    post_sha="$(sha256sum "${AA_LIST}" | awk '{print $1}')"
+    [ "${pre_sha}" = "${post_sha}" ]
+}
+
+@test "INVARIANT (re-arm after operator out-of-band AA_LIST deletion: re-creates the curated list file)" {
+    # Operator may rm /etc/apparmor/curated-profiles.list — apply must
+    # rebuild it so the next-run flip logic works.
+    write_config "complain"
+    AA_LOADED='firefox' run_wd
+    [ -f "${AA_LIST}" ]
+    rm -f "${AA_LIST}"
+    AA_LOADED='firefox' run_wd
+    [ -f "${AA_LIST}" ]
+    grep -q '^firefox$' "${AA_LIST}"
+}
