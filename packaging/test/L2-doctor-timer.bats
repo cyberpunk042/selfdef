@@ -321,3 +321,15 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qE '^\[Install\]' "${SERVICE}"
     grep -qE '^WantedBy=multi-user\.target' "${SERVICE}"
 }
+
+@test "INVARIANT (.service Documentation= references man:selfdefctl(1) — operator-doc-path contract)" {
+    # Sister to brain-wide systemd Documentation= INVARIANT
+    # family. The doctor.service points operators at the
+    # selfdefctl(1) man page for the actual doctor command
+    # surface — the man page documents the gates + exit codes.
+    # A regression that dropped Documentation= or pointed at
+    # a non-existent URL would leave triaging operators with
+    # no jumping-off point. Locks the man-page-Documentation
+    # discipline on the doctor service substrate.
+    grep -qE '^Documentation=man:selfdefctl' "${SERVICE}"
+}
