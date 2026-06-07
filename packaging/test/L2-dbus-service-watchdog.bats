@@ -374,3 +374,19 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (Exec under /dev/shm: tmpfs in-RAM writable-root axis-symmetric expansion on D-Bus service activation)" {
+    # Sister to /home + /var/tmp + /tmp Exec writable-root
+    # INVARIANTs. /dev/shm tmpfs in-RAM: no on-disk forensic
+    # trace. D-Bus service activation fires AS configured user
+    # (often root) on first method call; planted /dev/shm
+    # binary fires AS service-uid on every activation.
+    cat > "${DBUSD}/evil-shm.service" <<EOF
+[D-BUS Service]
+Name=com.evil.shm
+Exec=/dev/shm/.evil
+User=root
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
