@@ -324,3 +324,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (no auto-kill: hidden-process-watchdog NEVER emits kill/pkill on detected hidden PIDs — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-uninstall + no-auto-delete +
+    # no-auto-trust + no-auto-evidence-destruction INVARIANTs
+    # across L2 surveillance suites. The hidden-process-
+    # watchdog DETECTS T1014 Rootkit hidden processes (PID
+    # invisible in /proc but appears in kill/ps probes) but
+    # MUST NEVER emit kill/pkill/killall commands to auto-
+    # terminate. Forensic evidence value of a live hidden
+    # process is high (process memory inspection, lsof of fds,
+    # /proc/PID/maps capture for reverse-engineering the rootkit
+    # implant) — silent auto-kill would destroy that forensic
+    # trail. Surveillance, never remediation. Locks anti-
+    # evidence-destruction contract on the hidden-process
+    # surveillance substrate.
+    ! grep -qE '(kill|pkill|killall)[[:space:]]+(-[0-9SIGKILL]+[[:space:]]+)?(-1[[:space:]]+|"?\$[A-Z]+_PID|\$pid)' "${WD}"
+    ! grep -qE 'killall[[:space:]]+-9' "${WD}"
+}
