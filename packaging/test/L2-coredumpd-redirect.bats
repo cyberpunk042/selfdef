@@ -421,3 +421,16 @@ assert 'install' in data, 'install missing'
         ! grep -qE 'find[[:space:]]+/etc/systemd/coredump.*-delete' "${f}"
     done
 }
+
+@test "INVARIANT (install scripts use set -euo pipefail — anti-half-installed-state contract across full lifecycle)" {
+    # Sister to brain-wide set -euo pipefail INVARIANT family.
+    # coredumpd-redirect install/check/uninstall scripts MUST fail-loud on
+    # first error so a partial-install state is detectable.
+    # Locks fail-loud invariant on the coredumpd-redirect lifecycle
+    # substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/install"
+    for sh in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${sh}" ] || continue
+        grep -qE '^set[[:space:]]+-euo[[:space:]]+pipefail' "${sh}"
+    done
+}
