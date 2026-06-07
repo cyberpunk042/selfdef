@@ -305,3 +305,21 @@ TOMLEOF
     [ -f "${SYSCTL_DROPIN}" ]
     grep -qE '^fs\.suid_dumpable[[:space:]]*=[[:space:]]*0$' "${SYSCTL_DROPIN}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in render AND NO sysctl -w fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/sysctl.d/50-selfdef-coredump-
+    # suid.conf AND without firing sysctl -w fs.suid_dumpable=0.
+    # A silent dry-run that committed would flip the live kernel
+    # knob on a host where operator was investigating coredump
+    # behavior (suid-binary debugging). Locks the dry-run-
+    # preserves-state contract on the coredump-suid-restriction
+    # substrate.
+    write_config "suid-only"
+    rm -f "${SYSCTL_DROPIN}"
+    : > "${SCTL_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${SYSCTL_DROPIN}" ]
+    ! grep -q 'sysctl -w fs.suid_dumpable' "${SCTL_LOG}"
+}
