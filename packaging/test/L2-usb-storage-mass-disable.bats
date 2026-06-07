@@ -349,3 +349,20 @@ usb_storage            73728  0' DRY_RUN=1 run_wd
     [ -f "${dropin}" ]
     grep -qE '^#.*(selfdef|usb-storage-mass-disable|managed)' "${dropin}"
 }
+
+@test "INVARIANT (no auto-uninstall: usb-storage-mass-disable NEVER emits package-remove commands)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The usb-storage-mass-disable installer writes
+    # a modprobe.d blacklist + may fire rmmod usb_storage but
+    # MUST NEVER emit shell commands that uninstall kernel-mod
+    # related packages (apt/dpkg/dnf/rpm/yum remove|purge|
+    # uninstall linux-modules|kmod|systemd). Auto-removal would
+    # be catastrophic at the kernel-substrate level. Locks
+    # anti-package-removal contract on the usb-storage-mass-
+    # disable substrate.
+    write_config "blocked"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(linux-modules|kmod|systemd)'
+    dropin="${MODPROBE_D}/50-selfdef-usb-storage.conf"
+    [ ! -f "${dropin}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${dropin}"
+}
