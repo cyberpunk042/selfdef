@@ -339,3 +339,24 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: sudo-conf-watchdog NEVER deletes sudo.conf entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # sudo-conf-watchdog DETECTS T1548.003 Abuse Elevation
+    # Control Mechanism: Sudo / Sudo Plugin hijack but MUST
+    # NEVER emit sed/awk/rm commands to auto-clean the Plugin
+    # directive. The detected Plugin may be operator-legitimate
+    # (custom audit plugin for compliance logging). Silent
+    # auto-delete would destroy operator baseline state AND
+    # could leave sudo with NO valid Plugin loaded — breaking
+    # all sudo invocations system-wide. Surveillance, never
+    # remediation. Locks anti-data-loss contract on the sudo-
+    # conf surveillance substrate.
+    printf 'Plugin policy /tmp/.evil-sudo-plugin.so\n' > "${CONF}"
+    run_wd
+    [ -f "${CONF}" ]
+    grep -q 'Plugin' "${CONF}"
+    ! grep -qE 'sed[[:space:]]+-i.*sudo\.conf' "${WD}"
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+}
