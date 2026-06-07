@@ -254,3 +254,24 @@ run_wd() {
     run_wd
     bash -n "${LIBEXEC_DIR}/wol-disable.sh"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # wol-disable TOML; parser must tolerate without altering the
+    # profile-gated behavior. enforce-with-noise still installs
+    # the service + timer + libexec triplet AND the libexec
+    # carries ethtool -s <iface> wol d (the actual WoL-disable
+    # mechanism — closes the magic-packet remote-wakeup attack
+    # surface).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "enforce"
+operator_note = "WoL = magic-packet remote wakeup = surveillance-evading wakeup"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${LIBEXEC_DIR}/wol-disable.sh" ]
+    grep -qE 'ethtool -s .* wol d' "${LIBEXEC_DIR}/wol-disable.sh"
+}
