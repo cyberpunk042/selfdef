@@ -392,3 +392,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '/home:nodev'
     cap | grep -qE '"severity":"(warn|alert)"'
 }
+
+@test "INVARIANT (detail-tag axis: per-finding selfdef-mount-options-detail emissions bounded to one-per-missing-flag — operator log-spelunking)" {
+    # Sister to brain-wide main-tag + detail-tag emission
+    # INVARIANTs across the brain. The mount-options watchdog
+    # emits ONE main 'selfdef-mount-options' JSON record per
+    # scan (locked by JSON-record-is-SINGLE-main-logger-line
+    # INVARIANT above) AND emits 'selfdef-mount-options-detail'
+    # records one-per-missing-flag for operator log-spelunking
+    # (operator can grep journalctl -t selfdef-mount-options-
+    # detail to enumerate the specific finding rows). Two
+    # missing flags → two detail records. Locks the
+    # multi-detail-bounded-by-finding-count contract on the
+    # filesystem mount-options surveillance surface.
+    mk_findmnt
+    write_fixture $'/tmp\trelatime' $'/var/tmp\trelatime'  # /tmp missing 3, /var/tmp missing 3
+    run_wd
+    detail_count=$(cap | grep -cE '^-t selfdef-mount-options-detail -- ')
+    # Two mounts × 3 missing flags each = 6 detail records
+    [ "${detail_count}" = "6" ]
+}
