@@ -400,3 +400,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (host-key permissions 0600 baseline lock — private key file MUST be operator-private)" {
+    # Sister to many other watchdog/installer file-perm
+    # INVARIANTs across the brain. The host-key surveillance
+    # surface depends on the watchdog reading host private keys
+    # (or their fingerprints). Even though the watchdog only
+    # reads fingerprints, a regression that left the keys
+    # world-readable would be a separate security incident
+    # (T1552.004 — Credentials in Files: Private Keys). The
+    # watchdog operating on the keys MUST not change their
+    # perms; the host-key files must remain operator-private
+    # (0600 or 0640 typical for /etc/ssh/ssh_host_*_key).
+    # Current-behavior lock: watchdog does NOT relax permissions
+    # — sister contract to the no-auto-trust baseline lock.
+    mk_key ed25519 "ssh-ed25519 ORIGINAL_ED root@host"
+    chmod 0600 "${KEYDIR}/ssh_host_ed25519_key"
+    run_wd
+    [ "$(stat -c '%a' "${KEYDIR}/ssh_host_ed25519_key")" = "600" ]
+}
