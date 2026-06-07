@@ -255,3 +255,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (LD_AUDIT injection — sister axis to LD_PRELOAD on the dynamic-linker family)" {
+    # Sister to the LD_PRELOAD injection axis already locked.
+    # LD_AUDIT loads an "audit library" into every dynamically-
+    # linked process — equally powerful as LD_PRELOAD for global
+    # in-process code execution but historically less monitored
+    # (attackers prefer LD_AUDIT to evade LD_PRELOAD detectors).
+    # Locks coverage of the full ld.so dynamic-loader env-injection
+    # family on the systemd manager DefaultEnvironment surface
+    # (T1574.006 every-service env-injection).
+    printf '[Manager]\nDefaultEnvironment=LANG=en_US.UTF-8\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Manager]\nDefaultEnvironment=LD_AUDIT=/tmp/x.so\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
