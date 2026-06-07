@@ -323,3 +323,10 @@ TOMLEOF
     [ ! -f "${SYSCTL_DROPIN}" ]
     ! grep -q 'sysctl -w fs.suid_dumpable' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (drop-in is chmod 0644 — system-config convention)" {
+    write_config "suid-only"
+    run_wd
+    [ -f "${SYSCTL_DROPIN}" ]
+    [ "$(stat -c '%a' "${SYSCTL_DROPIN}")" = "644" ]
+}
