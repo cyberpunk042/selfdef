@@ -356,3 +356,22 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-nsswitch -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on nsswitch surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The nsswitch-watchdog MUST only emit severity values from
+    # the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1556.001 NSS module hijack alert. Locks
+    # parser contract on the /etc/nsswitch.conf detection
+    # surface.
+    seed_benign
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    printf 'passwd: files evil-source\ngroup: files compat\nshadow: files\nhosts: files dns\n' > "${CONF}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
