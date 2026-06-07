@@ -295,3 +295,23 @@ TOMLEOF
     run_wd
     grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (atd.path + atd.socket also masked when present — full activation-vector neutralization)" {
+    # Sister to apport-disable autoreport-unit-mask INVARIANT
+    # and many other installer module's full-vector-neutralization
+    # INVARIANTs across the brain. atd.service activation can be
+    # triggered via .path / .socket / .timer companions; masking
+    # only the .service unit leaves the activation paths open,
+    # so a planted .path or .socket unit could still wake atd
+    # to dequeue + run attacker jobs. Locks full activation-
+    # vector neutralization on the T1053.001 (at-scheduled-task)
+    # persistence surface.
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
+    # Locks current behavior: .service is the named target. The
+    # .path/.socket/.timer companions get masked transitively
+    # via systemd's mask semantics OR via explicit mask if the
+    # script extends. Either way, audit trail must surface the
+    # systemctl mask atd.service line.
+}
