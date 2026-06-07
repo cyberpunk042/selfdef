@@ -282,3 +282,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (kernel.unprivileged_userns_clone=1 weakening: enabling unprivileged user namespaces → alert — container-escape primitive axis)" {
+    # Sister to other sysctl-hardening weakening axes. kernel.
+    # unprivileged_userns_clone=1 lets unprivileged users create
+    # user namespaces — substrate for many privilege-escalation
+    # exploits (CVE-2022-0185, CVE-2022-25636, et al). On
+    # hardened hosts this is set to 0; an attacker who manages
+    # to flip back to 1 unlocks a large CVE surface. Lock
+    # weakening detection on the unprivileged-userns-clone
+    # axis (T1611 — Escape to Host via user-namespace creation).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'kernel.randomize_va_space = 2\nkernel.kptr_restrict = 2\nkernel.yama.ptrace_scope = 1\nkernel.unprivileged_userns_clone = 1\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
