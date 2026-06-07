@@ -353,3 +353,22 @@ TOMLEOF
     output="$(run_wd 2>&1)"
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+ethtool'
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. wol-disable manifest declares install + profile
+    # gating the resolver enforces; malformed manifest wedges
+    # the WoL ethtool-disable libexec baseline. Python's tomllib
+    # is the canonical parser. Locks anti-malformed-manifest on
+    # the wol-disable substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wol-disable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'wol-disable', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
