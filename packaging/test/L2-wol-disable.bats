@@ -937,3 +937,9 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     inst_dir="${BATS_TEST_DIRNAME}/../../modules/wol-disable/install"
     [ -d "${inst_dir}" ]
 }
+
+@test "INVARIANT (wol-disable install dir non-empty — install-content-presence 74-cycle)" {
+    inst="${BATS_TEST_DIRNAME}/../../modules/wol-disable/install"
+    n=$(ls "${inst}" 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

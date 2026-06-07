@@ -975,3 +975,9 @@ assert isinstance(data, dict), 'TOML root must be table'
     inst_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/install"
     [ -d "${inst_dir}" ]
 }
+
+@test "INVARIANT (coredump-suid-restrict install dir non-empty — install-content-presence 74-cycle)" {
+    inst="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/install"
+    n=$(ls "${inst}" 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

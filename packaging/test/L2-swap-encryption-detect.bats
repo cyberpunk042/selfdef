@@ -949,3 +949,9 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     inst_dir="${BATS_TEST_DIRNAME}/../../modules/swap-encryption-detect/install"
     [ -d "${inst_dir}" ]
 }
+
+@test "INVARIANT (swap-encryption-detect install dir non-empty — install-content-presence 74-cycle)" {
+    inst="${BATS_TEST_DIRNAME}/../../modules/swap-encryption-detect/install"
+    n=$(ls "${inst}" 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

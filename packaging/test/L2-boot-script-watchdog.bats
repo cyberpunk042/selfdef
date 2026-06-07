@@ -1037,3 +1037,9 @@ seed_benign() {
     sd="${BATS_TEST_DIRNAME}/../../modules/boot-script-watchdog/systemd"
     [ -d "${sd}" ]
 }
+
+@test "INVARIANT (boot-script-watchdog systemd dir is non-empty — systemd-content-presence 74-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/boot-script-watchdog/systemd"
+    n=$(ls "${sd}" | wc -l)
+    [ "${n}" -ge 1 ]
+}

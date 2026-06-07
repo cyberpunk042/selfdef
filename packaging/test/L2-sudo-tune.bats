@@ -970,3 +970,9 @@ assert isinstance(data, dict), 'TOML root must be table'
     inst_dir="${BATS_TEST_DIRNAME}/../../modules/sudo-tune/install"
     [ -d "${inst_dir}" ]
 }
+
+@test "INVARIANT (sudo-tune install dir non-empty — install-content-presence 74-cycle)" {
+    inst="${BATS_TEST_DIRNAME}/../../modules/sudo-tune/install"
+    n=$(ls "${inst}" 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

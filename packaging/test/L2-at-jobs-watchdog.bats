@@ -975,3 +975,9 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     sd="${BATS_TEST_DIRNAME}/../../modules/at-jobs-watchdog/systemd"
     [ -d "${sd}" ]
 }
+
+@test "INVARIANT (at-jobs-watchdog systemd dir is non-empty — systemd-content-presence 74-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/at-jobs-watchdog/systemd"
+    n=$(ls "${sd}" | wc -l)
+    [ "${n}" -ge 1 ]
+}

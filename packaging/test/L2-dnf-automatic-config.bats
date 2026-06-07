@@ -947,3 +947,9 @@ assert isinstance(data, dict), 'TOML root must be table'
     inst_dir="${BATS_TEST_DIRNAME}/../../modules/dnf-automatic-config/install"
     [ -d "${inst_dir}" ]
 }
+
+@test "INVARIANT (dnf-automatic-config install dir non-empty — install-content-presence 74-cycle)" {
+    inst="${BATS_TEST_DIRNAME}/../../modules/dnf-automatic-config/install"
+    n=$(ls "${inst}" 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

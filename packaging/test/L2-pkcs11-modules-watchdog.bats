@@ -935,3 +935,9 @@ assert 'install' in data, 'install missing'
     sd="${BATS_TEST_DIRNAME}/../../modules/pkcs11-modules-watchdog/systemd"
     [ -d "${sd}" ]
 }
+
+@test "INVARIANT (pkcs11-modules-watchdog systemd dir is non-empty — systemd-content-presence 74-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/pkcs11-modules-watchdog/systemd"
+    n=$(ls "${sd}" | wc -l)
+    [ "${n}" -ge 1 ]
+}

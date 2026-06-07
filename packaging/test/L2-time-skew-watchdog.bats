@@ -976,3 +976,9 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
     sd="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
     [ -d "${sd}" ]
 }
+
+@test "INVARIANT (time-skew-watchdog systemd dir is non-empty — systemd-content-presence 74-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    n=$(ls "${sd}" | wc -l)
+    [ "${n}" -ge 1 ]
+}

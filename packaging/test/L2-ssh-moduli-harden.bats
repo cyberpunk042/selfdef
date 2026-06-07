@@ -1108,3 +1108,9 @@ assert isinstance(data, dict), 'TOML root must be table'
     inst_dir="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/install"
     [ -d "${inst_dir}" ]
 }
+
+@test "INVARIANT (ssh-moduli-harden install dir non-empty — install-content-presence 74-cycle)" {
+    inst="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/install"
+    n=$(ls "${inst}" 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

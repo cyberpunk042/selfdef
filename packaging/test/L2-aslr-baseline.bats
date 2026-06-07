@@ -1002,3 +1002,9 @@ assert isinstance(data, dict), 'TOML root must be table'
     inst_dir="${BATS_TEST_DIRNAME}/../../modules/aslr-baseline/install"
     [ -d "${inst_dir}" ]
 }
+
+@test "INVARIANT (aslr-baseline install dir non-empty — install-content-presence 74-cycle)" {
+    inst="${BATS_TEST_DIRNAME}/../../modules/aslr-baseline/install"
+    n=$(ls "${inst}" 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

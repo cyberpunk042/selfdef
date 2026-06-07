@@ -1074,3 +1074,9 @@ assert 'install' in data, 'install missing'
     sd="${BATS_TEST_DIRNAME}/../../modules/logfile-integrity-watchdog/systemd"
     [ -d "${sd}" ]
 }
+
+@test "INVARIANT (logfile-integrity-watchdog systemd dir is non-empty — systemd-content-presence 74-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/logfile-integrity-watchdog/systemd"
+    n=$(ls "${sd}" | wc -l)
+    [ "${n}" -ge 1 ]
+}

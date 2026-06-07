@@ -1018,3 +1018,9 @@ seed_benign() {
     sd="${BATS_TEST_DIRNAME}/../../modules/aliases-watchdog/systemd"
     [ -d "${sd}" ]
 }
+
+@test "INVARIANT (aliases-watchdog systemd dir is non-empty — systemd-content-presence 74-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/aliases-watchdog/systemd"
+    n=$(ls "${sd}" | wc -l)
+    [ "${n}" -ge 1 ]
+}

@@ -965,3 +965,9 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
     sd="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
     [ -d "${sd}" ]
 }
+
+@test "INVARIANT (coredump-pattern-watchdog systemd dir is non-empty — systemd-content-presence 74-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    n=$(ls "${sd}" | wc -l)
+    [ "${n}" -ge 1 ]
+}
