@@ -299,3 +299,24 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (net.ipv4.conf.all.rp_filter=0 weakening: reverse-path filter disabled → alert — IP-spoofing-acceptance axis)" {
+    # Sister to brain-wide sysctl-hardening weakening axes
+    # (randomize_va_space, kptr_restrict, ptrace_scope, dmesg_
+    # restrict, ip_forward, unprivileged_userns_clone). reverse-
+    # path filter (rp_filter) is the kernel's anti-spoofing
+    # network defense — when active (rp_filter=1 or 2), packets
+    # received on an interface MUST match the route the kernel
+    # would use to reply back. Disabling rp_filter=0 lets
+    # spoofed-source-IP packets through, enabling reflection
+    # attacks AND giving attackers ability to receive responses
+    # to spoofed-source probes. Lock weakening detection on
+    # rp_filter axis (T1565.002 transmitted-data-manipulation
+    # spoofed-source variant).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'kernel.randomize_va_space = 2\nnet.ipv4.conf.all.rp_filter = 0\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
