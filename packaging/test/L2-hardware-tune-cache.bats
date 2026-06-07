@@ -183,3 +183,39 @@ teardown_real_run() {
     fi
     teardown_real_run
 }
+
+@test "INVARIANT (env file is shell-sourceable: bash -n parses it cleanly)" {
+    # Downstream consumers source the env file. It MUST be valid shell
+    # syntax (no malformed assignments, no unterminated quotes).
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    bash -n "${SELFDEF_HARDWARE_TUNE_ENV}"
+    parse_rc=$?
+    teardown_real_run
+    [ "${parse_rc}" -eq 0 ]
+}
+
+@test "INVARIANT (env file carries CFLAGS + RUSTFLAGS — both compiler-toolchain envs covered)" {
+    # The downstream contract per SD-R23: both C/C++ (CFLAGS) and
+    # Rust (RUSTFLAGS) toolchain consumers must find their respective
+    # variables. Lock that BOTH surface in the env file.
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    grep -q '^CFLAGS=' "${SELFDEF_HARDWARE_TUNE_ENV}"
+    grep -q '^RUSTFLAGS=' "${SELFDEF_HARDWARE_TUNE_ENV}"
+    teardown_real_run
+}
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates env file)" {
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    [ -f "${SELFDEF_HARDWARE_TUNE_ENV}" ]
+    rm -f "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    rc=$?
+    teardown_real_run
+    [ "${rc}" -eq 0 ]
+}
