@@ -342,3 +342,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '/var/tmp:nosuid'
     cap | grep -qE '"severity":"(warn|alert)"'
 }
+
+@test "INVARIANT (/boot + nosuid: missing nosuid on /boot surfaces in sample — boot-data integrity axis)" {
+    # Sister to /tmp+nosuid, /var/tmp+nosuid, /dev/shm+noexec
+    # axes already locked. /boot carries the kernel + initramfs
+    # blobs — anti-tampering policy says any setuid binary
+    # planted in /boot would survive across kernel-upgrade
+    # cycles and could be invoked from the boot loader's chain
+    # (T1542 family — boot persistence vectors). Lock the axis-
+    # symmetry on /boot: missing nosuid → surfaces in sample so
+    # operator dashboard routes triage to the right path.
+    mk_findmnt
+    write_fixture $'/boot\tnodev,noexec,relatime'         # missing nosuid only
+    run_wd
+    cap | grep -q '/boot:nosuid'
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
