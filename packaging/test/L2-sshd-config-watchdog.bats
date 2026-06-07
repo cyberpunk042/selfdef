@@ -257,3 +257,49 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-sshd-config -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no-auto-trust: sshd-config-watchdog does NOT refresh baseline on dangerous-directive detection — alert STAYS until operator updates)" {
+    # sshd dangerous-directive (PermitRootLogin yes / NOPASSWD-equivalent
+    # / ForceCommand under writable root) is the remote-facing root-exec
+    # primitive. Alert MUST persist across runs until operator explicitly
+    # re-baselines. Sister to sudo-conf, gss-mech, ld-preload, nm-vpn-
+    # plugin, openvpn-config — active-injection class never auto-trusts.
+    eff "${BENIGN[@]}"
+    run_wd
+    eff "permitrootlogin yes" "forcecommand none" "x11forwarding yes"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (PermitRootLogin prohibit-password is benign — only 'yes' triggers alert; key-only is operator-intentional)" {
+    # 'PermitRootLogin prohibit-password' (key-only root) is the
+    # operator-intentional hardened config — must NOT trigger alert.
+    # Locks the distinction: only 'yes' (password+key) is dangerous.
+    eff "permitrootlogin prohibit-password" "passwordauthentication no" "permitemptypasswords no" "forcecommand none" "x11forwarding yes"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (without-password is benign per sshd semantics — sister to prohibit-password)" {
+    # 'PermitRootLogin without-password' (deprecated alias for
+    # prohibit-password) is also benign. Lock both equivalent
+    # operator-intentional values do NOT trigger alert.
+    eff "permitrootlogin without-password" "passwordauthentication no" "permitemptypasswords no" "forcecommand none" "x11forwarding yes"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (AuthorizedKeysCommand under /home: user-writable hijack coverage on AKCmd axis)" {
+    # Operator's home dir is a writable-root variant. AuthorizedKeysCommand
+    # under /home/user/<x> is the user-writable variant of the /tmp +
+    # /dev/shm + /var/tmp axes already locked.
+    eff "${BENIGN[@]}"
+    run_wd
+    eff "permitrootlogin no" "authorizedkeyscommand /home/user/getkeys" "x11forwarding yes"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
