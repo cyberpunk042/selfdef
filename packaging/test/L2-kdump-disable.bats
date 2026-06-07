@@ -626,3 +626,27 @@ sc = (data.get('install_paths') or {}).get('scope', '')
 assert sc == 'system', f'install_paths.scope must be system, got {sc!r}'
 "
 }
+
+@test "INVARIANT (kdump-disable module.toml [install_paths].paths is TOML list of strings — install_paths.paths TOML-list-of-strings contract)" {
+    # Sister to brain-wide [install_paths].paths INVARIANT
+    # family. The install_paths.paths field MUST be a TOML
+    # list of strings (each element an absolute path the
+    # module touches on apply). A regression that swapped to
+    # a comma-separated string ("path1,path2,path3") would
+    # silently treat it as a single literal path. The
+    # selfdef installer iterates the list to surface the
+    # mutation manifest to operators; broken type-shape
+    # would break the install-options surface + dry-run
+    # auditor. Locks the TOML-list-of-strings type discipline
+    # on the kdump-disable install_paths.paths substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/kdump-disable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert isinstance(ps, list), f'install_paths.paths must be TOML list, got {type(ps).__name__}'
+assert all(isinstance(p, str) for p in ps), f'every paths entry must be a string'
+"
+}

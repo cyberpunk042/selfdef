@@ -654,3 +654,23 @@ seed_benign() {
         grep -qE '^ProtectHome=' "${s}"
     done
 }
+
+@test "INVARIANT (aliases-watchdog service unit declares NoNewPrivileges=true — privilege-escalation containment contract)" {
+    # Sister to brain-wide systemd NoNewPrivileges= INVARIANT
+    # family. The NoNewPrivileges=true directive instructs
+    # the kernel to set PR_SET_NO_NEW_PRIVS on the watchdog
+    # process — any subsequent execve() in the watchdog
+    # script (sha256sum, awk, etc.) is forbidden to acquire
+    # NEW privileges via setuid/setgid/file-capabilities. An
+    # exploited watchdog cannot escalate via a setuid helper
+    # (e.g. /usr/bin/su, /usr/bin/sudo). A regression
+    # dropping NoNewPrivileges= would leave the watchdog
+    # exposed to setuid-binary pivot. Locks the privilege-
+    # escalation containment discipline on the aliases-
+    # watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/aliases-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^NoNewPrivileges=true' "${s}"
+    done
+}
