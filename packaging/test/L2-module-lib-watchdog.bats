@@ -643,3 +643,8 @@ setup() {
     out="$(selfdef_injection_patterns)"
     echo "${out}" | grep -q 'base64'
 }
+
+@test "INVARIANT (lib injection_patterns includes mkfifo backdoor — known-attack coverage)" {
+    out="$(selfdef_injection_patterns)"
+    echo "${out}" | grep -q 'mkfifo'
+}

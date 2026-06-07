@@ -805,3 +805,8 @@ chk_path = os.path.join('${BATS_TEST_DIRNAME}', '..', '..', 'modules', 'slm-cpu-
 @test "INVARIANT (slm-cpu-loop install/uninstall.sh uses set -euo pipefail — Bash strict-mode contract)" {
     grep -qE '^set -euo pipefail' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh"
 }
+
+
+@test "INVARIANT (slm-cpu-loop install/check.sh uses set -euo pipefail — Bash strict-mode contract)" {
+    grep -qE '^set -euo pipefail' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/check.sh"
+}

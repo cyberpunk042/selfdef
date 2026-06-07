@@ -656,3 +656,7 @@ expected = {'/usr/bin/python3', '/usr/bin/nvidia-smi', '/usr/local/bin/vllm', '/
 assert set(vals) == expected, f'allowlist must be sain-01 §6 verbatim set, got {vals!r}'
 "
 }
+
+@test "INVARIANT (postinst pre-creates /etc/selfdef/perimeter-extensions before tetragon signal — config-staging ordering)" {
+    grep -qE '/etc/selfdef/perimeter-extensions' "${POSTINST}"
+}

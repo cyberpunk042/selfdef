@@ -698,3 +698,7 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
 @test "INVARIANT (suricata install/uninstall.sh exists as file — uninstall-script existence contract)" {
     [ -f "${BATS_TEST_DIRNAME}/../../modules/suricata/install/uninstall.sh" ]
 }
+
+@test "INVARIANT (suricata install/uninstall.sh is executable — script-runnable contract)" {
+    [ -x "${BATS_TEST_DIRNAME}/../../modules/suricata/install/uninstall.sh" ]
+}

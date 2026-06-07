@@ -581,3 +581,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service Documentation field present — operator-doc-trail contract)" {
     grep -qE '^Documentation=' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler.service uses Type=simple — long-running-supervisor contract)" {
+    grep -qE '^Type=simple' "${UNIT}"
+}

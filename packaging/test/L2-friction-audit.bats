@@ -688,3 +688,7 @@ EOF
 @test "INVARIANT (script's ZFS gate match string 'all pools are healthy' verbatim — operator-pattern-match contract)" {
     grep -qE 'all pools are healthy' "${SCRIPT}"
 }
+
+@test "INVARIANT (script Memory gate counts DIMM Size: lines — canonical-DIMM-presence-query path)" {
+    grep -qE 'Size:|grep.*Size' "${SCRIPT}"
+}

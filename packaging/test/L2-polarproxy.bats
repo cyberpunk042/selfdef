@@ -651,3 +651,7 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
 @test "INVARIANT (polarproxy install/uninstall.sh exists as file — uninstall-script existence contract)" {
     [ -f "${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/uninstall.sh" ]
 }
+
+@test "INVARIANT (polarproxy install/uninstall.sh is executable — script-runnable contract)" {
+    [ -x "${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/uninstall.sh" ]
+}

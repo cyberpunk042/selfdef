@@ -399,3 +399,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # (only purge does). Allow check at postrm structure.
     grep -qE '/var/cache/selfdef' "${POSTRM}"
 }
+
+@test "INVARIANT (guardian.service uses Type=simple — long-running-supervisor contract)" {
+    grep -qE '^Type=simple' "${UNIT}"
+}
