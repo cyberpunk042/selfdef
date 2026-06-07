@@ -290,3 +290,21 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (membership-into-kvm: 'm myapp kvm' → alert — VM-launch axis privileged-group coverage)" {
+    # Sister to disk + shadow + sudo + wheel + docker + systemd-
+    # journal privileged-group membership axes already locked.
+    # The kvm group has access to /dev/kvm — substrate for
+    # launching any VM. An attacker with kvm membership can
+    # launch a VM that mounts the host filesystem read/write,
+    # bypassing host access controls (T1611 — Escape to Host
+    # via VM launch). The watchdog MUST treat kvm membership
+    # additions as alert-grade, closing axis-parity on the
+    # privileged-group surveillance family.
+    seed_benign
+    run_wd
+    printf 'u myapp 999 "My App Daemon"\nm myapp kvm\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
