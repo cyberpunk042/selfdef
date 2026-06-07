@@ -262,3 +262,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker'
 }
+
+@test "INVARIANT (program: map under /var/tmp — writable-root axis-symmetric expansion on autofs map surface)" {
+    # Sister to /tmp + /dev/shm + /home program: map writable-root
+    # INVARIANTs already locked. /var/tmp is writable by ALL users
+    # (sticky-bit doesn't gate exec-from-it) and persists across
+    # reboots (unlike /tmp /dev/shm tmpfs). Attackers prefer it
+    # for boot-survival persistence. The autofs program-map
+    # scanner MUST recognize /var/tmp paths just as firmly as the
+    # /tmp + /dev/shm family — locks tmpfs-vs-persistent writable-
+    # root axis symmetry on the T1546 autofs program-map root-exec
+    # persistence surface.
+    printf '/mnt/data program:/var/tmp/.auto.smb\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
