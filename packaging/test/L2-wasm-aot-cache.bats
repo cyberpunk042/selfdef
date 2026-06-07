@@ -905,3 +905,8 @@ assert isinstance(data, dict)
     chk="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install/check.sh"
     head -1 "${chk}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (wasm-aot-cache install/uninstall.sh has shebang line — POSIX-conformant 81)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install/uninstall.sh"
+    head -1 "${uni}" | grep -qE '^#!'
+}

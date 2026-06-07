@@ -886,3 +886,8 @@ assert isinstance(data, dict)
     chk="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/install/check.sh"
     head -1 "${chk}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (hardware-tune-cache install/uninstall.sh has shebang line — POSIX-conformant 81)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/install/uninstall.sh"
+    head -1 "${uni}" | grep -qE '^#!'
+}

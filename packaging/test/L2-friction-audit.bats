@@ -754,3 +754,6 @@ EOF
 @test "INVARIANT (script declares emit_ocsf function with class_uid+severity_id arg-pair — OCSF-emit-canonical 80)" {
     awk '/^emit_ocsf\(\)/,/^}/' "${SCRIPT}" | grep -qE 'class_uid|severity_id'
 }
+@test "INVARIANT (script declares HOSTNAME default fallback — operator-config-defaulting 81)" {
+    grep -qE 'hostname.*\$\(hostname\)|HOSTNAME.*hostname' "${SCRIPT}"
+}

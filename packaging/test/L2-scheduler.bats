@@ -648,3 +648,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postrm references scheduler unit — purge-cleanup contract 80)" {
     grep -qE 'scheduler' "${POSTRM}"
 }
+@test "INVARIANT (postinst writes to scheduler state dir — install-staging 81)" {
+    grep -qE 'scheduler' "${POSTINST}"
+}

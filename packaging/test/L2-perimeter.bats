@@ -736,3 +736,10 @@ assert c == 'sys_execve', f'call must be sys_execve, got {c!r}'
 @test "INVARIANT (YAML file declares spec: line — well-formed-CRD-spec 80)" {
     grep -qE '^spec:' "${YAML}"
 }
+@test "INVARIANT (YAML metadata block has at least name field — well-formed-CRD-identifier 81)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert data['metadata'].get('name')
+"
+}

@@ -755,3 +755,8 @@ assert ch == 'install/check.sh'
     chk="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/check.sh"
     head -1 "${chk}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (polarproxy install/uninstall.sh has shebang line — POSIX-conformant 81)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/uninstall.sh"
+    head -1 "${uni}" | grep -qE '^#!'
+}

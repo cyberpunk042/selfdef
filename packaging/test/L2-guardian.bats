@@ -469,3 +469,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postrm references guardian unit — purge-cleanup contract 80)" {
     grep -qE 'guardian' "${POSTRM}"
 }
+@test "INVARIANT (postinst writes to guardian state dir — install-staging 81)" {
+    grep -qE 'guardian' "${POSTINST}"
+}

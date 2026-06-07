@@ -712,3 +712,6 @@ setup() {
 @test "INVARIANT (lib file readable and source-able — library-sourceability 80)" {
     [ -r "${LIB}" ]
 }
+@test "INVARIANT (lib defines toml_get function — config-accessor canonical 81)" {
+    declare -F toml_get >/dev/null
+}
