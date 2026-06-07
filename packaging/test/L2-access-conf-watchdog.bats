@@ -333,3 +333,21 @@ seed_benign() {
     run_wd
     cap | grep -q 'distinctive-attacker-account'
 }
+
+@test "INVARIANT (multi-broad-permit: 3 broad permits in one delta scan → all surface in suspicious_sample; consolidation discipline)" {
+    # Sister to many other watchdog multi-item single-alert
+    # consolidation INVARIANTs across the brain. When an
+    # attacker adds multiple broad-permit users at once (mass-
+    # backdoor sweep), all MUST surface in the suspicious_sample
+    # field so operator dashboard sees the full attacker payload
+    # in one record. Locks the consolidation contract on the
+    # access-conf permit surveillance surface — multiple T1098
+    # account-manipulation grants in one event.
+    seed_benign
+    run_wd
+    printf '+ : root : LOCAL\n+ : backdoor1 : ALL\n+ : backdoor2 : ALL\n+ : backdoor3 : ALL\n- : ALL : ALL\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"added":[3-9]'
+    cap | grep -q 'backdoor1\|backdoor2\|backdoor3'
+}
