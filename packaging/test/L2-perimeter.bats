@@ -359,3 +359,22 @@ calls = [kp['call'] for kp in data['spec']['kprobes']]
 assert calls == ['sys_execve'], f'Expected only sys_execve, got {calls}'
 "
 }
+
+@test "INVARIANT (YAML spec.kprobes[0].syscall=True — kprobe attaches at syscall layer, not raw fentry)" {
+    # Sister to brain-wide kprobe-layer INVARIANT family.
+    # The MS047 perimeter MUST attach at the SYSCALL layer
+    # (sys_execve) — not the fentry/kprobe-raw layer. Syscall-
+    # layer probes get string-resolved args (path resolution
+    # already done by kernel), while raw kprobes would need to
+    # walk page tables. A regression to syscall=false would
+    # require the matchArgs allowlist to use kernel-internal
+    # pointer arguments instead of resolved-path strings,
+    # silently breaking the allowlist matching. Locks the
+    # syscall-layer attach point on the perimeter YAML
+    # substrate.
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert data['spec']['kprobes'][0]['syscall'] is True, 'kprobe must attach at syscall layer'
+"
+}
