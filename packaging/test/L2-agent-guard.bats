@@ -202,3 +202,16 @@ teardown_dry_run() {
     unset SELFDEF_DRY_RUN SELFDEF_AGENT_GUARD_CONFIG
     [ "${status}" -ne 0 ]
 }
+
+@test "INVARIANT (apply.sh + check.sh + uninstall.sh use set -euo pipefail — fail-loud invariant)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # agent-guard is the Tetragon-based AI-runtime safety
+    # substrate (MS017 — runtime guard layer for LLM tool calls);
+    # silent install/uninstall failure would leave the kernel-
+    # attestation policies in half-loaded state — partial AI-
+    # safety enforcement is worse than none (operator believes
+    # they have full coverage when they don't).
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/apply.sh"
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/check.sh"
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
+}
