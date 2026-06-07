@@ -219,3 +219,21 @@ teardown_real_run() {
     teardown_real_run
     [ "${rc}" -eq 0 ]
 }
+
+@test "INVARIANT (env file is chmod 0644 — system-config convention; no operator-write-needed)" {
+    # Sister to many other installer modules' chmod 0644 INVARIANT
+    # across the brain. The hardware-tune env file is a system-config
+    # surface (consumed by downstream compiler toolchain wrappers).
+    # MUST be world-readable (operator-build scripts may run as
+    # non-root and need to source it) but NOT world-writable (would
+    # let a non-root attacker plant malicious CFLAGS that get
+    # consumed by every subsequent compile). Locks the file mode
+    # discipline alongside the shell-sourceable + content-fidelity
+    # axes already covered.
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    mode="$(stat -c '%a' "${SELFDEF_HARDWARE_TUNE_ENV}")"
+    teardown_real_run
+    [ "${mode}" = "644" ]
+}
