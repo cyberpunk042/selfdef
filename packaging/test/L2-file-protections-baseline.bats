@@ -275,3 +275,26 @@ run_wd() {
     # Check every non-empty non-comment line matches sysctl grammar.
     awk '/^[[:space:]]*#/ || /^[[:space:]]*$/ {next} /^[a-zA-Z_][a-zA-Z0-9_.]*[[:space:]]*=[[:space:]]*[0-9]+/ {next} {bad=1; print "malformed: " $0} END{exit bad?1:0}' "${DROPIN}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # file-protections-baseline TOML; parser must tolerate without
+    # altering the profile-gated content. strict-with-noise still
+    # installs the strict drop-in (protected_hardlinks=1 +
+    # protected_symlinks=1 + protected_fifos=2 + protected_
+    # regular=2 — the full set-tight family that defeats most
+    # writable-/tmp + symlink-pointer races used as priv-esc
+    # primitives).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "strict"
+operator_note = "fs.protected_* — symlink + hardlink + fifo race defense"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE '^fs\.protected_hardlinks[[:space:]]*=' "${DROPIN}"
+    grep -qE '^fs\.protected_symlinks[[:space:]]*=' "${DROPIN}"
+}
