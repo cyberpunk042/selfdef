@@ -296,3 +296,19 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: motd script invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs across
+    # the brain. Beyond inline reverse-shell payloads, attackers
+    # may keep the motd script benign-looking but have it invoke
+    # a binary they've staged in /tmp / /var/tmp / /dev/shm.
+    # T1546.004 pam_motd-as-root persistence then runs the
+    # writable-root binary AS ROOT at every interactive login.
+    # Locks writable-root-exec axis on per-login motd surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/tmp/staged_payload\n' > "${HOOKD}/00-header"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
