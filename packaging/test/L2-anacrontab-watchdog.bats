@@ -389,3 +389,25 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: anacrontab-watchdog NEVER deletes anacrontab entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # anacrontab-watchdog DETECTS T1053.003 anacron-schedule-
+    # trigger root-exec persistence but MUST NEVER emit sed/
+    # awk/rm commands to auto-clean the job-line. The detected
+    # job may be operator-legitimate (custom maintenance task,
+    # backup runner, log-pruning script). Silent auto-delete
+    # would destroy operator baseline state. Surveillance,
+    # never remediation. Locks anti-data-loss contract on the
+    # anacrontab surveillance substrate.
+    cat > "${ANAC}" <<'EOF'
+SHELL=/bin/sh
+1	5	evil	/tmp/.evil
+EOF
+    run_wd
+    [ -f "${ANAC}" ]
+    grep -q 'evil' "${ANAC}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*anacrontab'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+}
