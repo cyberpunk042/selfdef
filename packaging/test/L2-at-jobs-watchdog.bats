@@ -768,3 +768,13 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         [ "${m}" = "644" ]
     done
 }
+
+@test "INVARIANT (at-jobs-watchdog timer unit declares Persistent= directive — boot-catchup-policy contract)" {
+    # Sister to brain-wide systemd timer Persistent= INVARIANT
+    # family.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/at-jobs-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        grep -qE '^Persistent=' "${t}"
+    done
+}

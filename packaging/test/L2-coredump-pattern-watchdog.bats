@@ -765,3 +765,13 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         [ "${m}" = "644" ]
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog timer unit declares Persistent= directive — boot-catchup-policy contract)" {
+    # Sister to brain-wide systemd timer Persistent= INVARIANT
+    # family.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        grep -qE '^Persistent=' "${t}"
+    done
+}

@@ -847,3 +847,13 @@ assert 'install' in data, 'install missing'
         [ "${m}" = "644" ]
     done
 }
+
+@test "INVARIANT (file-capabilities-watchdog timer unit declares Persistent= directive — boot-catchup-policy contract)" {
+    # Sister to brain-wide systemd timer Persistent= INVARIANT
+    # family.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/file-capabilities-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        grep -qE '^Persistent=' "${t}"
+    done
+}

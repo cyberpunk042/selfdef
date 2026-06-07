@@ -777,3 +777,13 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         [ "${m}" = "644" ]
     done
 }
+
+@test "INVARIANT (time-skew-watchdog timer unit declares Persistent= directive — boot-catchup-policy contract)" {
+    # Sister to brain-wide systemd timer Persistent= INVARIANT
+    # family.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        grep -qE '^Persistent=' "${t}"
+    done
+}
