@@ -435,3 +435,42 @@ EOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"service-account-lock"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no userdel/no account deletion — chsh/passwd-l ONLY, never remove /etc/passwd lines)" {
+    # Sister to brain-wide no-auto-uninstall + no-data-loss
+    # discipline. The service-account-lock module NEUTRALIZES
+    # service accounts (chsh → nologin, passwd -l) but MUST
+    # NEVER emit shell commands that DELETE accounts from
+    # /etc/passwd (userdel, deluser). Account-removal is
+    # operator-only — silent userdel during lockdown would
+    # break package-uninstall-restore paths AND remove
+    # forensic evidence. T1531 Account Access Removal (when
+    # weaponized) is exactly what the lockdown discipline
+    # must NOT do — neutralize, never erase.
+    write_synth_passwd
+    write_config "enforce"
+    SYSCALL_LOG="${TMP}/userdel.log"
+    : > "${SYSCALL_LOG}"
+    cat > "${BIN}/userdel" <<UDEOF
+#!/usr/bin/env bash
+printf 'userdel %s\n' "\$*" >> "${SYSCALL_LOG}"
+exit 0
+UDEOF
+    chmod +x "${BIN}/userdel"
+    cat > "${BIN}/deluser" <<DLEOF
+#!/usr/bin/env bash
+printf 'deluser %s\n' "\$*" >> "${SYSCALL_LOG}"
+exit 0
+DLEOF
+    chmod +x "${BIN}/deluser"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_DRY_RUN=0 \
+        SELFDEF_SVC_ACCOUNT_CONFIG="${CONF}" \
+        SELFDEF_PASSWD_FILE="${PASSWD_FILE}" \
+        SELFDEF_SVC_ACCOUNT_LOG="${ORIGINAL_LOG}" \
+        CHSH_LOG="${CHSH_LOG}" \
+        PASSWD_LOG="${PASSWD_LOG}" \
+        bash "${WD}"
+    # userdel/deluser MUST NEVER have fired.
+    ! [ -s "${SYSCALL_LOG}" ]
+}
