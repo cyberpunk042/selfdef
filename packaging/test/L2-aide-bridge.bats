@@ -353,3 +353,25 @@ Changed entries: 3"
     [ "${main_count}" = "1" ]
 }
 
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on aide-bridge surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The aide-bridge MUST only emit severity values from the
+    # closed set {ok,warn,alert} — never custom values (critical,
+    # error, fatal, notice, info). Operator dashboard parsers
+    # branch on the literal severity string; an out-of-set
+    # value silently falls through routing and the operator
+    # never sees the T1565.001 Stored Data Manipulation /
+    # T1014 Rootkit AIDE file-integrity alert. Locks parser
+    # contract on the AIDE delta-detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    mk_aide 0 "AIDE found NO differences between database and filesystem."
+    run_wd                                              # ok path
+    mk_aide 7 "Added entries: 1
+Removed entries: 1
+Changed entries: 1"
+    run_wd                                              # alert path
+    # Every severity value emitted MUST be one of {ok,warn,alert}.
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
