@@ -416,3 +416,22 @@ EOF
     # emit_status carries `locked=N` numeric count.
     [[ "${output}" =~ locked=[0-9] ]]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on service-account-lock installer
+    # surface across multi-account audit.
+    write_synth_passwd
+    write_config "audit"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_DRY_RUN=0 \
+        SELFDEF_SVC_ACCOUNT_CONFIG="${CONF}" \
+        SELFDEF_PASSWD_FILE="${PASSWD_FILE}" \
+        SELFDEF_SVC_ACCOUNT_LOG="${ORIGINAL_LOG}" \
+        CHSH_LOG="${CHSH_LOG}" \
+        PASSWD_LOG="${PASSWD_LOG}" \
+        bash "${WD}"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"service-account-lock"')
+    [ "${count}" = "1" ]
+}
