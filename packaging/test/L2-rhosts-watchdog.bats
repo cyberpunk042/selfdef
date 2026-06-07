@@ -224,3 +224,41 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (user-wildcard +user form: + on a user position → still alerts)" {
+    # rsh/rlogin grammar also accepts `+ user` (any host trusted
+    # for the named user) or `host +` (any user from named host)
+    # — both are trust-relationship backdoors. Lock that the
+    # user-wildcard variant is also flagged.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'trusted.example.com +\n' > "${EQUIV}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (per-user .shosts file IS flagged as backdoor — sister axis to .rhosts)" {
+    # OpenSSH's hostbased-auth reads .shosts (the ssh-equivalent of
+    # .rhosts) for hostbased trust. A user's .shosts is the same
+    # backdoor surface as .rhosts on the rsh axis.
+    seed_benign
+    run_wd
+    user_shosts="${TMP}/user-bob.shosts"
+    printf 'evil.example.com\n' > "${user_shosts}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    FILES_V="${EQUIV} ${user_shosts}" run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (sample names the offending file in JSON — operator triage routing)" {
+    # When a wildcard fires, the sample MUST surface the file path
+    # so operator dashboard routes triage to the right path. Sister
+    # contract: polkit-rules/nfs-exports sample-naming pattern.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '+\n' > "${EQUIV}"
+    run_wd
+    cap | grep -q "$(basename "${EQUIV}")"
+}
