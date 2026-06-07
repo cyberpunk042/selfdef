@@ -237,3 +237,21 @@ teardown_real_run() {
     teardown_real_run
     [ "${mode}" = "644" ]
 }
+
+@test "INVARIANT (env file header carries hardware-tune-cache self-identifying marker — head -1 stale-cleanup discipline)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain (ssh-hardening / slm-cpu-loop /
+    # tensor-parallel-inference / journal-tune / acct-baseline).
+    # The env file lands at /etc/selfdef/hardware-tune.env. A
+    # stale-cleanup pass (operator housekeeping or uninstall
+    # path) inspects the first non-blank comment line to identify
+    # selfdef-rendered config from operator config. Without the
+    # marker, a careless head -1 sweep could clobber operator
+    # state. Locks the provenance contract.
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${SELFDEF_HARDWARE_TUNE_ENV}")"
+    teardown_real_run
+    [[ "${first_nonblank}" == *"hardware-tune"* ]] || [[ "${first_nonblank}" == *"selfdef"* ]]
+}
