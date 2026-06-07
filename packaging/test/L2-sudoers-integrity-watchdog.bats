@@ -395,3 +395,21 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (User_Alias indirection STILL alerts — alias-resolution on user-list axis doesn't dodge dangerous-flag detection)" {
+    # Sister to Cmnd_Alias indirection INVARIANT just locked.
+    # Attackers may layer User_Alias indirection: `User_Alias
+    # ATTACKERS = evil1, evil2` + `ATTACKERS ALL=(ALL) NOPASSWD:
+    # ALL`. The watchdog MUST alert on User_Alias-based NOPASSWD
+    # grants too. Closes axis-parity on the alias-indirection
+    # detection family.
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SUDOERS_D_DIR}/99-user-alias-attacker" <<'EOF'
+User_Alias ATTACKER_USERS = evil1, evil2
+ATTACKER_USERS ALL=(ALL) NOPASSWD: ALL
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
