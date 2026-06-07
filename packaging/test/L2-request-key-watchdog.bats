@@ -342,3 +342,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-request-key -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on request-key surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The request-key-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1546 kernel-keyring-upcall root-exec
+    # persistence alert. Locks parser contract on the /etc/
+    # request-key.conf + request-key.d detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver\n' > "${CONF}"
+    run_wd                                              # ok / baseline
+    printf 'create dns_resolver * * /tmp/.evil\n' > "${CONF}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
