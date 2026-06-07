@@ -345,3 +345,23 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (job under /var/tmp writable root): persistent tmpfs payload → alert" {
+    # Sister to /tmp + /dev/shm + /home anacrontab job writable-
+    # root INVARIANTs already locked. /var/tmp is writable by
+    # ALL users AND persists across reboots — attackers prefer
+    # for boot-survival persistence. anacron fires AS ROOT on
+    # scheduled triggers; planted binary in /var/tmp gets
+    # repeated root-exec at every cadence. T1053.003 anacron-
+    # schedule-trigger root-exec persistence.
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    cat > "${ANAC}" <<'EOF'
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+1	5	evil	/var/tmp/staged_payload
+EOF
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
