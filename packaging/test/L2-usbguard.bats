@@ -390,3 +390,20 @@ EOF
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+usbguard'
     ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+usbguard' "${SYSEOF_LOG:-/dev/null}" 2>/dev/null || true
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on usbguard surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The usbguard installer MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the USB-device allowlist status alert. Locks
+    # parser contract on the usbguard installer JSON surface
+    # (consistency-with-watchdog-family discipline).
+    printf '%s\n' 'allow id 1d6b:0002' > "${BASELINE_FILE}"
+    write_config "permissive"
+    output="$(run_wd 2>&1)"
+    bad=$(printf '%s\n' "${output}" | grep -oE '"severity":"[^"]+"' | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
