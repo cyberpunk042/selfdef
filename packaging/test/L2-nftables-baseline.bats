@@ -351,3 +351,19 @@ run_wd() {
     [ -n "${load_line}" ]
     [ "${delete_line}" -lt "${load_line}" ]
 }
+
+@test "INVARIANT (drop-in is chmod 0644 — system-config convention)" {
+    # Sister to many other installer module's chmod 0644 INVARIANT
+    # across the brain (sysctl drop-ins, journal-tune, kernel-yama).
+    # The nftables ruleset drop-in lands at /etc/nftables.d/50-
+    # selfdef.conf alongside operator-hand-authored / packaging-
+    # provided drop-ins. Must be world-readable (nft -f reads it
+    # at boot via nftables.service) and root-write-only — any
+    # other perm would let an attacker silently rewrite the
+    # ruleset to allow ingress on any port + bypass the entire
+    # firewall posture.
+    write_config "baseline"
+    run_wd
+    [ -f "${NFT_DROPIN}" ]
+    [ "$(stat -c '%a' "${NFT_DROPIN}")" = "644" ]
+}
