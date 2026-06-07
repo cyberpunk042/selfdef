@@ -283,3 +283,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named dnf-plugins action surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # dnf-plugins post-transaction action file (T1546 — post-
+    # transaction-trigger root-exec persistence; DNF runs action
+    # commands AS ROOT after every package install/upgrade/
+    # remove), the file path/name MUST surface in the JSON
+    # sample so operator dashboard routes triage to the right
+    # path.
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '*:in:/tmp/.evil\n' > "${ACTD}/distinctive-attacker-action.action"
+    run_wd
+    cap | grep -q 'distinctive-attacker-action'
+}
