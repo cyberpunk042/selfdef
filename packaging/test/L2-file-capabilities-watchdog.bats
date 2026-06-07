@@ -425,3 +425,23 @@ mk_cap() { printf '#!/bin/sh\n' > "${ROOT}/$1"; chmod 0755 "${ROOT}/$1"; setcap 
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on file-capabilities surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The file-capabilities-watchdog MUST only emit severity
+    # values from the closed set {ok,warn,alert} — never custom
+    # values (critical, error, fatal, notice, info). Operator
+    # dashboard parsers branch on the literal severity string;
+    # an out-of-set value silently falls through routing and
+    # the operator never sees the T1548 Abuse Elevation Control
+    # Mechanism via file-capability alert. Locks parser
+    # contract on the file-capability inventory delta detection
+    # surface.
+    mk_cap baseline cap_net_raw+ep
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    mk_cap evil_dangerous cap_sys_admin+ep
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
