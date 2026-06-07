@@ -239,3 +239,20 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (sensitive-domain: Let's Encrypt ACME / CA pin → alert (cert-issuance MITM))" {
+    # Sister axis to package-MITM (debian/ubuntu) + supply-chain MITM
+    # (docker/github/pypi/npmjs). Pinning a CA / ACME endpoint lets an
+    # attacker MITM cert-issuance — the operator's web service /
+    # automated client thinks it got a valid cert from Let's Encrypt
+    # but it actually got a rogue cert signed by the attacker. T1556
+    # Modify Authentication Process. Lock the CA-domain axis on the
+    # /etc/hosts pin surface alongside the package + supply-chain axes
+    # already covered.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '127.0.0.1 localhost\n0.0.0.0 acme-v02.api.letsencrypt.org\n' > "${HOSTS}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
