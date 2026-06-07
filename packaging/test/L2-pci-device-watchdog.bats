@@ -362,3 +362,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '0000:0a:00.0\|0c0330'
 }
+
+@test "INVARIANT (Thunderbolt/USB4 controller-class device add — class=0c0340 — surfaces for evil-Thunderbolt-card detection)" {
+    # Sister to USB-controller-class (0c0330 xHCI USB3) PCI
+    # insertion INVARIANT already locked. Thunderbolt + USB4
+    # PCI controllers are the most-impactful DMA-attack vector:
+    # the host's IOMMU often allows Thunderbolt full DMA into
+    # host RAM by default (Thunderspy CVE-2020-0570 / DMA-
+    # attack family) — patching an attacker-controlled
+    # Thunderbolt PCIe card OR docking station with attached
+    # PCIe device grants attacker direct memory access. The
+    # watchdog MUST surface Thunderbolt controller PCI inserts
+    # alongside USB to close the cold-boot DMA-tamper detection
+    # axis (T1542 Pre-OS Boot via DMA-capable PCI device).
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    mk_device "0000:0b:00.0" "8086" "1137" "0c0340"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '0000:0b:00.0\|0c0340'
+}
