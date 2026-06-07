@@ -324,3 +324,13 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"nscd-disable"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: nscd package NEVER auto-removed)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs. nscd module
+    # neutralizes via stop+disable+mask; the package MUST stay
+    # installed (operator may legitimately need to enable nscd
+    # later for cache-performance investigation).
+    write_config "mask"
+    run_wd
+    ! grep -qE '(apt-get|dpkg|dnf|rpm)[[:space:]]+(remove|purge|uninstall)' "${SYSEOF_LOG}"
+}
