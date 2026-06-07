@@ -241,3 +241,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (pre-existing world-writable musl path file → baseline_initial fires alert at install-time)" {
+    # Sister to every other watchdog pre-existing-world-writable
+    # baseline_initial INVARIANT across the brain. The install-
+    # time-vet contract: if the musl path file is ALREADY
+    # world-writable when selfdef first installs the watchdog,
+    # the first run MUST raise alert (or at least warn) — not
+    # silently baseline a broken security posture. Closes the
+    # install-time-vet axis on the musl ld.so library-search-
+    # path surface (T1574 — dynamic-loader hijack via writable
+    # config file letting attacker prepend evil dir at any time).
+    printf '/lib\n/usr/lib\n' > "${CONF}"
+    chmod 0666 "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
