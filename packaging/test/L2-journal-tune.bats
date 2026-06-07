@@ -246,3 +246,23 @@ run_wd() {
     run_wd
     grep -qE '^(ForwardTo(Syslog|Wall|KMsg)|Storage|Seal|Compress)=' "${DROPIN_DIR}/50-selfdef.conf"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # journal-tune TOML; parser must tolerate without altering the
+    # profile-gated behavior. paranoid-with-noise still installs
+    # the tighter drop-in (Storage=persistent + forward-to + size
+    # bumps — the audit-trail-integrity ladder for high-volume
+    # hosts).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "paranoid"
+operator_note = "high-volume audit-rules + AI-tool journal heavy"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    cmp -s modules/journal-tune/configs/paranoid.conf "${DROPIN_DIR}/50-selfdef.conf"
+    grep -qE '^Storage=persistent' "${DROPIN_DIR}/50-selfdef.conf"
+}
