@@ -328,3 +328,18 @@ CCEOF
     main_count=$(cap | grep -cE '^-t selfdef-time-skew -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (severity field is bounded vocabulary {ok,warn,alert,high} — operator dashboard severity axis lock)" {
+    # Sister to brain-wide bounded-vocabulary INVARIANTs
+    # (lynis-cron, rkhunter-cron, nfs-mount-watchdog). severity
+    # field surfaces on operator dashboard color-coded severity
+    # axis. A future regression introducing a fifth value would
+    # silently bucket as unknown. Bounded set locked.
+    mk_chronyc 0 "$(tracking_block "0.001" "0.001" "0.001")"
+    run_wd
+    sev=$(cap | grep -oE '"severity":"[^"]+"' | head -1)
+    case "${sev}" in
+        '"severity":"ok"'|'"severity":"warn"'|'"severity":"alert"'|'"severity":"high"') : ;;
+        *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert,high}" ;;
+    esac
+}
