@@ -265,3 +265,21 @@ EOF
     run_wd
     cap | grep -q 'very-distinctive-attacker'
 }
+
+@test "INVARIANT (setgid 2755 also flagged — sister axis to setuid 4755 on the suid-bit detection ladder)" {
+    # Sister to the setuid (4755) axis already locked. setgid (2755)
+    # is the sister bit — instead of escalating to file-owner's uid,
+    # it escalates to the file-group's gid. An attacker may declare
+    # 'f /run/payload 2755 root wheel -' to plant a setgid-wheel
+    # binary that runs with wheel group privileges (often used for
+    # sudo group membership / /etc/shadow read on systems where
+    # wheel is privileged). Locks the full suid-bit family on the
+    # tmpfiles.d declarative-file-creation surface (T1548.001 —
+    # Abuse Elevation Control Mechanism: Setuid and Setgid).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'f /run/myapp/sgid-payload 2755 root wheel -\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
