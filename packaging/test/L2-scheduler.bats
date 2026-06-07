@@ -549,3 +549,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler unit Documentation references SDD-031 — operator-spec-link discipline)" {
     grep -qE '^Documentation=.*sdd/031' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler unit comment block references avx-plus-plus dump line range — derivation-source audit-trail)" {
+    grep -qE 'avx-plus-plus|sain-01|MS04[89]' "${UNIT}"
+}

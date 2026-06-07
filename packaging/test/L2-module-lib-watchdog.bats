@@ -608,3 +608,7 @@ setup() {
     n=$(selfdef_injection_patterns | grep -c .)
     [ "${n}" -ge 8 ]
 }
+
+@test "INVARIANT (lib emit_status() JSON record carries module field — multi-module aggregation routing contract)" {
+    awk '/^emit_status\(\)/,/^}/' "${LIB}" | grep -qE 'MODULE|module'
+}

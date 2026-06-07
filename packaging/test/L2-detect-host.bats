@@ -627,3 +627,17 @@ for e in r:
     assert isinstance(e, dict), f'requires entry must be inline-table, got {type(e).__name__}'
 "
 }
+
+
+@test "INVARIANT (detect-host module.toml [install_paths].paths is TOML list of strings — mutation-manifest typing contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert isinstance(ps, list), f'install_paths.paths must be TOML list, got {type(ps).__name__}'
+assert all(isinstance(p, str) for p in ps), 'every paths entry must be string'
+"
+}

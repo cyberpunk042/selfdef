@@ -746,3 +746,15 @@ for e in r:
     assert isinstance(e, dict), f'requires entry must be inline-table, got {type(e).__name__}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml [install].kind = \"script\" — script install-flow contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+k = (data.get('install') or {}).get('kind', '')
+assert k == 'script', f'install.kind must be script, got {k!r}'
+"
+}

@@ -531,3 +531,9 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer file path matches the .service file path in same directory — sister-unit-co-location contract)" {
     [ "$(dirname "${TIMER}")" = "$(dirname "${SERVICE}")" ]
 }
+
+@test "INVARIANT (.timer cadence directives include at least 2 of OnBootSec/OnUnitActiveSec/OnCalendar — multi-cadence-mode contract)" {
+    grep -qE '^(OnBootSec|OnUnitActiveSec|OnCalendar)=' "${TIMER}"
+    count=$(grep -cE '^(OnBootSec|OnUnitActiveSec|OnCalendar)=' "${TIMER}")
+    [ "${count}" -ge 2 ]
+}

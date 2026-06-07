@@ -648,3 +648,7 @@ EOF
 @test "INVARIANT (script uses SELFDEF_FRICTION_AUDIT_HOSTNAME env-var with hostname(1) default — operator-host-identification override contract)" {
     grep -qE 'SELFDEF_FRICTION_AUDIT_HOSTNAME' "${SCRIPT}"
 }
+
+@test "INVARIANT (script declares per-cycle CRITICAL ARCHITECTURAL FRICTION ERROR prefix on diagnostic — operator-pattern-match contract)" {
+    grep -qE 'CRITICAL ARCHITECTURAL FRICTION ERROR' "${SCRIPT}"
+}

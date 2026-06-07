@@ -593,3 +593,12 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert isinstance(data.get('metadata', {}), dict)
 "
 }
+
+@test "INVARIANT (YAML kprobes is non-empty — perimeter must attach ≥1 kernel probe)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+k = data['spec'].get('kprobes', [])
+assert isinstance(k, list) and len(k) > 0, f'kprobes must be non-empty list, got {k!r}'
+"
+}

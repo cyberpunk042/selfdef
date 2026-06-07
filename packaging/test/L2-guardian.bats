@@ -364,3 +364,8 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst pre-creates /mnt/vault/context ONLY if mountpoint — ZFS-mount-aware staging contract)" {
     grep -qE 'mountpoint -q /mnt/vault' "${POSTINST}"
 }
+
+@test "INVARIANT (postrm has BOTH purge AND remove cases — Debian package-lifecycle symmetry contract)" {
+    grep -qE '^[[:space:]]*purge\)' "${POSTRM}"
+    grep -qE '^[[:space:]]*remove\)' "${POSTRM}"
+}

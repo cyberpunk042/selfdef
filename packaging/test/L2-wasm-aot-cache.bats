@@ -746,3 +746,15 @@ ap = (data.get('install') or {}).get('apply', '')
 assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {ap!r}'
 "
 }
+
+@test "INVARIANT (wasm-aot-cache module.toml [install] check = \"install/check.sh\" — install check path canonical contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ch = (data.get('install') or {}).get('check', '')
+assert ch == 'install/check.sh', f'install.check must be install/check.sh, got {ch!r}'
+"
+}
