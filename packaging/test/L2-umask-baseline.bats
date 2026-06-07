@@ -281,3 +281,23 @@ TOMLEOF
     cmp -s modules/umask-baseline/configs/strict-profile.sh "${PROFILE_D}/50-selfdef-umask.sh"
     cmp -s modules/umask-baseline/configs/strict-login.conf "${LOGIN_DEFS_D}/50-selfdef-umask.conf"
 }
+
+@test "INVARIANT (strict umask is stricter than group umask — profile-rank monotonic tightening)" {
+    # Sister to login-defs-baseline + pam-history + pam-pwquality
+    # + shell-timeout-baseline profile-rank monotonic INVARIANTs
+    # already locked. The strict profile MUST emit a umask value
+    # at least as restrictive as the group profile (numerically
+    # higher umask = MORE bits masked = stricter). If strict had
+    # a looser umask than group, operator's intent ("tighten
+    # default file permissions") would be silently inverted.
+    write_config "group"
+    run_wd
+    group_umask="$(grep -oE 'umask 0?[0-9]+' "${PROFILE_D}/50-selfdef-umask.sh" | grep -oE '[0-9]+$' | head -1)"
+    write_config "strict"
+    run_wd
+    strict_umask="$(grep -oE 'umask 0?[0-9]+' "${PROFILE_D}/50-selfdef-umask.sh" | grep -oE '[0-9]+$' | head -1)"
+    [ -n "${group_umask}" ]
+    [ -n "${strict_umask}" ]
+    # Strict numerically higher = more bits masked = stricter.
+    [ "${strict_umask}" -ge "${group_umask}" ]
+}
