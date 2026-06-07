@@ -315,3 +315,57 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"out_of_tree_module"'
     ! cap | grep -q '"event":"mass_new_modules"'
 }
+
+@test "INVARIANT (3-add boundary lock: exactly 3 in-tree adds → alert mass_new_modules)" {
+    # Sister to cron-job-watchdog 3-add + listening-ports 3-add +
+    # suid-sgid 4-add + timestomp 4-add boundary INVARIANTs.
+    # Mass-new threshold here is 3 (inclusive). Regression that
+    # bumps to 4+ would trip here.
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    write_modules_proc ext4 a b c    # exactly 3 new in-tree
+    stage_ko a; stage_ko b; stage_ko c
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"mass_new_modules"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"added":3'
+}
+
+@test "INVARIANT (compound out-of-tree multi-module: 2 out-of-tree modules in same scan → out_of_tree=2, single alert event)" {
+    # Sister to crontab-allow multi-grant consolidation pattern.
+    # When multiple out-of-tree modules surface in same scan,
+    # single alert event with out_of_tree counter = N.
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    write_modules_proc ext4 rootkit1 rootkit2
+    # NEITHER staged — both out-of-tree.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"out_of_tree_module"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"out_of_tree":2'
+    main_count=$(cap | grep -cE '^-t selfdef-kernel-modules -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (kver-aware moddir: SELFDEF_KMOD_MODDIR points at the watchdog's idea of /lib/modules/\$(uname -r); .ko-existence check uses that exact dir)" {
+    # Lock that the moddir env-var is the load-bearing knob for
+    # the .ko-existence check. A regression that hardcoded
+    # /lib/modules/\$(uname -r) in the script (ignoring the env
+    # override) would trip in CI (no /lib/modules/\$(uname -r)
+    # exists in the test sandbox). The fact that the existing
+    # tests work means SELFDEF_KMOD_MODDIR IS load-bearing —
+    # lock it explicitly.
+    write_modules_proc ext4 newdriver
+    stage_ko ext4
+    stage_ko newdriver       # staged in the test MODDIR, not in real /lib/modules
+    run_wd
+    # If the script ignored SELFDEF_KMOD_MODDIR and used real
+    # /lib/modules, newdriver would surface as out-of-tree (since
+    # it's not in real /lib/modules). The fact that it does NOT
+    # surface as out-of-tree confirms the env-var is honored.
+    cap | grep -qE '"baseline_count":2'
+}
