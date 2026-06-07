@@ -253,3 +253,21 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=all-off'* ]]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # TOML; parser must tolerate without altering the profile-gated
+    # behavior. all-off-with-noise still installs BOTH sysctl +
+    # limits.d drop-ins.
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "all-off"
+operator_note = "all-off — disable ALL coredumps"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${SYSCTL_DROPIN}" ]
+    [ -f "${LIMITS_DROPIN}" ]
+}
