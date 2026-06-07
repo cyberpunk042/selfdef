@@ -314,3 +314,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (omprog binary under /var/tmp — writable-root axis-symmetric expansion on rsyslog log-event-trigger surface)" {
+    # Sister to /home omprog binary writable-root INVARIANT
+    # already locked. /var/tmp is writable by ALL users AND
+    # persists across reboots — attackers prefer for boot-
+    # survival persistence. omprog invokes binary AS ROOT for
+    # each matching log event; attacker who plants binary in
+    # /var/tmp + makes rsyslog log-rule match attacker-controlled
+    # event (or makes attacker-triggered remote log entry hit
+    # the rule) gets remote shell on every match. T1546/T1037
+    # log-event-trigger root-exec persistence.
+    printf 'action(type="omprog" binary="/usr/libexec/rsyslog/helper")\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'action(type="omprog" binary="/var/tmp/.evil")\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
