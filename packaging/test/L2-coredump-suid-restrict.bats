@@ -358,3 +358,23 @@ TOMLEOF
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)'
     ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${SYSCTL_DROPIN}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. coredump-suid-restrict installs sysctl + limits.d
+    # drop-ins gated by profile (suid-only / all-off); a
+    # malformed module.toml would break the dependency-resolver
+    # at install-time + leave the suid-dumpable hardening
+    # wedged. Python's tomllib is the canonical parser. Locks
+    # anti-malformed-manifest on the coredump-suid-restrict
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'coredump-suid-restrict', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
