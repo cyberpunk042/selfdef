@@ -199,3 +199,40 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-nm-vpn-plugin -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no-auto-trust: nm-vpn-plugin-watchdog does NOT refresh baseline on suspicious-plugin detection — alert STAYS until operator updates)" {
+    # T1574 NetworkManager-root code-load primitive — alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    # Sister to gss-mech, ld-preload, musl-ld-path, postfix-exec —
+    # the active-injection class never auto-trusts.
+    printf '[libnm]\nplugin=/usr/lib/NetworkManager/libnm-vpn-plugin-openvpn.so\n' > "${NAME}"
+    run_wd
+    printf '[libnm]\nplugin=/tmp/evil.so\n' > "${NAME}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-descriptor scan: a second .name in same dir ALSO scanned — not just openvpn)" {
+    # NM-VPN dir may carry many descriptors (openvpn / openconnect /
+    # vpnc / wireguard / pptp). Attacker may plant a NEW descriptor
+    # with a writable plugin path. Watchdog must enumerate every
+    # .name in the dir, not stop at the first one.
+    printf '[libnm]\nplugin=/usr/lib/NetworkManager/libnm-vpn-plugin-openvpn.so\n' > "${NAME}"
+    printf '[libnm]\nplugin=/tmp/evil-openconnect.so\n' > "${VPND}/openconnect.name"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: a second VPN dir ALSO scanned — both system + local VPN dirs)" {
+    # NM may consult /etc/NetworkManager/VPN/ + /usr/lib/NetworkManager/VPN/
+    # (system-provided vs operator-overridden). Watchdog must walk
+    # multiple dirs when SELFDEF_NMVPN_DIRS contains multiple paths.
+    VPND2="${TMP}/VPN2"; mkdir -p "${VPND2}"
+    printf '[libnm]\nplugin=/usr/lib/NetworkManager/libnm-vpn-plugin-openvpn.so\n' > "${NAME}"
+    printf '[libnm]\nplugin=/tmp/evil-extra.so\n' > "${VPND2}/extra.name"
+    DIRS="${VPND} ${VPND2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
