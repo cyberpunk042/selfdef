@@ -282,3 +282,13 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (payload under /home — user-writable persistence vector on at job surface)" {
+    # Sister to /tmp + /var/tmp + /dev/shm at-job writable-root
+    # INVARIANTs. /home is user-writable; attacker pivots into
+    # user account, plants /home/<user>/.payload, sets at job
+    # pointing at it for delayed root-exec. T1053.001.
+    printf '#!/bin/sh\n/home/alice/.payload\n' > "${JOB}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
