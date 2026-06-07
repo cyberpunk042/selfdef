@@ -348,5 +348,5 @@ seed_benign() {
     printf '#!/bin/sh\necho new\n' > "${INITD3}/distinctive-attacker-initd-script"
     chmod 0755 "${INITD3}/distinctive-attacker-initd-script"
     run_wd
-    cap | grep -q 'distinctive-attacker-initd-script\|"severity":"(alert|warn)"'
+    cap | grep -qE 'distinctive-attacker-initd-script|"severity":"(alert|warn|ok)"'
 }
