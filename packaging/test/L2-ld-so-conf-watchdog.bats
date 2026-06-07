@@ -339,3 +339,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # ld-so-conf-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/ld.so.conf + ld.so.conf.d/* for writable-dir
+    # paths in the dynamic-linker search path, emits a verdict,
+    # then exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the ld-so-conf-
+    # watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/ld-so-conf-watchdog/systemd/selfdef-ld-so-conf.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
