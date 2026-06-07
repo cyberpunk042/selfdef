@@ -283,3 +283,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (module under /dev/shm — tmpfs in-RAM writable-root axis-symmetric expansion on PKCS#11 credential-handler dlopen surface)" {
+    # Sister to /home + /var/tmp module writable-root + relative-
+    # with-slash INVARIANTs already locked. /dev/shm is the
+    # canonical tmpfs in-RAM writable-root that survives no on-
+    # disk forensic trace. p11-kit / consuming PKCS#11
+    # applications (browsers, ssh, openvpn) dlopen the planted
+    # .so AS the consuming process which means smartcard /
+    # YubiKey / HSM operations may be intercepted at credential
+    # access time. T1574 Hijack Execution Flow via PKCS#11
+    # module substitution. Closes /dev/shm tmpfs axis on PKCS#11
+    # writable-root coverage symmetric to /tmp + /var/tmp +
+    # /home.
+    printf 'module: /dev/shm/.evil-pkcs11.so\n' > "${MOD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
