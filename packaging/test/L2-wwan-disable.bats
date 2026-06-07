@@ -276,3 +276,27 @@ run_wd() {
     [ -f "${MODPROBE_FILE}" ]
     grep -qE '^blacklist cdc_mbim$' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # wwan-disable TOML; parser must tolerate without altering the
+    # profile-gated behavior. mask-with-noise still fires the full
+    # architectural triplet (rfkill block wwan + ModemManager mask
+    # + persistent modprobe blacklist) — the full remote-attack-
+    # surface neutralization the operator selected (carrier OTA
+    # pushes / Stingray / baseband CVEs all become irrelevant if the
+    # modem is dead).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "WWAN = carrier OTA + Stingray + baseband CVE surface"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q 'rfkill block wwan' "${RF_LOG}"
+    grep -q 'systemctl mask ModemManager.service' "${SYSEOF_LOG}"
+    [ -f "${MODPROBE_FILE}" ]
+    grep -q 'managed-by: selfdef wwan-disable' "${MODPROBE_FILE}"
+}
