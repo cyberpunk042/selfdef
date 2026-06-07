@@ -251,3 +251,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (relative-with-slash mechanism path 'sub/dir/p.so' → alert: PWD-at-exec attacker primitive on GSSAPI loader)" {
+    # Sister to krb5-plugins-watchdog + musl-ld-path-watchdog
+    # relative-with-slash INVARIANTs across the brain. A mechanism
+    # .so path with embedded slashes BUT no leading slash (e.g.
+    # 'sub/dir/p.so' instead of '/sub/dir/p.so') is NOT a fully-
+    # qualified absolute path — GSSAPI's dlopen() will resolve it
+    # relative to the CWD of the consuming daemon at load time.
+    # An attacker who can affect the daemon's CWD (PWD-at-exec
+    # primitive) gets to control where the mechanism .so loads
+    # from for EVERY GSSAPI consumer. Locks detection of the
+    # relative-with-slash variant on the GSSAPI mech surface.
+    printf 'gssapi_evil 1.2.3.4 sub/dir/p.so\n' > "${MECH}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
