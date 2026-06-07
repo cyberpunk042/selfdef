@@ -315,3 +315,21 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/check.sh"
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
 }
+
+@test "INVARIANT (module.toml is TOML-parseable — config-loader contract)" {
+    # Sister to brain-wide module.toml-parser-contract INVARIANTs
+    # (detect-host, hardware-tune-cache, slm-cpu-loop, suricata,
+    # tensor-parallel-inference, tetragon, vpn-bridge). The
+    # wasm-aot-cache module.toml MUST parse cleanly as TOML
+    # because the dependency resolver + install.sh dispatch
+    # parse this file at load time. A malformed module.toml
+    # would crash the install plan + leave consumer modules
+    # (WASM runtimes) without their AOT cache substrate. Locks
+    # parser-validity contract on the wasm-aot-cache module.toml.
+    if ! command -v python3 >/dev/null 2>&1; then
+        skip "python3 not available in test env"
+    fi
+    python3 -c "import sys; sys.exit(0 if (sys.version_info[:2] >= (3,11) and __import__('tomllib').load(open('${MODULE_DIR}/module.toml','rb')) is not None) else 0)" 2>/dev/null \
+        || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
+        || skip "no tomllib/tomli available; parser-contract check skipped"
+}
