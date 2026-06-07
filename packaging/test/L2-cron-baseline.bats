@@ -328,3 +328,24 @@ TOMLEOF
     # And root is present in at.allow too (symmetric anti-lockout).
     grep -q '^root$' "${AT_ALLOW}"
 }
+
+@test "INVARIANT (empty .deny files render — sister anti-bypass to .allow positive-list)" {
+    # Sister contract to the .allow anti-lockout floor. cron(8)
+    # semantics: if .allow exists, ONLY users in .allow can use
+    # crontab; if .deny exists, ONLY users NOT in .deny can. The
+    # selfdef baseline writes BOTH .allow AND empty .deny — the
+    # empty .deny serves as a positive marker that selfdef
+    # actively manages the policy (defends against operator
+    # accidentally restoring a permissive .deny that would
+    # otherwise let everyone use cron on distros where .allow
+    # is ignored). Locks the dual-file defense substrate on the
+    # cron-scheduler access surface.
+    write_config "root-only"
+    run_wd
+    [ -f "${CRON_DENY}" ]
+    [ -f "${AT_DENY}" ]
+    # .deny must NOT carry stale operator content (selfdef
+    # ownership requires complete rewrite to empty + manage).
+    ! grep -q '^evil-user$' "${CRON_DENY}"
+    ! grep -q '^evil-user$' "${AT_DENY}"
+}
