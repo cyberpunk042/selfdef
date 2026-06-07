@@ -236,3 +236,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     DIRS="${VPND} ${VPND2}" run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (plugin .so under /home — user-writable hijack on NetworkManager VPN dlopen surface)" {
+    # Sister to the /tmp + /var/tmp + /dev/shm writable-root axes
+    # already locked. /home is the user-writable surface — an
+    # attacker with regular user account can drop a malicious VPN
+    # plugin .so into their home and have it dlopen()'d into
+    # NetworkManager (running AS ROOT) the next time NM walks the
+    # VPN descriptor directory. Locks axis-symmetry across the
+    # writable-root family on the NetworkManager VPN-plugin
+    # dlopen-load surface (T1574 — Hijack Execution Flow via
+    # shared object substitution).
+    printf '[libnm]\nplugin=/home/user/.evil-nm-plugin.so\n' > "${NAME}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
