@@ -498,3 +498,26 @@ ap = inst.get('apply', '')
 assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {ap!r}'
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml [install] check = \"install/check.sh\" — install check path canonical contract)" {
+    # Sister to brain-wide module.toml [install] INVARIANT
+    # family. The selfdefctl health checker resolves check
+    # scripts via module.toml's [install].check field — the
+    # canonical value is the relative path "install/check.sh"
+    # (under the module's own directory). A regression that
+    # swapped to an absolute /usr/local/libexec/... path would
+    # break the in-tree test runner. A regression to a non-
+    # existent path would surface as "check script not found"
+    # at health-check time. Locks the canonical install/check.
+    # sh path discipline on the hardware-tune-cache module substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+inst = data.get('install') or {}
+chk = inst.get('check', '')
+assert chk == 'install/check.sh', f'install.check must be install/check.sh, got {chk!r}'
+"
+}

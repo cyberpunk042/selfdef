@@ -631,3 +631,23 @@ assert 'install' in data, 'install missing'
         grep -qE '^TimeoutStartSec=' "${s}"
     done
 }
+
+@test "INVARIANT (kernel-module-watchdog service unit declares Nice= — idle-priority anti-resource-starve contract)" {
+    # Sister to brain-wide systemd resource-priority INVARIANT
+    # family. Watchdog .service units run periodic scans (often
+    # sha256sum walks of large config trees) — they MUST be
+    # deprioritized via Nice= (positive value = lower priority
+    # under load) so that the watchdog scan doesn't starve
+    # operator-foreground workloads when CPU is contended.
+    # The canonical selfdef value is Nice=15 (well above the
+    # background-batch threshold of 10). A regression dropping
+    # Nice= would let watchdog scans compete with foreground at
+    # default Nice=0, surfacing as latency spikes on contended
+    # hosts. Locks the idle-priority anti-resource-starve
+    # discipline on the kernel-module-watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/kernel-module-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^Nice=' "${s}"
+    done
+}
