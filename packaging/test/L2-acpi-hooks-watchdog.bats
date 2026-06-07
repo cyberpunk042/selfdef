@@ -295,3 +295,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-acpi-binding'
 }
+
+@test "INVARIANT (exec-path under writable-root: ACPI action invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # ACPI-event-trigger root-exec persistence — acpid runs the
+    # bound action AS ROOT on every power button / lid / battery
+    # event. Beyond inline rev-shell payloads, attackers stage
+    # benign-looking actions that invoke a binary in writable-
+    # root.
+    printf 'event=button/power\naction=/etc/acpi/actions/power.sh\n' > "${BIND}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'event=button/power\naction=/tmp/staged_payload\n' > "${BIND}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
