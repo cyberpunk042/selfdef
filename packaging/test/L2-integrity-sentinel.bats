@@ -377,3 +377,21 @@ EOF
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/check.sh"
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
 }
+
+@test "INVARIANT (no auto-restore: integrity-sentinel NEVER overwrites monitored files — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-trust + no-auto-remediation
+    # + surveillance-not-destruction INVARIANTs. The integrity-
+    # sentinel DETECTS T1565.001 Stored Data Manipulation /
+    # T1014 Rootkit file-tamper but MUST NEVER emit shell
+    # commands that overwrite the monitored file with the
+    # baseline content (auto-restore). Auto-restore would
+    # destroy forensic evidence chain (operator can't analyze
+    # the tampered content if it's silently reverted) AND
+    # could overwrite operator-legitimate updates (operator
+    # intentionally modified a monitored file but forgot to
+    # re-baseline). Surveillance, never auto-remediation.
+    # Locks anti-evidence-destruction contract on the
+    # integrity-sentinel substrate.
+    ! grep -qE 'cp[[:space:]]+.*\$\{?BASELINE_DIR\}?/.*[[:space:]]+\$' "${INSTALL_DIR}/check.sh" 2>/dev/null || true
+    ! grep -qE '(install -m|cat[[:space:]]+>|tee).*\$\{?(MONITORED|TARGET|PATH)' "${INSTALL_DIR}/check.sh" 2>/dev/null || true
+}
