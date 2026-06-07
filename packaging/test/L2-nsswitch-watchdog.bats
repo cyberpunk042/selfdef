@@ -305,3 +305,22 @@ seed_benign() {
     run_wd
     cap | grep -q 'distinctive_attacker_mod'
 }
+
+@test "INVARIANT (rogue source on netgroup db — RBAC-substrate hijack — also alerts)" {
+    # Sister to rogue-on-passwd / group / shadow / hosts dbs
+    # already locked. The netgroup db is used for /etc/hosts.equiv
+    # NIS-style trust groups + sudo Net_Groups + xinetd allow/
+    # deny ACL semantics. Attacker injecting rogue NSS source on
+    # netgroup hijacks the answer to "is host X a member of
+    # group G?" — granting access regardless of actual host
+    # group membership. T1556.001 — Modify Authentication Process
+    # via NSS module hijack on the netgroup db. Closes axis-
+    # parity with passwd/group/shadow/hosts dbs in the rogue-
+    # source family.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'passwd: files\ngroup: files\nshadow: files\nhosts: files dns\nnetgroup: evil_nss\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
