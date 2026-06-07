@@ -404,3 +404,15 @@ seed_benign() {
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*rc\.local'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # boot-script-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/rc.local + /etc/init.d for injection patterns,
+    # emits a verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the boot-script-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/boot-script-watchdog/systemd/selfdef-boot-script.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
