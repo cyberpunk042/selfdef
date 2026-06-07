@@ -287,3 +287,17 @@ TOMLEOF
     first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${DROPIN_DIR}/50-selfdef.conf")"
     [[ "${first_nonblank}" == *"selfdef"* ]]
 }
+
+@test "INVARIANT (drop-in is chmod 0644 — system-config convention)" {
+    # Sister to many other installer module's chmod 0644 INVARIANT
+    # across the brain (sysctl drop-ins, limits.d, ssh-hardening
+    # drop-in, apparmor-baseline AA_LIST). The journald conf.d
+    # drop-in must be world-readable (systemd-journald reads it at
+    # daemon start) and root-write-only (any other mode would let
+    # an attacker silently retune the journal — Storage=none
+    # would defeat audit-trail forensics).
+    write_config "standard"
+    run_wd
+    [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    [ "$(stat -c '%a' "${DROPIN_DIR}/50-selfdef.conf")" = "644" ]
+}
