@@ -303,3 +303,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # sudo.conf at all).
     cap | grep -qE '"severity":"(ok|warn|alert)"'
 }
+
+@test "INVARIANT (Plugin .so under /dev/shm — tmpfs in-RAM writable-root axis-symmetric expansion on sudo plugin-load substrate)" {
+    # Sister to /home + /var/tmp + /tmp Plugin .so writable-root
+    # INVARIANTs already locked. /dev/shm is canonical tmpfs
+    # in-RAM writable-root that survives no on-disk forensic
+    # trace. sudo loads Plugin .so files AS ROOT during plugin
+    # initialization phase — planted attacker .so in /dev/shm
+    # would execute AS ROOT every sudo invocation. T1548.003
+    # Abuse Elevation Control Mechanism: Sudo / Sudo Plugin
+    # hijack. Closes /dev/shm tmpfs axis on sudo plugin-load
+    # writable-root coverage symmetric to /tmp + /var/tmp +
+    # /home.
+    printf 'Plugin policy /dev/shm/.evil-sudo-plugin.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
