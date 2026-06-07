@@ -201,3 +201,43 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-musl-ld-path -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no-auto-trust: musl-ld-path-watchdog does NOT refresh baseline on writable-dir detection — alert STAYS until operator updates)" {
+    # T1574.006 dynamic-linker hijacking on musl substrate — alert
+    # MUST persist across runs until operator explicitly re-baselines.
+    # Sister to gss-mech, ld-preload, postfix-exec et al. — the
+    # active-injection class never auto-trusts.
+    printf '/lib\n/usr/lib\n' > "${CONF}"
+    run_wd
+    printf '/lib\n/tmp/evil/lib\n/usr/lib\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file scan: a second musl-ld file ALSO scanned — not only the x86_64 path)" {
+    # Musl-libc systems may have multi-arch path files
+    # (/etc/ld-musl-aarch64.path on cross-compile substrate). A planted
+    # writable-dir entry in any arch-file MUST be flagged.
+    CONF2="${TMP}/ld-musl-aarch64.path"
+    printf '/lib\n/usr/lib\n' > "${CONF}"
+    printf '/lib\n/tmp/evil/lib\n' > "${CONF2}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_MUSL_PROFILE=report \
+    SELFDEF_MUSL_BASELINE="${BASELINE}" \
+    SELFDEF_MUSL_FILES="${CONF} ${CONF2}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (mixed-form line: newline-separated AND colon-separated in same file → any writable entry alerts)" {
+    # Musl loader accepts BOTH newline-separated and colon-separated
+    # entries on the same line. Mixed-form files are valid musl
+    # configuration; watchdog must parse both grammars.
+    printf '/lib:/usr/lib\n/opt/lib:/tmp/evil/lib\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
