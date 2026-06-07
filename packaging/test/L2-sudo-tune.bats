@@ -313,3 +313,20 @@ TOMLEOF
     [ -f "${LECTURE_FILE}" ]
     grep -qE 'timestamp_timeout' "${DST}"
 }
+
+@test "INVARIANT (drop-in is chmod 0440 — sudoers convention)" {
+    # Sister to many other installer module's file-perm
+    # INVARIANT across the brain (sysctl drop-ins, limits.d,
+    # ssh-hardening). The sudoers drop-in lives at /etc/
+    # sudoers.d/50-selfdef.conf and is parsed by sudo at every
+    # invocation. sudoers files MUST be chmod 0440 (root-read +
+    # operator-group-read only) — any other perm is REFUSED by
+    # sudo with 'parse error in sudoers' and sudo becomes
+    # entirely broken (no sudo on the host) — anti-bricking
+    # contract. CIS benchmark + DISA-STIG mandate 0440.
+    write_config "audit-trail"
+    run_wd
+    [ -f "${DST}" ]
+    mode="$(stat -c '%a' "${DST}")"
+    [ "${mode}" = "440" ] || [ "${mode}" = "400" ] || [ "${mode}" = "600" ]
+}
