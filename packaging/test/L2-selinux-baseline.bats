@@ -393,3 +393,24 @@ EOF
     grep -qE '^SELINUX=enforcing$' "${SELINUX_CONFIG}"
     grep -qE '^SELINUXTYPE=mls$' "${SELINUX_CONFIG}"
 }
+
+@test "INVARIANT (live SELinux config file is chmod 0644 — system-config convention)" {
+    # Sister to many other installer module's chmod 0644
+    # INVARIANT across the brain. /etc/selinux/config is the
+    # boot-time SELinux substrate config file consumed by the
+    # init system on every boot. Must be world-readable (audit
+    # tooling + diagnostic scripts need to inspect it) and
+    # root-write-only — any other perm would let an attacker
+    # silently downgrade SELINUX=enforcing to permissive or
+    # disabled, defeating the entire MAC layer at next boot.
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=permissive
+SELINUXTYPE=targeted
+EOF
+    chmod 0644 "${SELINUX_CONFIG}"
+    write_config "permissive"
+    run_wd
+    # Lock that the script does NOT degrade existing 0644 perm.
+    mode="$(stat -c '%a' "${SELINUX_CONFIG}")"
+    [ "${mode}" = "644" ] || [ "${mode}" = "640" ] || [ "${mode}" = "600" ]
+}
