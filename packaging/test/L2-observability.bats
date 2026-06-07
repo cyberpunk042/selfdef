@@ -212,3 +212,19 @@ teardown_dry_run() {
     # full module-script surface (apply + check + uninstall).
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
 }
+
+@test "INVARIANT (no auto-uninstall: observability module NEVER emits package-remove commands on prometheus/grafana)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The observability installer wires alerts +
+    # dashboard + scrape templates but MUST NEVER emit shell
+    # commands that uninstall the upstream observability
+    # packages (apt/dpkg/dnf/rpm/yum remove|purge|uninstall
+    # prometheus|grafana|prometheus-node-exporter). Silent
+    # auto-removal would tear down the operator dashboard
+    # entirely — every selfdef-emitted alert + metric loses
+    # its consumer. T1562.001 self-defeat. Locks anti-package-
+    # removal contract on the observability substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(prometheus|grafana|prometheus-node-exporter)' "${f}"
+    done
+}
