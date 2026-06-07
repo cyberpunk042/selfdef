@@ -238,3 +238,18 @@ with open('${MODULE_DIR}/profiles/${p}.toml', 'rb') as f:
         ! grep -qE 'find[[:space:]]+/etc/(wireguard|tailscale|cloudflared).*-delete' "${f}"
     done
 }
+
+@test "INVARIANT (vpn-bridge install scripts use set -euo pipefail — anti-half-installed-state contract across full lifecycle)" {
+    # Sister to brain-wide set -euo pipefail INVARIANT family.
+    # vpn-bridge wires wg/tailscale/cloudflared tunnels; a
+    # partial-install state (one tunnel up + another half-wired)
+    # is worse than no install. set -euo pipefail forces apply/
+    # check/uninstall scripts to exit-on-first-error, leaving a
+    # detectable failed state rather than a half-state. Locks
+    # the fail-loud invariant on the vpn-bridge install/lifecycle
+    # substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        head -20 "${f}" | grep -qE 'set[[:space:]]+-euo[[:space:]]+pipefail'
+    done
+}
