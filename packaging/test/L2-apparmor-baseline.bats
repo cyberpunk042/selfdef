@@ -375,3 +375,21 @@ TOMLEOF
     grep -q 'aa-enforce firefox' "${AAFLIP_LOG}"
     ! grep -q 'aa-complain' "${AAFLIP_LOG}"
 }
+
+@test "INVARIANT (AA_LIST is chmod 0644 — system-config convention)" {
+    # Sister to many other installer module's file-perm
+    # INVARIANT across the brain (sysctl drop-ins, limits.d,
+    # ssh-hardening drop-in, journal-tune drop-in). The
+    # curated-profiles.list lands at a system-config path
+    # consumed by AppArmor + operator audit tooling. 0644 is
+    # the standard read-everyone, write-root convention — any
+    # other perm (especially 0666 world-writable) would be a
+    # security regression letting any user rewrite the curated
+    # list and disable selected MAC profiles silently. Locks
+    # the file-perm contract on the AppArmor MAC layer
+    # substrate.
+    write_config "enforce"
+    AA_LOADED='firefox' run_wd
+    [ -f "${AA_LIST}" ]
+    [ "$(stat -c '%a' "${AA_LIST}")" = "644" ]
+}
