@@ -527,3 +527,21 @@ c = data.get('category', '')
 assert isinstance(c, str) and len(c) > 0, f'category must be non-empty string, got {repr(c)}'
 "
 }
+
+@test "INVARIANT (module.toml version field is semver X.Y.Z — version-comparison sortability contract)" {
+    # Sister to brain-wide module.toml semver INVARIANT family.
+    # The version field MUST follow X.Y.Z semver so the resolver
+    # can sort versions numerically + version-gate downstream
+    # consumers. A regression to "v1" / "1.0" / "1.0.0-beta+meta"
+    # would break the sortable numeric comparison. Locks the
+    # semver-X.Y.Z discipline on the ctrlaltdel-disable substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ctrlaltdel-disable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib, re
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('version', '')
+assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r}'
+"
+}

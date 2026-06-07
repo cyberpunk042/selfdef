@@ -514,3 +514,14 @@ assert 'install' in data, 'install missing'
         ! grep -qE '^Restart=on-failure' "${s}"
     done
 }
+
+@test "INVARIANT (securetty-watchdog service unit declares Description= — systemctl-status operator-readable label)" {
+    # Sister to brain-wide systemd Description= INVARIANT
+    # family. Locks Description-present discipline on the
+    # securetty-watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/securetty-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^Description=' "${s}"
+    done
+}
