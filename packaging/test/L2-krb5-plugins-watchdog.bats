@@ -249,3 +249,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (pre-existing world-writable krb5.conf): baseline_initial fires alert at install-time" {
+    # Sister to every other watchdog pre-existing-world-writable
+    # baseline_initial INVARIANT across the brain. The install-time-
+    # vet contract: if krb5.conf is ALREADY world-writable when
+    # selfdef first installs the watchdog, the first run MUST raise
+    # alert (or at least warn) — not silently baseline a broken
+    # security posture. Closes the install-time-vet axis on the
+    # GSSAPI/preauth dlopen-load surface (T1574/T1546 — any process
+    # using GSSAPI dlopen()s the module .so, so a world-writable
+    # krb5.conf lets a non-root attacker swap in their own .so to
+    # execute in every GSSAPI-aware daemon).
+    printf '[plugins]\n  clpreauth = { module = pkinit:/usr/lib/krb5/plugins/preauth/pkinit.so }\n' > "${CONF}"
+    chmod 0666 "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
