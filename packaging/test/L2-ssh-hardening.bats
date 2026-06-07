@@ -379,3 +379,18 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"ssh-hardening"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (drop-in chmod 0644 — sshd_config.d convention; 0600 would defeat sshd readability)" {
+    # Sister to brain-wide drop-in chmod 0644 INVARIANTs
+    # (/etc/profile.d, /etc/sysctl.d, /etc/sshd_config.d). The
+    # sshd_config.d drop-in MUST be world-readable mode 0644
+    # because sshd may drop privileges before parsing the
+    # config in some configurations + mode 0600 would defeat
+    # the canonical sshd_config.d include semantics. Locks
+    # file-mode contract on the SSH hardening drop-in
+    # substrate; the drop-in carries policy not secret keys.
+    write_config "standard"
+    run_wd
+    mode="$(stat -c '%a' "${DST}")"
+    [ "${mode}" = "644" ]
+}
