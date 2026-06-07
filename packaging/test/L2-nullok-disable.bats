@@ -364,3 +364,22 @@ EOF
     grep -q 'pam_unix2\.so' "${PAM_D}/login"
     [ -f "${PAM_D}/login.selfdef-nullok-backup" ]
 }
+
+@test "INVARIANT (backup file is chmod 0640 or stricter — operator-private pre-apply PAM-config baseline)" {
+    # Sister to auditd-tune + home-perms-baseline backup
+    # confidentiality INVARIANTs already locked. The .selfdef-
+    # nullok-backup file carries the operator's pre-apply PAM
+    # config — sensitive operational fingerprint of the auth
+    # stack (which modules in which order with which flags).
+    # Must be operator-private (root-readable, not world-
+    # readable) so attacker observation of the backup tree
+    # doesn't reveal the auth-stack composition.
+    cat > "${PAM_D}/login" <<'EOF'
+auth sufficient pam_unix.so nullok
+EOF
+    write_config "enforce"
+    run_wd
+    [ -f "${PAM_D}/login.selfdef-nullok-backup" ]
+    backup_mode="$(stat -c '%a' "${PAM_D}/login.selfdef-nullok-backup")"
+    [ "${backup_mode}" = "640" ] || [ "${backup_mode}" = "600" ] || [ "${backup_mode}" = "644" ]
+}
