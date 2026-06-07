@@ -338,3 +338,16 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # pm-utils-hooks-watchdog runs ON the timer's scheduled fire
+    # — scans /etc/pm/sleep.d + /usr/lib/pm-utils/sleep.d for
+    # injection patterns, emits a verdict, then exits. Type=
+    # simple would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the pm-utils-hooks-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/pm-utils-hooks-watchdog/systemd/selfdef-pm-utils.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
