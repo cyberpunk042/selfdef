@@ -295,3 +295,14 @@ run_wd() {
     run_wd
     grep -qE '(readonly\s+TMOUT|declare\s+-r\s+TMOUT)' "${DROPIN}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on shell-timeout-baseline installer
+    # surface.
+    write_config "strict"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"shell-timeout-baseline"')
+    [ "${count}" = "1" ]
+}
