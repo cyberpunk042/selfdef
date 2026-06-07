@@ -285,3 +285,21 @@ TOMLEOF
     [ -f "${DROPIN}" ]
     grep -qE 'kernel\.sysrq\s*=\s*0' "${DROPIN}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in render AND NO sysctl -w fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/sysctl.d/50-selfdef-kernel-
+    # sysrq.conf AND without firing sysctl -w kernel.sysrq=<N>.
+    # A silent dry-run that committed would flip the kernel
+    # sysrq mask on a host where operator was investigating
+    # console-debugging behavior (incident responder needs sysrq
+    # available for emergency stack-trace capture). Locks dry-
+    # run-preserves-state on the sysrq-restrict substrate.
+    write_config "off"
+    rm -f "${DROPIN}"
+    : > "${SCTL_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DROPIN}" ]
+    ! grep -qE 'sysctl -w kernel.sysrq' "${SCTL_LOG}"
+}
