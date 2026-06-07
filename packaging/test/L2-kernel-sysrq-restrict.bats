@@ -311,3 +311,14 @@ TOMLEOF
     [ -f "${DROPIN}" ]
     [ "$(stat -c '%a' "${DROPIN}")" = "644" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on kernel-sysrq-restrict installer
+    # surface across drop-in + sysctl-w phases.
+    write_config "off"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"kernel-sysrq-restrict"')
+    [ "${count}" = "1" ]
+}
