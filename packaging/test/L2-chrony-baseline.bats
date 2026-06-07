@@ -320,3 +320,21 @@ run_wd() {
     [[ "${first_pool}" == *"selfdef"* ]]
     [[ "${first_nts}" == *"selfdef"* ]]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO chrony drop-in written AND NO chronyd restart/reload fired)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/chrony/chrony.conf.d/
+    # 50-selfdef.conf AND without restarting/reloading chronyd.
+    # A silent dry-run that committed would flip the host's NTP
+    # baseline (pool sources or NTS authentication) at preview
+    # time — clock-skew matters for log timestamps + Kerberos +
+    # TLS-cert-validation. Locks the dry-run-preserves-state
+    # contract on the time-sync substrate.
+    rm -f "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    write_config "pool"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${CHRONY_DROPIN_DIR}/50-selfdef.conf" ]
+    ! grep -qE 'systemctl (restart|reload) chronyd' "${SYSEOF_LOG}"
+}
