@@ -268,3 +268,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named binfmt entry surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # binfmt entry (T1574 — Hijack Execution Flow via binary-
+    # format interpreter; every exec of a matching binary fires
+    # the planted interpreter), the entry NAME MUST surface in
+    # the JSON sample so operator dashboard routes triage to the
+    # right path.
+    printf ':qemu-arm:M:0:magic:mask:/usr/bin/qemu-arm:OCF\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf ':evil:M:0:magic:mask:/tmp/.evil-interpreter:OC\n' > "${BINFMTD}/99-distinctive-attacker-binfmt.conf"
+    run_wd
+    cap | grep -q 'distinctive-attacker-binfmt'
+}
