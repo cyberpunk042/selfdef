@@ -369,3 +369,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # surface as out-of-tree confirms the env-var is honored.
     cap | grep -qE '"baseline_count":2'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named module surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker loads a new
+    # kernel module (T1547.006 — Kernel Modules and Extensions
+    # persistence), the module name MUST surface in the JSON
+    # sample so operator dashboard routes triage to the right
+    # module. Locks the operator-visibility contract on the
+    # kernel-module surveillance surface.
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    write_modules_proc ext4 distinctive_attacker_mod
+    stage_ko distinctive_attacker_mod
+    run_wd
+    cap | grep -q 'distinctive_attacker_mod'
+}
