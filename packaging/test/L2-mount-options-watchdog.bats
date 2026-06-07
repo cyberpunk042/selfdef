@@ -285,3 +285,46 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=report run_wd
     cap | grep -q '"profile":"report"'
 }
+
+@test "INVARIANT (stateless re-evaluation: missing-flag alert STAYS visible on every run until operator remounts)" {
+    # mount-options-watchdog is stateless (no baseline-refresh required) —
+    # re-evaluates LIVE mount table on every run. A missing-flag mount that
+    # stays mounted across runs MUST re-alert every run, not decay to ok
+    # after first detection.
+    mk_findmnt
+    write_fixture $'/tmp\trelatime'                     # 3 missing flags
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"broad_missing_flags"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (boundary 1 miss: warn ladder lower bound)" {
+    # The warn ladder lower bound is 1 miss; locks against regression
+    # where 1 miss might silently decay to ok.
+    mk_findmnt
+    write_fixture $'/tmp\tnosuid,nodev,relatime'        # 1 missing: noexec
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"missing_flags":1'
+}
+
+@test "INVARIANT (multiple separate mounts all hardened — no false-positive at scale)" {
+    # When ALL six expected mounts are separate AND ALL carry their
+    # full flag set, severity stays ok. Locks against regression where
+    # the multi-mount path might accidentally false-positive.
+    mk_findmnt
+    write_fixture \
+        $'/tmp\tnosuid,nodev,noexec,relatime' \
+        $'/var/tmp\tnosuid,nodev,noexec,relatime' \
+        $'/dev/shm\tnosuid,nodev,noexec,relatime' \
+        $'/home\tnosuid,nodev,relatime' \
+        $'/var/log\tnosuid,nodev,noexec,relatime' \
+        $'/boot\tnosuid,nodev,noexec,relatime'
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    cap | grep -q '"event":"all_flags_present"'
+    cap | grep -qE '"missing_flags":0'
+}
