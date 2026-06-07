@@ -277,3 +277,18 @@ seed_benign() {
     run_wd
     cap | grep -q 'pts/77'
 }
+
+@test "INVARIANT (pre-existing pts entry: baseline_initial fires alert at install-time — install-time-vet contract)" {
+    # Sister to every other watchdog pre-existing-broad-condition
+    # baseline_initial INVARIANT across the brain. The install-time-
+    # vet contract: if /etc/securetty ALREADY carries a network-pty
+    # (pts/N) entry when selfdef first installs the watchdog, the
+    # first run MUST raise alert (or at least warn) — not silently
+    # baseline a broken security posture. Closes the install-time-
+    # vet axis on the root-allowed-tty surface (T1078 — Valid
+    # Accounts via remote-root-login enabled-by-pts-widening).
+    printf 'tty1\ntty2\nttyS0\npts/0\n' > "${SECURETTY}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
