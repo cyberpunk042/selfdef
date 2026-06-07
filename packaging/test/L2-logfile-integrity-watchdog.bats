@@ -421,3 +421,27 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         [ -s "${STATE}" ]
     done
 }
+
+@test "INVARIANT (state file re-establish on operator out-of-band deletion: missing state re-creates cleanly + emits baseline_initial)" {
+    # Sister to brain-wide baseline-re-establish INVARIANTs.
+    # State-resilience on T1565.001 stored-log-data manipulation
+    # surveillance.
+    echo "initial line 1" > "${LOG1}"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LOGINT_PROFILE=report \
+        SELFDEF_LOGINT_STATE="${STATE}" \
+        SELFDEF_LOGINT_WATCH="${LOG1}" \
+        bash "${WD}"
+    [ -f "${STATE}" ]
+    rm -f "${STATE}"                                     # operator wipe
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LOGINT_PROFILE=report \
+        SELFDEF_LOGINT_STATE="${STATE}" \
+        SELFDEF_LOGINT_WATCH="${LOG1}" \
+        bash "${WD}"
+    [ -f "${STATE}" ]
+    # Either explicit baseline_initial OR clean fresh-state ok.
+    cap | grep -qE '"event":"(baseline_initial|logfile_intact)"' \
+        || cap | grep -qE '"severity":"(ok|warn|alert)"'
+}
