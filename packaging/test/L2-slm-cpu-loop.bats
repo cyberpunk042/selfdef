@@ -314,3 +314,14 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"hardware-tune-env"' "${MODULE_DIR}/module.toml" \
         || grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"hardware-tune-cache"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on slm-cpu-loop installer surface.
+    export SELFDEF_DRY_RUN=1
+    run bash "${INSTALL_DIR}/apply.sh"
+    unset SELFDEF_DRY_RUN SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"slm-cpu-loop"')
+    [ "${count}" = "1" ]
+}
