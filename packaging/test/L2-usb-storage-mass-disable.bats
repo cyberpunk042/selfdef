@@ -275,3 +275,20 @@ usb_storage            73728  0' run_wd
     [ -f "${MODPROBE_D}/50-selfdef-usb-storage.conf" ]
     grep -qE '(blacklist|install) usb_storage' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
 }
+
+@test "INVARIANT (blocked profile covers BOTH usb_storage AND uas — full mass-storage class coverage)" {
+    # Sister to many other watchdog/installer's multi-axis coverage
+    # INVARIANT across the brain. USB Attached SCSI (uas) is the
+    # newer-generation mass-storage transport, used by USB 3.0+
+    # thumb drives that negotiate UAS instead of legacy BOT. An
+    # attacker plugging in a UAS-only thumb drive would bypass a
+    # usb_storage-only blacklist. Lock the complete class coverage:
+    # blocked profile MUST blacklist BOTH usb_storage AND uas.
+    # T1052 (Hardware Additions) data-exfil + T1091 (Replication
+    # Through Removable Media) malware-introduction primitives both
+    # close.
+    write_config "blocked"
+    run_wd
+    grep -qE '(blacklist|install) usb_storage' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+    grep -qE '(blacklist|install) uas' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+}
