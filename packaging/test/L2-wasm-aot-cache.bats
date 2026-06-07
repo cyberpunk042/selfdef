@@ -262,3 +262,17 @@ INSTALL_DIR="${MODULE_DIR}/install"
     # module interface contract.
     grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"wasm-aot-cache-dir"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (module.toml depends_on hardware-tune-cache — upstream-substrate dependency lock)" {
+    # Sister to many other installer module's depends_on
+    # contract INVARIANT across the brain. wasm-aot-cache
+    # composes on hardware-tune-cache's CFLAGS — the AOT-
+    # compiled wasm objects must match the CPU architecture
+    # tune already baked into hardware-tune.env. A silent
+    # removal of the depends_on token would let operators
+    # install wasm-aot-cache before hardware-tune-cache + get
+    # silently-mismatched AOT objects (compiled with default
+    # CFLAGS instead of the operator-tuned set). Locks the
+    # topological-order contract.
+    grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"hardware-tune-cache"' "${MODULE_DIR}/module.toml"
+}
