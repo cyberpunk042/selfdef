@@ -503,3 +503,17 @@ setup() {
     grep -qE 'emit_status\(\)' "${LIB}"
     awk '/^emit_status\(\)/,/^}/' "${LIB}" | grep -qE 'printf'
 }
+
+@test "INVARIANT (run() helper logs the command before executing — operator-audit-trail contract)" {
+    # Sister to brain-wide operator-audit-trail INVARIANT
+    # family. The module-lib's run() helper IS the
+    # canonical exec channel — apply.sh calls `run "desc"
+    # cmd args...` for any state-mutating action. The helper
+    # MUST log() the desc + command before execing so
+    # operator triaging journalctl can SEE what the module
+    # tried to do. A regression that exec'd silently would
+    # leave operators with no journald trail of mutations.
+    # Locks the audit-trail-before-exec discipline on the
+    # run() substrate.
+    awk '/^run\(\)/,/^}/' "${LIB}" | grep -qE 'log '
+}

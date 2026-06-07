@@ -465,3 +465,18 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^\[Service\]' "${UNIT}"
     grep -qE '^\[Install\]' "${UNIT}"
 }
+
+@test "INVARIANT (cargo-deb assets ship selfdef-scheduler.service — Debian packaging-manifest contract)" {
+    # Sister to brain-wide cargo-deb manifest INVARIANT
+    # family. The scheduler unit must be listed in the
+    # selfdef-daemon Cargo.toml [package.metadata.deb] assets
+    # block so dpkg ships it to /etc/systemd/system/ at
+    # install time. A regression that dropped the asset
+    # entry would leave the .deb without the unit + cause
+    # postinst to fail with "unit not found". Locks the
+    # cargo-deb manifest discipline on the scheduler
+    # substrate.
+    DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
+    [ -f "${DAEMON_CARGO}" ]
+    grep -qE 'selfdef-scheduler\.service' "${DAEMON_CARGO}"
+}

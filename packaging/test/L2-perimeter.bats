@@ -495,3 +495,22 @@ sels = data['spec']['kprobes'][0].get('selectors', [])
 assert isinstance(sels, list) and len(sels) > 0, f'selectors must be non-empty list (enforcement presence), got {sels!r}'
 "
 }
+
+@test "INVARIANT (YAML metadata does NOT declare namespace — cluster-scoped CRD enforcement contract)" {
+    # Sister to brain-wide Kubernetes scope INVARIANT family.
+    # Tetragon TracingPolicy is a CLUSTER-scoped CRD (not
+    # namespace-scoped) — the kind=TracingPolicy resource MUST
+    # NOT declare a metadata.namespace field. A regression
+    # that added namespace: would either silently break the
+    # CRD application (Tetragon rejects namespaced
+    # TracingPolicy) or scope enforcement only within that
+    # namespace (defeating the cluster-wide sovereign-perimeter
+    # design). Locks the cluster-scoped (no-namespace) CRD
+    # discipline on the perimeter YAML substrate.
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+meta = data.get('metadata', {})
+assert 'namespace' not in meta, f'metadata.namespace must be absent (cluster-scoped CRD), got {meta.get(\"namespace\")!r}'
+"
+}

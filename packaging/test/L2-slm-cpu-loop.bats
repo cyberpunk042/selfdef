@@ -584,3 +584,26 @@ assert isinstance(cons, list), f'consumes must be a TOML list, got {type(cons)._
 assert 'hardware-tune-env' in cons, f'consumes must include hardware-tune-env (SD-R68 substrate), got {cons!r}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml [metadata] phase=main — install-ordering contract)" {
+    # Sister to brain-wide module.toml phase INVARIANT
+    # family. The [metadata].phase field gates which install
+    # pass the module runs in (canonical "main" for normal
+    # modules, "early" for pre-substrate setup like hardware-
+    # tune-cache). slm-cpu-loop is a main-phase module — it
+    # depends on early-phase hardware-tune-cache having
+    # already applied. A regression that omitted phase or
+    # set it to "early" would invert the install ordering
+    # + fail when slm-cpu-loop tries to read hardware-tune.
+    # env that doesn't exist yet. Locks the phase install-
+    # ordering discipline on the slm-cpu-loop substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ph = (data.get('metadata') or {}).get('phase', '')
+assert ph == 'main', f'[metadata].phase must be main, got {ph!r}'
+"
+}

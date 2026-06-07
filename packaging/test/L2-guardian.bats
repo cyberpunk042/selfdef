@@ -288,3 +288,19 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^\[Service\]' "${UNIT}"
     grep -qE '^\[Install\]' "${UNIT}"
 }
+
+@test "INVARIANT (cargo-deb assets ship selfdef-guardian.service — Debian packaging-manifest contract)" {
+    # Sister to brain-wide cargo-deb manifest INVARIANT
+    # family. The guardian unit must be listed in the
+    # selfdef-daemon Cargo.toml [package.metadata.deb] assets
+    # block so dpkg ships it to /etc/systemd/system/ at
+    # install time. A regression that dropped the asset
+    # entry would leave the .deb without the unit + cause
+    # postinst to fail on `systemctl enable selfdef-
+    # guardian.service` with "unit not found". Locks the
+    # cargo-deb manifest discipline on the guardian
+    # substrate.
+    DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
+    [ -f "${DAEMON_CARGO}" ]
+    grep -qE 'selfdef-guardian\.service' "${DAEMON_CARGO}"
+}

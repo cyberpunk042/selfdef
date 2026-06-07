@@ -458,3 +458,26 @@ assert isinstance(prov, list), f'provides must be a TOML list, got {type(prov)._
 assert len(prov) >= 1, f'provides must declare ≥1 capability, got {prov!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml declares requires field as TOML list of inline-tables — runtime-binary-dependency contract)" {
+    # Sister to brain-wide module.toml requires INVARIANT
+    # family. The requires field declares runtime binary +
+    # config dependencies as TOML list of inline-tables:
+    # [{ kind = "binary", value = "systemctl" }, ...]. A
+    # regression that swapped to a simple string list would
+    # break the resolver's per-kind dispatch (binary vs
+    # config vs systemd-unit). Locks the inline-table list
+    # discipline on the detect-host requires substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+req = data.get('requires')
+assert isinstance(req, list), f'requires must be a TOML list, got {type(req).__name__}'
+for r in req:
+    assert isinstance(r, dict), f'each requires entry must be inline-table, got {type(r).__name__}'
+    assert 'kind' in r and 'value' in r, f'each requires must have kind+value, got {r!r}'
+"
+}

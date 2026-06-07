@@ -419,3 +419,18 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qE '^\[Service\]' "${SERVICE}"
     grep -qE '^\[Install\]' "${SERVICE}"
 }
+
+@test "INVARIANT (.timer file has [Unit] + [Timer] + [Install] section headers — systemd timer INI structural contract)" {
+    # Sister to .service 3-section INVARIANT already locked.
+    # A systemd .timer file MUST contain three canonical
+    # section headers: [Unit] (metadata + ordering), [Timer]
+    # (cadence directives OnBootSec/OnUnitActiveSec/etc),
+    # [Install] (timers.target binding). Without [Timer] the
+    # cadence directives are no-ops; without [Install]
+    # `systemctl enable selfdef-doctor.timer` is a no-op.
+    # Locks the 3-section INI structural discipline on the
+    # doctor timer substrate.
+    grep -qE '^\[Unit\]' "${TIMER}"
+    grep -qE '^\[Timer\]' "${TIMER}"
+    grep -qE '^\[Install\]' "${TIMER}"
+}

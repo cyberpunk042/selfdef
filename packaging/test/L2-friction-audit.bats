@@ -568,3 +568,17 @@ EOF
     grep -qE 'trap.*EXIT|trap .* INT TERM EXIT' "${SCRIPT}" || \
         ! grep -qE 'mktemp' "${SCRIPT}"
 }
+
+@test "INVARIANT (emit_ring uses mkdir -p \${RING_DIR} before write — idempotent dir-create contract)" {
+    # Sister to brain-wide mkdir -p INVARIANT family. emit_ring
+    # writes /var/cache/selfdef/friction-audit/ring/\${ts_ms}-
+    # \${gate}.json — on first run after install (or after
+    # operator `rm -rf` of the cache dir), the parent dir may
+    # not exist. emit_ring MUST mkdir -p the dir before
+    # write so write doesn't ENOENT-fail. A regression that
+    # dropped the mkdir would surface as "first-write fails,
+    # second succeeds" — operator-confusing race. Locks the
+    # idempotent dir-create discipline on the friction-audit
+    # emit_ring substrate.
+    grep -qE 'mkdir -p.*RING' "${SCRIPT}"
+}
