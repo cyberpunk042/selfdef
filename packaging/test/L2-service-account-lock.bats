@@ -376,3 +376,19 @@ EOF
     grep -q 'passwd -l dash-user' "${PASSWD_LOG}"
     grep -q 'passwd -l ksh-user' "${PASSWD_LOG}"
 }
+
+@test "INVARIANT (DRY_RUN does not fire any chsh / passwd -l)" {
+    # Sister to many other installer module's DRY_RUN INVARIANT
+    # across the brain. The service-account-lock DRY_RUN path
+    # MUST be a no-op against live state — operator using
+    # --dry-run to preview expects ZERO mutations. Locks the
+    # dry-run side-effect-freedom contract so a regression that
+    # fires chsh or passwd -l through DRY_RUN would be caught
+    # (silent account neutralization during preview would lock
+    # out legitimate operator-intended users).
+    write_synth_passwd
+    write_config "enforce"
+    DRY_RUN=1 run_wd
+    ! [ -s "${CHSH_LOG}" ]
+    ! [ -s "${PASSWD_LOG}" ]
+}
