@@ -280,3 +280,17 @@ teardown_dry_run() {
         ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(tetragon|bpftool)' "${f}"
     done
 }
+
+@test "INVARIANT (no auto-delete: agent-guard installer NEVER deletes operator-pre-existing Tetragon TracingPolicies — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # agent-guard writes selfdef-prefixed TracingPolicy YAMLs;
+    # it MUST NEVER rm/find-delete operator-pre-existing
+    # /etc/tetragon/tracing-policies/*.yaml not owned by THIS
+    # module. Locks no-auto-delete on the agent-guard installer
+    # substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/etc/tetragon([[:space:]]|$)' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/tetragon.*-delete' "${f}"
+    done
+}
