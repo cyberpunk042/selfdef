@@ -266,3 +266,20 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (init= under /home — user-writable PID-1 hijack vector): user-writable init= axis" {
+    # Sister to the init= under /tmp + /var/tmp + /dev/shm PID-1
+    # hijack axes already locked. /home is the user-writable
+    # surface — an attacker with a regular user account can drop
+    # a malicious init binary into their home and have GRUB hand
+    # it PID-1 on next boot. T1542/T1037 boot-time PID-1 hijack
+    # via /home init=. Locks the /home user-writable axis on the
+    # init= PID-1 hijack family (sister axis to all the writable-
+    # root /tmp /var/tmp /dev/shm axes).
+    seed_benign
+    run_wd
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="quiet init=/home/user/.evil-init"\n' > "${DEFAULT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
