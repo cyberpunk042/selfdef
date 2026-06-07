@@ -396,3 +396,27 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${CONF}" <<'EOF'
+/var/log/app1.log {
+  daily
+  postrotate
+    /tmp/.evil1
+  endscript
+}
+/var/log/app2.log {
+  daily
+  postrotate
+    /var/tmp/.evil2
+  endscript
+}
+EOF
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-logrotate -- ')
+    [ "${main_count}" = "1" ]
+}
