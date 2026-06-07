@@ -415,3 +415,18 @@ setup() {
     # the module-lib substrate.
     head -3 "${LIB}" | grep -qE 'shellcheck shell=bash|sourced'
 }
+
+@test "INVARIANT (SELFDEF_MODULE_LIB_VERSION_REQUIRED gate prevents reverse-version-compat — anti-downgrade-source contract)" {
+    # Sister to brain-wide library-version INVARIANT family.
+    # The lib's version-gate code MUST refuse to source if the
+    # caller declares SELFDEF_MODULE_LIB_VERSION_REQUIRED >
+    # SELFDEF_MODULE_LIB_VERSION. A regression that flipped the
+    # comparison would let a v3-required caller source a v2
+    # lib and silently miss helpers the caller expects. Locks
+    # the anti-downgrade-source discipline on the module-lib
+    # substrate.
+    grep -qE 'SELFDEF_MODULE_LIB_VERSION_REQUIRED' "${LIB}"
+    # Check that the gate uses -gt (not -lt — which would be
+    # reversed)
+    grep -qE 'SELFDEF_MODULE_LIB_VERSION_REQUIRED.*-gt' "${LIB}"
+}

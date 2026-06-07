@@ -216,3 +216,13 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # ordering discipline on the guardian unit substrate.
     grep -qE '^After=' "${UNIT}"
 }
+
+@test "INVARIANT (guardian.service uses ProtectSystem= or ProtectKernel directive — hardening discipline)" {
+    # Sister to brain-wide Ring-0 hardening INVARIANT family.
+    # Guardian is a kernel-event tap; minimal hardening set
+    # MUST include at least one Protect* directive. A unit
+    # without ANY hardening would have full /etc-write surface,
+    # making the guardian itself a target. Locks minimal-
+    # hardening discipline on the guardian unit substrate.
+    grep -qE '^Protect[A-Z]' "${UNIT}"
+}

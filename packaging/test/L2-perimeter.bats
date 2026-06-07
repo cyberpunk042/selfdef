@@ -396,3 +396,20 @@ assert arg['index'] == 0, f'arg index must be 0, got {arg[\"index\"]}'
 assert arg['type'] == 'string', f'arg type must be string, got {arg[\"type\"]}'
 "
 }
+
+@test "INVARIANT (YAML spec.kprobes[0].selectors[0].matchActions[0].action=Sigkill — enforcement-not-audit contract)" {
+    # Sister to brain-wide enforcement-action INVARIANT family.
+    # The MS047 perimeter is ENFORCEMENT, not audit — when an
+    # off-allowlist execve is detected, the kernel-fence MUST
+    # SIGKILL the offender. A regression that swapped Sigkill
+    # for Audit/Post (passive) would turn the perimeter into a
+    # logger, defeating its trust-fence purpose. Locks the
+    # Sigkill enforcement-action contract on the perimeter
+    # YAML substrate.
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+action = data['spec']['kprobes'][0]['selectors'][0]['matchActions'][0]['action']
+assert action == 'Sigkill', f'matchAction must be Sigkill, got {action}'
+"
+}

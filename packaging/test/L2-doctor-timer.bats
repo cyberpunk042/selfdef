@@ -343,3 +343,15 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     # discipline on the doctor timer substrate.
     grep -qE '^Unit=selfdef-doctor\.service' "${TIMER}"
 }
+
+@test "INVARIANT (.service ExecStart command argument is exactly \"doctor\" — selfdefctl subcommand contract)" {
+    # Sister to brain-wide ExecStart-args INVARIANT family.
+    # The selfdef-doctor.service's ExecStart MUST be
+    # /usr/bin/selfdefctl doctor (the `doctor` subcommand).
+    # A regression that changed the arg to `audit` or dropped
+    # the arg entirely would surface as selfdefctl printing
+    # its help text instead of running the health check. Locks
+    # the doctor-subcommand discipline on the doctor service
+    # substrate.
+    grep -qE '^ExecStart=/usr/bin/selfdefctl doctor$' "${SERVICE}"
+}

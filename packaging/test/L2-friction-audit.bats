@@ -492,3 +492,17 @@ EOF
     # friction-audit substrate.
     grep -qE 'SELFDEF_FRICTION_AUDIT_MIN_STICKS' "${SCRIPT}"
 }
+
+@test "INVARIANT (emit_ring records carry status field {pass,fail,skip} — operator-triage status-axis contract)" {
+    # Sister to brain-wide emit_ring-schema INVARIANT family.
+    # Ring-buffer records MUST carry a status field whose value
+    # is one of {pass, fail, skip} — operators ls + grep on
+    # status=fail to surface failed audits without parsing the
+    # OCSF jsonl. A regression that emitted status:"error"
+    # instead would break the operator filter. Locks the
+    # bounded-status-vocabulary discipline on the friction-
+    # audit ring substrate.
+    grep -qE 'emit_ring.*"pass"' "${SCRIPT}"
+    grep -qE 'emit_ring.*"fail"' "${SCRIPT}"
+    grep -qE 'emit_ring.*"skip"' "${SCRIPT}"
+}

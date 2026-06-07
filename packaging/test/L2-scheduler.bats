@@ -386,3 +386,17 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^User=root$' "${UNIT}"
     grep -qE '^Group=root$' "${UNIT}"
 }
+
+@test "INVARIANT (.service RestrictAddressFamilies explicitly enumerates AF_UNIX + AF_INET — Ring-0 network-surface lock)" {
+    # Sister to brain-wide RestrictAddressFamilies INVARIANT
+    # family. The scheduler's network surface is bounded:
+    # AF_UNIX (local IPC to selfdef-daemon backpressure
+    # monitor) + AF_INET / AF_INET6 (Prometheus metric scrape).
+    # The directive MUST enumerate exactly these — a regression
+    # adding AF_NETLINK or AF_PACKET would let scheduler tap
+    # raw network surfaces it has no business using. Locks the
+    # explicit-enumeration discipline on the scheduler
+    # RestrictAddressFamilies substrate.
+    grep -qE '^RestrictAddressFamilies=.*AF_UNIX' "${UNIT}"
+    grep -qE '^RestrictAddressFamilies=.*AF_INET' "${UNIT}"
+}
