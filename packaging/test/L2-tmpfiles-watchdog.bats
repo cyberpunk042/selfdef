@@ -377,3 +377,17 @@ EOF
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*tmpfiles'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # tmpfiles-watchdog runs ON the timer's scheduled fire —
+    # diffs /etc/tmpfiles.d + /usr/lib/tmpfiles.d against
+    # baseline, emits a verdict on suspicious file-creation
+    # entries (boot-time persistence vector), then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the tmpfiles-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/tmpfiles-watchdog/systemd/selfdef-tmpfiles.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
