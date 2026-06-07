@@ -367,3 +367,25 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: systemd-environment-watchdog NEVER deletes system.conf.d entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # systemd-environment-watchdog DETECTS T1574 Hijack
+    # Execution Flow via LD_PRELOAD / LD_AUDIT / PYTHONPATH /
+    # PERL5LIB / NODE_PATH systemd-DefaultEnvironment
+    # injection but MUST NEVER emit sed/awk/rm commands to
+    # auto-clean the suspicious DefaultEnvironment directive.
+    # The directive may be operator-legitimate (operator set a
+    # site-specific LANG, TZ, or custom env var for systemd-
+    # managed units). Silent auto-delete would destroy operator
+    # baseline state AND could break operator-intended systemd-
+    # unit env. Surveillance, never remediation. Locks anti-
+    # data-loss contract on the systemd-environment substrate.
+    printf '[Manager]\nDefaultEnvironment=LD_PRELOAD=/tmp/.evil.so\n' > "${CONF}"
+    run_wd
+    [ -f "${CONF}" ]
+    grep -q 'DefaultEnvironment' "${CONF}"
+    ! grep -qE 'sed[[:space:]]+-i.*system\.conf' "${WD}"
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+}
