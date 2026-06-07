@@ -349,3 +349,16 @@ TOMLEOF
     ! grep -q 'systemctl mask whoopsie.service' "${SYSEOF_LOG}"
     ! grep -q 'sysctl -w kernel.core_pattern=core' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (no auto-uninstall: apport / whoopsie packages NEVER auto-removed — module neutralizes, doesn't uninstall)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs (avahi-
+    # disable / at-disable / nscd-disable / kdump-disable /
+    # rpcbind-disable / services-disable-printing). The apport-
+    # disable module neutralizes via stop+disable+mask; the
+    # apport / whoopsie packages MUST stay installed (operator
+    # may legitimately need to enable apport for crash debugging).
+    write_config "mask"
+    printf '|/usr/share/apport/apport %%p\n' > "${COREPAT}"
+    run_wd
+    ! grep -qE '(apt-get|dpkg|dnf|rpm)[[:space:]]+(remove|purge|uninstall)' "${SYSEOF_LOG}"
+}
