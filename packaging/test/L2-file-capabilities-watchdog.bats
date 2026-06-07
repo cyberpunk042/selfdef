@@ -396,3 +396,16 @@ mk_cap() { printf '#!/bin/sh\n' > "${ROOT}/$1"; chmod 0755 "${ROOT}/$1"; setcap 
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (cap_sys_module dangerous-cap detect on file-cap surface — kernel module loading axis)" {
+    # Sister to capability-conf-watchdog cap_sys_module INVARIANT.
+    # cap_sys_module = direct kernel-module loading primitive.
+    # Closes axis-parity between the two capability-tracking
+    # watchdogs on the cap_sys_module coverage (T1547.006).
+    mk_cap baseline cap_net_raw+ep
+    run_wd
+    mk_cap modload_binary cap_sys_module+ep
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
