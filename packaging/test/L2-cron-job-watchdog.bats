@@ -401,3 +401,18 @@ EOF
     cap | grep -qE '"added":[3-9]'
     cap | grep -qE '"severity":"(warn|alert)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named cron.d file surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # cron.d file (T1053.003 — Scheduled Task/Cron persistence;
+    # cron runs files in /etc/cron.d AS ROOT at scheduled times),
+    # the file path/name MUST surface in the JSON sample so
+    # operator dashboard routes triage to the right path.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '*/5 * * * * root /tmp/.evil' > "${CRON_D}/99-distinctive-attacker-cron"
+    run_wd
+    cap | grep -q 'distinctive-attacker-cron'
+}
