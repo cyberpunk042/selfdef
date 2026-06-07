@@ -278,3 +278,11 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-kernel-cmdline -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (weakener-detect: spectre_v2=off → alert): CPU-side-channel mitigation disable axis" {
+    # spectre_v2=off disables Spectre v2 CPU mitigations. Sister
+    # axis to mitigations=off but more specific. Lock detection.
+    write_cmdline "BOOT_IMAGE=/vmlinuz ro quiet spectre_v2=off"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
