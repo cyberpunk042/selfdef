@@ -313,3 +313,17 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (server under /home — user-writable hijack coverage on xinetd server axis)" {
+    # Sister to many other watchdog's /home user-writable
+    # INVARIANT across the brain. /home is the user-writable
+    # surface — an attacker with regular user account can drop
+    # a malicious server binary into their home and have xinetd
+    # exec it AS ROOT (or as the configured user=) on every
+    # matching network connection. Sister to dhcpd-exec +
+    # postfix-exec /home axes already locked. T1546 — Event
+    # Triggered Execution via xinetd server-on-port.
+    printf 'service evilsvc {\n  socket_type = stream\n  protocol = tcp\n  user = root\n  server = /home/user/.evil-xinetd-server\n  disable = no\n}\n' > "${XD}/evilsvc"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
