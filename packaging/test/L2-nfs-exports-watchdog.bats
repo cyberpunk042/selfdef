@@ -380,3 +380,16 @@ seed_benign() {
     mode="$(stat -c '%a' "${BASELINE}")"
     [ "${mode}" = "600" ] || [ "${mode}" = "640" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # nfs-exports-watchdog runs ON the timer's scheduled fire —
+    # diffs /etc/exports against baseline, emits a verdict on
+    # wildcard/anyone-from-anywhere expansions, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the nfs-exports-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/nfs-exports-watchdog/systemd/selfdef-nfs-exports.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
