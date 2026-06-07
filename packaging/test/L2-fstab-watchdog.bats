@@ -343,3 +343,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (bind-mount shadowing /boot — boot-time persistence vector)" {
+    # Sister to /etc + /bin + /sbin + /root/.ssh + /var + /usr +
+    # /home bind-mount shadow axes. /boot contains kernel +
+    # initramfs + bootloader; shadow lets attacker replace any
+    # of these. T1542 Pre-OS Boot.
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/data/fake-boot /boot none bind 0 0\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
