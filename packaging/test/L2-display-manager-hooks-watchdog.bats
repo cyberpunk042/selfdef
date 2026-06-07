@@ -328,3 +328,15 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-dm-hooks -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (exec-path under writable-root: DM hook invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # display-manager session-trigger root-exec / user-exec —
+    # DM hooks fire on every graphical login session start.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/tmp/staged_payload\n' > "${HOOKD}/Xsession"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
