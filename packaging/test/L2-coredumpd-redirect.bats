@@ -347,3 +347,11 @@ TOMLEOF
     [ ! -f "${DROPIN_DIR}/50-selfdef.conf" ]
     ! grep -qE 'systemctl restart coredump' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (drop-in is chmod 0644 — system-config convention)" {
+    write_config "redirect"
+    run_wd
+    drop_in="${DROPIN_DIR}/50-selfdef.conf"
+    [ -f "${drop_in}" ]
+    [ "$(stat -c '%a' "${drop_in}")" = "644" ]
+}
