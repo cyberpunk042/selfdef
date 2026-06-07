@@ -279,3 +279,18 @@ TOMLEOF
     run_wd
     grep -qE 'PASS_MIN_DAYS[[:space:]]+[1-9]' "${DROPIN}"
 }
+
+@test "INVARIANT (SHA_CRYPT_MIN_ROUNDS >= 5000 in strict — CIS-compliant key-stretching against offline cracking)" {
+    # Sister to ENCRYPT_METHOD SHA512 INVARIANT already locked.
+    # SHA512 crypt rounds count = key-stretching factor against
+    # offline brute-force / dictionary attacks on stolen
+    # /etc/shadow hashes. CIS benchmark + DISA-STIG require
+    # rounds >= 5000 (selfdef strict ships 65536 = 2^16 rounds
+    # which is 13x the floor). Lock the minimum — a regression
+    # that dropped rounds to the libc default (5000 or even
+    # lower) would silently weaken the entire shadow hash
+    # substrate against offline cracking with modern GPUs.
+    write_config "strict"
+    run_wd
+    grep -qE '^SHA_CRYPT_MIN_ROUNDS[[:space:]]+([5-9][0-9]{3}|[0-9]{5,})' "${DROPIN}"
+}
