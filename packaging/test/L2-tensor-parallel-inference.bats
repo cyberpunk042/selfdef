@@ -842,3 +842,8 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
     uni="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '#!/.*bash'
 }
+
+@test "INVARIANT (tensor-parallel-inference install/apply.sh declares non-empty body — non-trivial-script contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/install/apply.sh"
+    [ -s "${apply}" ]
+}

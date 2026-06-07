@@ -684,3 +684,7 @@ assert s == True, f'syscall must be True, got {s!r}'
 @test "INVARIANT (YAML file size is non-zero — non-empty TracingPolicy)" {
     [ -s "${YAML}" ]
 }
+@test "INVARIANT (YAML file has >10 lines — non-trivial-policy contract)" {
+    lines=$(wc -l < "${YAML}")
+    [ "${lines}" -gt 10 ]
+}

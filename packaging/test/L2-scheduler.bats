@@ -599,3 +599,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service file size is non-zero — non-empty unit file)" {
     [ -s "${UNIT}" ]
 }
+@test "INVARIANT (scheduler.service has >10 lines of directives — non-trivial-unit-file contract)" {
+    lines=$(wc -l < "${UNIT}")
+    [ "${lines}" -gt 10 ]
+}

@@ -830,3 +830,7 @@ chk_path = os.path.join('${BATS_TEST_DIRNAME}', '..', '..', 'modules', 'slm-cpu-
     uni="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '#!/.*bash'
 }
+@test "INVARIANT (slm-cpu-loop install/apply.sh declares non-empty body — non-trivial-script contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/apply.sh"
+    [ -s "${apply}" ]
+}

@@ -742,3 +742,8 @@ assert 'sigma-correlator' in p, f'must provide sigma-correlator, got {p!r}'
 @test "INVARIANT (detect-host module.toml file size is non-zero — non-empty manifest)" {
     [ -s "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml" ]
 }
+@test "INVARIANT (detect-host module.toml has >10 lines of declarations — non-trivial-manifest contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    lines=$(wc -l < "${mtoml}")
+    [ "${lines}" -gt 10 ]
+}

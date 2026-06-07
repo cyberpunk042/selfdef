@@ -585,3 +585,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service file size is non-zero — non-empty unit file)" {
     [ -s "${SERVICE}" ]
 }
+@test "INVARIANT (.service is not empty — non-trivial-unit-file contract)" {
+    lines=$(wc -l < "${SERVICE}")
+    [ "${lines}" -gt 5 ]
+}

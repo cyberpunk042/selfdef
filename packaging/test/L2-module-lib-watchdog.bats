@@ -665,3 +665,7 @@ setup() {
 @test "INVARIANT (lib file size is non-zero — non-empty library)" {
     [ -s "${LIB}" ]
 }
+@test "INVARIANT (lib file has >50 lines of code — non-trivial-library contract)" {
+    lines=$(wc -l < "${LIB}")
+    [ "${lines}" -gt 50 ]
+}

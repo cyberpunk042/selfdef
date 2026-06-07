@@ -706,3 +706,6 @@ EOF
 @test "INVARIANT (script ring_dir uses /var/cache/selfdef/friction-audit/ring — canonical-state-path)" {
     grep -qE '/var/cache/selfdef/friction-audit/ring|FRICTION_AUDIT_RING_DIR' "${SCRIPT}"
 }
+@test "INVARIANT (script declares emit_ring function — ring-buffer-emit canonical surface)" {
+    grep -qE '^emit_ring\(\)|emit_ring \(\)' "${SCRIPT}"
+}
