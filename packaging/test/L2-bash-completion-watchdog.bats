@@ -342,3 +342,24 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: bash-completion-watchdog NEVER deletes completion files — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # bash-completion-watchdog DETECTS T1546 bash-completion-
+    # trigger user-exec persistence but MUST NEVER emit rm/
+    # unlink commands to auto-clean the completion file. The
+    # detected completion may be operator-legitimate (custom
+    # tool's tab-completion installer, language-runtime
+    # completion). Silent auto-delete would destroy operator
+    # baseline state AND could break operator's shell-completion
+    # workflow. Surveillance, never remediation. Locks anti-
+    # data-loss contract on the bash-completion surveillance
+    # substrate.
+    seed_benign
+    printf '#!/bin/bash\n/dev/tcp/1.1.1.1/4444\n' > "${HOOKD}/distinctive-attacker-completion"
+    run_wd
+    [ -f "${HOOKD}/distinctive-attacker-completion" ]
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(HOOKD|FILE|file|COMPLETION)'
+}
