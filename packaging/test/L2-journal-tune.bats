@@ -901,3 +901,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     [ -f "${inst_dir}/check.sh" ]
     [ -f "${inst_dir}/uninstall.sh" ]
 }
+
+@test "INVARIANT (journal-tune install/apply.sh declares bash shebang — bash-interpreter contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/journal-tune/install/apply.sh"
+    head -1 "${apply}" | grep -qE '#!/.*bash|#!/usr/bin/env bash'
+}

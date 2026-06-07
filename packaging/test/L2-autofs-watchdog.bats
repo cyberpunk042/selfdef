@@ -887,3 +887,13 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         grep -qE 'logger -t selfdef-' "${s}"
     done
 }
+
+@test "INVARIANT (autofs-watchdog .sh script declares profile-aware exit behavior — operator-extension profile-dispatch contract)" {
+    # Sister to brain-wide profile-aware INVARIANT family.
+    # Scripts MUST handle PROFILE=enforce vs report differently.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/autofs-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'PROFILE.*enforce|enforce.*PROFILE|profile.*enforce' "${s}"
+    done
+}
