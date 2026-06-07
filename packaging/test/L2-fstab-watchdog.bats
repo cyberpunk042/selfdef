@@ -272,3 +272,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! cap | grep -q '"event":"fstab_suspicious_mount"'
     ! cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (multi-file scan: /etc/fstab + /etc/fstab.d/* axes — suspicious mount in fstab.d drop-in → alert)" {
+    # Sister to every other watchdog multi-dir / multi-file scan
+    # INVARIANT across the brain. mount(8) honors /etc/fstab.d/*
+    # drop-ins (typically for site-specific or vendor-shipped
+    # boot mounts) alongside the main /etc/fstab. Attacker may
+    # plant a loop-image-on-writable-root mount in EITHER. Lock
+    # multi-file axis on the boot-mount surface.
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant suspicious loop-image mount in the fstab.d drop-in.
+    printf '/tmp/evil-disk.img /mnt ext4 loop 0 0\n' > "${FSTABD}/site.conf"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
