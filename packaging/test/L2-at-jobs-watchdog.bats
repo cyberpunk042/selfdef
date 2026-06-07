@@ -323,3 +323,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: at-jobs-watchdog NEVER deletes at-job files — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # at-jobs-watchdog DETECTS T1053.001 at-scheduled-task
+    # root-exec persistence but MUST NEVER emit rm/atrm
+    # commands to auto-clean the planted at job. The detected
+    # job may be operator-legitimate (delayed maintenance task,
+    # at-scheduled backup, one-shot reboot). Silent auto-delete
+    # would destroy operator baseline state. Auto-atrm is also
+    # a denial-of-service primitive. Surveillance, never
+    # remediation. Locks anti-data-loss contract on the at-jobs
+    # surveillance substrate.
+    printf '#!/bin/sh\n/tmp/.evil\n' > "${JOB}"
+    run_wd
+    [ -f "${JOB}" ]
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*(atrm|find[[:space:]].*-delete)'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(JOB|FILE|file)'
+}
