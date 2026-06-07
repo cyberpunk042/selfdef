@@ -219,3 +219,40 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-sudo-conf -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no-auto-trust: sudo-conf-watchdog does NOT refresh baseline on suspicious-plugin detection — alert STAYS until operator updates)" {
+    # T1574 setuid-root sudo plugin-load privesc primitive — alert
+    # MUST persist across runs until operator explicitly
+    # re-baselines. Sister to gss-mech, ld-preload, nm-vpn-plugin,
+    # openvpn-config, musl-ld-path, snmpd-exec — active-injection
+    # class never auto-trusts.
+    printf 'Plugin sudoers_policy sudoers.so\n' > "${CONF}"
+    run_wd
+    printf 'Plugin policy /tmp/evil.so\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (Plugin .so under /home: user-writable hijack coverage on Plugin axis)" {
+    # Operator's home dir is a writable-root variant — symmetric
+    # axis to /tmp + /var/tmp + /dev/shm.
+    printf 'Plugin policy /home/user/evil.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable sudo.conf → alert above benign-content bar — file mode IS the architectural surface)" {
+    # Even if sudo.conf content is benign, world-writable file
+    # means any user can plant a malicious Plugin at next sudo
+    # invocation — file mode is the architectural surface (sister
+    # to gss-mech / ld-preload world-writable axis).
+    printf 'Plugin sudoers_policy sudoers.so\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
