@@ -342,3 +342,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -qE '(kill|pkill|killall)[[:space:]]+(-[0-9SIGKILL]+[[:space:]]+)?(-1[[:space:]]+|"?\$[A-Z]+_PID|\$pid)' "${WD}"
     ! grep -qE 'killall[[:space:]]+-9' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # hidden-process-watchdog runs ON the timer's scheduled fire
+    # — diffs /proc PID-list against ps output to surface hidden
+    # processes (rootkit signature), emits a verdict, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the hidden-process-
+    # watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/hidden-process-watchdog/systemd/selfdef-hidden-process.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
