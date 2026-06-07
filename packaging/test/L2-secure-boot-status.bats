@@ -341,3 +341,19 @@ TOMLEOF
     [ -f "${SCRIPT_DST}" ]
     [ "$(stat -c '%a' "${SCRIPT_DST}")" = "755" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family
+    # for timer-driven scheduled probes (entropy-baseline, swap-
+    # encryption-detect, doctor-timer, bootloader-password-
+    # detect, mta-loopback-detect). The secure-boot-status probe
+    # runs ON the timer's scheduled fire — executes ONCE, reads
+    # SecureBoot/SetupMode EFI vars, emits a verdict, then
+    # exits. Type=simple would leave systemd thinking the probe
+    # is a long-running daemon, breaking timer's OnSuccess /
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract
+    # on the secure-boot-status substrate.
+    write_config "monitor"
+    run_wd
+    grep -qE '^Type=oneshot' "${SVC_DST}"
+}
