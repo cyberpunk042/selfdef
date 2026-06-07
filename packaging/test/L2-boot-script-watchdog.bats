@@ -382,3 +382,25 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: boot-script-watchdog NEVER deletes init.d/rc.local entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # boot-script-watchdog DETECTS T1037 boot-time root-exec
+    # persistence but MUST NEVER emit sed/awk/rm commands to
+    # auto-clean the script. The detected script may be
+    # operator-legitimate (custom rc.local for hardware quirk
+    # workaround, legacy LSB init script for sysv-compat
+    # service). Silent auto-delete would destroy operator
+    # baseline state AND could break early-boot service
+    # activation. Surveillance, never remediation. Locks anti-
+    # data-loss contract on the boot-script surveillance
+    # substrate.
+    seed_benign
+    printf '#!/bin/sh\n/dev/tcp/1.1.1.1/4444\nexit 0\n' > "${RCFILE}"
+    run_wd
+    [ -f "${RCFILE}" ]
+    grep -q 'exit 0' "${RCFILE}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*rc\.local'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+}
