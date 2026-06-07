@@ -793,3 +793,9 @@ assert isinstance(data, dict)
     inst_dir="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install"
     [ -d "${inst_dir}" ]
 }
+
+@test "INVARIANT (bridge-l2 install dir non-empty — install-content-presence 74-cycle)" {
+    inst="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install"
+    n=$(ls "${inst}" 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

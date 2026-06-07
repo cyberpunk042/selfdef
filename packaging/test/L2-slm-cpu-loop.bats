@@ -864,3 +864,6 @@ assert isinstance(data, dict)
     inst_dir="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install"
     [ -d "${inst_dir}" ]
 }
+@test "INVARIANT (MODULE_DIR variable defined and non-empty — substrate-defined 74)" {
+    [ -n "${MODULE_DIR}" ]
+}

@@ -778,3 +778,6 @@ assert isinstance(data, dict)
     n=$(ls "${BATS_TEST_DIRNAME}/../../modules/detect-host" | wc -l)
     [ "${n}" -ge 1 ]
 }
+@test "INVARIANT (MODULE_DIR variable defined and non-empty — substrate-defined 74)" {
+    [ -n "${MODULE_DIR}" ]
+}

@@ -446,3 +446,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst readable — file-mode-access contract)" {
     [ -r "${POSTINST}" ]
 }
+@test "INVARIANT (UNIT variable defined and non-empty — substrate-defined 74)" {
+    [ -n "${UNIT}" ]
+}

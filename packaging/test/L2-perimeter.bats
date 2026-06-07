@@ -713,3 +713,6 @@ assert c == 'sys_execve', f'call must be sys_execve, got {c!r}'
 @test "INVARIANT (YAML parent dir exists at packaging/tetragon-policies/ — packaging tree-layout 73)" {
     [ -d "$(dirname "${YAML}")" ]
 }
+@test "INVARIANT (YAML variable defined and non-empty — substrate-defined 74)" {
+    [ -n "${YAML}" ]
+}

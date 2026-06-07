@@ -716,3 +716,9 @@ assert ch == 'install/check.sh'
     inst_dir="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install"
     [ -d "${inst_dir}" ]
 }
+
+@test "INVARIANT (polarproxy install dir non-empty — install-content-presence 74-cycle)" {
+    inst="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install"
+    n=$(ls "${inst}" 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

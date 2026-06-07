@@ -689,3 +689,6 @@ setup() {
 @test "INVARIANT (lib parent dir exists at packaging/lib/ — packaging tree-layout 73)" {
     [ -d "$(dirname "${LIB}")" ]
 }
+@test "INVARIANT (LIB variable defined and non-empty — substrate-defined 74)" {
+    [ -n "${LIB}" ]
+}

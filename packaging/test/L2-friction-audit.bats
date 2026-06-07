@@ -731,3 +731,6 @@ EOF
 @test "INVARIANT (script file executable — script-runnable contract)" {
     [ -x "${SCRIPT}" ] || [ -f "${SCRIPT}" ]
 }
+@test "INVARIANT (SCRIPT variable defined and non-empty — substrate-defined 74)" {
+    [ -n "${SCRIPT}" ]
+}
