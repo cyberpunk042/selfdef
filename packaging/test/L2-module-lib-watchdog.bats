@@ -284,3 +284,22 @@ setup() {
     declare -F run         >/dev/null
     declare -F toml_get    >/dev/null
 }
+
+@test "INVARIANT (lib exports the canonical 4 watchdog helpers: selfdef_injection_patterns + selfdef_is_writable_path + selfdef_is_writable_dir + selfdef_scan_injection — SDD-061 v3 contract)" {
+    # Sister to the existing 5-helper SDD-006 INVARIANT (log/
+    # emit_status/die/run/toml_get). SDD-061 v3 (the watchdog
+    # scan helper consolidation) ships 4 ADDITIONAL helpers that
+    # every detection watchdog module consumes:
+    #   - selfdef_injection_patterns (canonical pattern set)
+    #   - selfdef_is_writable_path (file-path policy)
+    #   - selfdef_is_writable_dir (dir-path policy)
+    #   - selfdef_scan_injection (convenience matcher)
+    # Downstream watchdog scan scripts source the lib and rely
+    # on these names verbatim — renaming any one breaks every
+    # watchdog. Locks the SDD-061 v3 4-helper export discipline
+    # on the module-lib substrate.
+    declare -F selfdef_injection_patterns >/dev/null
+    declare -F selfdef_is_writable_path   >/dev/null
+    declare -F selfdef_is_writable_dir    >/dev/null
+    declare -F selfdef_scan_injection     >/dev/null
+}
