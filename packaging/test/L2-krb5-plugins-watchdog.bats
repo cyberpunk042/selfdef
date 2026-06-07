@@ -285,3 +285,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named krb5 plugin .so path surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker swaps the
+    # module path to a distinctively-named writable path, the
+    # path MUST surface in the JSON sample so operator dashboard
+    # routes triage to the right code-load surface (T1574/T1546
+    # — Hijack Execution Flow via GSSAPI plugin .so).
+    printf '[plugins]\n  clpreauth = { module = pkinit:/usr/lib/krb5/plugins/preauth/pkinit.so }\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[plugins]\n  kdcpreauth = { module = evil:/tmp/.distinctive-attacker-mod.so }\n' > "${CONF}"
+    run_wd
+    cap | grep -q 'distinctive-attacker-mod'
+}
