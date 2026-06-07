@@ -376,3 +376,18 @@ TOMLEOF
     ! [ -f "${SYSTEMD_DIR}/tmp.mount.d/50-selfdef.conf" ]
     ! [ -f "${SYSTEMD_DIR}/var-tmp.mount.d/50-selfdef.conf" ]
 }
+
+@test "INVARIANT (drop-in is chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs. The systemd
+    # mount drop-ins are world-readable so systemd at boot can
+    # consume them, and root-write-only to prevent silent
+    # tampering of /tmp / /var/tmp mount semantics.
+    write_config "noexec"
+    run_wd
+    drop_in="${SYSTEMD_DIR}/tmp.mount.d/50-selfdef.conf"
+    [ -f "${drop_in}" ] || drop_in="${SYSTEMD_DIR}/var-tmp.mount.d/50-selfdef.conf"
+    if [ -f "${drop_in}" ]; then
+        mode="$(stat -c '%a' "${drop_in}")"
+        [ "${mode}" = "644" ] || [ "${mode}" = "640" ] || [ "${mode}" = "600" ]
+    fi
+}
