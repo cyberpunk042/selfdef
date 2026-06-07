@@ -373,3 +373,26 @@ EOF
     cap | grep -q '"event":"new_privileged_account"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (T1136 — Create Account axis: attacker creates a service-style account with system-uid range that nobody-uses → ALSO surfaced)" {
+    # Sister to the uid=0 impostor + sudo-group + new-ordinary-user
+    # axes already locked. Attacker may avoid uid=0 (loud) AND avoid
+    # adding to sudo group (loud) by creating a service-style account
+    # in the system-uid range (UID<1000 typical service range) with
+    # an interactive shell — a long-game persistence vector that
+    # service-account-lock would neutralize but only if the operator
+    # already ran it. Locks: a NEW UID-range-100 account with
+    # interactive shell STILL surfaces as new_account (even though
+    # not privileged) — operator can triage from there. Closes the
+    # T1136 (Create Account) axis on the account-watchdog surface.
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo 'sneaky-svc:x:107:107:Sneaky Service:/var/lib/sneaky:/bin/bash' >> "${PASSWD_FILE}"
+    run_wd
+    # Either new_account event OR new_privileged_account (if some
+    # heuristic catches the bash-shell + service-uid combo).
+    cap | grep -qE '"event":"(new_account|new_privileged_account)"'
+    cap | grep -qE '"severity":"(warn|alert)"'
+    cap | grep -q 'sneaky-svc'
+}
