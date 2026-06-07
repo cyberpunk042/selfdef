@@ -341,3 +341,12 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (weakener-detect: ignore_loglevel → alert): debug-output exfil axis surface" {
+    # Sister to boot-time weakener family. ignore_loglevel
+    # raises dmesg output so kernel pointer values, build-config
+    # details, etc. leak to userspace — recon primitive.
+    write_cmdline "BOOT_IMAGE=/vmlinuz ro ignore_loglevel"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
