@@ -265,3 +265,17 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
         *) false ;;
     esac
 }
+
+@test "INVARIANT (.service ExecStart points at /usr/bin/selfdefctl — packaging contract honored)" {
+    # Sister to brain-wide ExecStart packaging-path INVARIANT
+    # family. The doctor.service MUST invoke /usr/bin/selfdefctl
+    # (Debian-package install path), not /usr/local/bin or
+    # /opt/selfdef — those are operator-extension paths that
+    # would bypass the package manifest. A regression that
+    # switched ExecStart to /usr/local/bin would surface as
+    # "doctor.timer fires but selfdefctl not found" on hosts
+    # where the package shipped the binary to /usr/bin/. Locks
+    # the Debian-package binary-path discipline on the doctor
+    # service substrate.
+    grep -qE '^ExecStart=/usr/bin/selfdefctl' "${SERVICE}"
+}
