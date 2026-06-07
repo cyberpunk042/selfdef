@@ -400,3 +400,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on crontab-allow surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The crontab-allow-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1053.003 cron-grant access-list surveillance
+    # alert. Locks parser contract on the cron.allow/at.allow
+    # delta detection surface.
+    printf 'alice\n' > "${CA}"
+    printf 'someone\n' > "${AA}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    printf 'alice\nevil\n' > "${CA}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
