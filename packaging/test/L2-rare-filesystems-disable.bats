@@ -356,3 +356,20 @@ TOMLEOF
     [ -f "${MODPROBE_FILE}" ]
     ! grep -qE 'apt-get|dpkg|dnf|rpm' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on rare-filesystems-disable surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The rare-filesystems-disable installer MUST only emit
+    # severity values from the closed set {ok,warn,alert} —
+    # never custom values (critical, error, fatal, notice,
+    # info). Operator dashboard parsers branch on the literal
+    # severity string; an out-of-set value silently falls
+    # through routing and the operator never sees the rare-fs
+    # neutralization status alert. Locks parser contract on the
+    # rare-filesystems-disable installer JSON surface
+    # (consistency-with-watchdog-family discipline).
+    write_config "baseline"
+    output="$(run_wd 2>&1)"
+    bad=$(printf '%s\n' "${output}" | grep -oE '"severity":"[^"]+"' | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
