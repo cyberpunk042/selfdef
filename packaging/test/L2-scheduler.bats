@@ -360,3 +360,16 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # ordering discipline on the scheduler unit substrate.
     grep -qE '^After=zfs-mount\.service' "${UNIT}"
 }
+
+@test "INVARIANT (.service ExecStart=/usr/local/bin/selfdef-scheduler — derivation-source binary-path discipline)" {
+    # Sister to brain-wide ExecStart-path INVARIANT family.
+    # The scheduler binary lives at /usr/local/bin/ (operator-
+    # extension path, NOT the Debian-packaged /usr/bin/) because
+    # the scheduler is the SDD-031 Goldilocks routing layer
+    # built per-host from the avx-plus-plus dump. A regression
+    # that swapped to /usr/bin/ would silently look up the
+    # debian-package-installed binary (which may be older or
+    # missing altogether). Locks the operator-extension binary-
+    # path discipline on the scheduler service substrate.
+    grep -qE '^ExecStart=/usr/local/bin/selfdef-scheduler' "${UNIT}"
+}
