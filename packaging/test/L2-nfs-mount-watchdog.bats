@@ -360,3 +360,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity field is bounded vocabulary {ok,warn,alert} — operator dashboard severity axis lock)" {
+    # Sister to brain-wide bounded-vocabulary INVARIANTs across
+    # the brain. severity field surfaces on operator dashboard
+    # color-coded severity axis. A future refactor introducing
+    # a fifth value (e.g. 'critical' or 'info') would silently
+    # bucket as unknown on the dashboard's color-mapping. Lock
+    # the bounded set so any new severity value is intentional
+    # + dashboard-mapped, not a silent regression.
+    mk_findmnt
+    write_mounts $'nfs4\t/mnt/test\tnosuid,nodev,relatime'
+    run_wd
+    sev=$(cap | grep -oE '"severity":"[^"]+"' | head -1)
+    case "${sev}" in
+        '"severity":"ok"'|'"severity":"warn"'|'"severity":"alert"') : ;;
+        *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
+    esac
+}
