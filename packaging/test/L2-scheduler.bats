@@ -545,3 +545,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service After= chain includes selfdef-guardian.service — Ring-0 ordering contract)" {
     grep -qE '^After=.*selfdef-guardian' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler unit Documentation references SDD-031 — operator-spec-link discipline)" {
+    grep -qE '^Documentation=.*sdd/031' "${UNIT}"
+}

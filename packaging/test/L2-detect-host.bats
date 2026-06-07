@@ -613,3 +613,17 @@ c = data.get('consumes')
 assert isinstance(c, list), f'consumes must be TOML list, got {type(c).__name__}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml requires field present as TOML list of inline-tables — runtime-dependency contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('requires')
+assert isinstance(r, list), f'requires must be TOML list, got {type(r).__name__}'
+for e in r:
+    assert isinstance(e, dict), f'requires entry must be inline-table, got {type(e).__name__}'
+"
+}

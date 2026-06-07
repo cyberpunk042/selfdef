@@ -603,3 +603,8 @@ setup() {
 @test "INVARIANT (lib's run() helper handles DRY_RUN=1 by logging instead of executing — anti-side-effect dry-run contract)" {
     awk '/^run\(\)/,/^}/' "${LIB}" | grep -qE 'DRY_RUN.*1|\[\[ *.DRY_RUN'
 }
+
+@test "INVARIANT (lib's selfdef_injection_patterns emits at least 8 patterns — comprehensive-RCE-coverage contract)" {
+    n=$(selfdef_injection_patterns | grep -c .)
+    [ "${n}" -ge 8 ]
+}

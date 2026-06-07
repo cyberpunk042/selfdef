@@ -660,3 +660,15 @@ a = (data.get('profiles') or {}).get('available', [])
 assert isinstance(a, list), f'profiles.available must be TOML list, got {type(a).__name__}'
 "
 }
+
+@test "INVARIANT (vpn-bridge module.toml provides field present as TOML list — capability-export contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/vpn-bridge/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+p = data.get('provides')
+assert isinstance(p, list), f'provides must be TOML list, got {type(p).__name__}'
+"
+}

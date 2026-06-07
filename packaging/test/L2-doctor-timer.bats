@@ -527,3 +527,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (init checklist Step 11 references --now on enable — boot-and-fire-immediately contract)" {
     grep -qE 'systemctl enable --now selfdef-doctor.timer' "${INIT}"
 }
+
+@test "INVARIANT (.timer file path matches the .service file path in same directory — sister-unit-co-location contract)" {
+    [ "$(dirname "${TIMER}")" = "$(dirname "${SERVICE}")" ]
+}

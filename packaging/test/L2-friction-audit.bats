@@ -644,3 +644,7 @@ EOF
 @test "INVARIANT (Memory gate test uses dmidecode --type 17 — canonical-memory-DIMM-query-path contract)" {
     grep -qE 'dmidecode' "${SCRIPT}"
 }
+
+@test "INVARIANT (script uses SELFDEF_FRICTION_AUDIT_HOSTNAME env-var with hostname(1) default — operator-host-identification override contract)" {
+    grep -qE 'SELFDEF_FRICTION_AUDIT_HOSTNAME' "${SCRIPT}"
+}

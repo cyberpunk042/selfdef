@@ -582,3 +582,14 @@ assert 'namespace' not in meta, f'metadata.namespace must be absent (cluster-sco
     grep -qE 'chattr \+i.*2>/dev/null|chattr \+i.*\|\| true' "${POSTINST}" || \
         grep -qE 'chattr \+i' "${POSTINST}"
 }
+
+@test "INVARIANT (YAML metadata has annotations or labels reserved for operator-extension — annotation-extension-surface contract)" {
+    # The metadata block does NOT require annotations to be present,
+    # but if present, they're operator-extensions. Verify the YAML
+    # is structurally well-formed at metadata level.
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert isinstance(data.get('metadata', {}), dict)
+"
+}

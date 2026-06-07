@@ -715,3 +715,15 @@ s = data.get('summary', '')
 assert s, f'summary must be non-empty, got {s!r}'
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml [install] apply = \"install/apply.sh\" — install apply path canonical contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ap = (data.get('install') or {}).get('apply', '')
+assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {ap!r}'
+"
+}

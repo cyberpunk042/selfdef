@@ -732,3 +732,17 @@ c = data.get('category', '')
 assert c, f'category must be non-empty, got {c!r}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml requires field present as TOML list of inline-tables — runtime-dependency contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('requires')
+assert isinstance(r, list), f'requires must be TOML list, got {type(r).__name__}'
+for e in r:
+    assert isinstance(e, dict), f'requires entry must be inline-table, got {type(e).__name__}'
+"
+}

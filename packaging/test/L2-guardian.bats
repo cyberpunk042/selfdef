@@ -360,3 +360,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst pre-creates /var/cache/selfdef/guardian/ring — ring-buffer staging contract)" {
     grep -qE '/var/cache/selfdef/guardian/ring' "${POSTINST}"
 }
+
+@test "INVARIANT (postinst pre-creates /mnt/vault/context ONLY if mountpoint — ZFS-mount-aware staging contract)" {
+    grep -qE 'mountpoint -q /mnt/vault' "${POSTINST}"
+}

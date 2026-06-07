@@ -844,3 +844,15 @@ a = (data.get('profiles') or {}).get('available', [])
 assert isinstance(a, list), f'profiles.available must be TOML list, got {type(a).__name__}'
 "
 }
+
+@test "INVARIANT (auditd-immutable module.toml phase field present + canonical value — install-pass-ordering contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-immutable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+p = data.get('phase', '')
+assert p in {'main', 'early', 'late', 'pre', 'post'}, f'phase must be canonical, got {p!r}'
+"
+}
