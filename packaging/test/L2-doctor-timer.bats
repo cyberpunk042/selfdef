@@ -242,3 +242,26 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qE '^Description=' "${TIMER}"
     grep -qiE 'selfdef|doctor|health' "${TIMER}"
 }
+
+@test "INVARIANT (.service ReadOnlyPaths enumeration covers all doctor read targets — explicit-allowlist hardening discipline)" {
+    # Sister to brain-wide Ring-0 hardening INVARIANT family.
+    # The doctor's ProtectSystem=strict alone forbids ALL
+    # writes to /etc but ALSO would forbid reads on
+    # mount-namespaced ProtectSystem=strict targets without
+    # ReadOnlyPaths explicit-allowlist. The ReadOnlyPaths
+    # directive MUST enumerate all 4 doctor input dirs
+    # (/etc/selfdef, /etc/tetragon, /usr/local/bin,
+    # /usr/share/selfdef) so a future regression that adds a
+    # new doctor-input dir without ALSO adding it to
+    # ReadOnlyPaths trips this assertion. Locks the explicit-
+    # allowlist enumeration discipline on the doctor service
+    # substrate (sister to the existing ReadOnlyPaths
+    # individual-path INVARIANTs).
+    count=$(grep -cE '^ReadOnlyPaths=' "${SERVICE}")
+    [ "${count}" -eq 1 ]
+    rop=$(grep '^ReadOnlyPaths=' "${SERVICE}")
+    case "${rop}" in
+        *"/etc/selfdef"*"/etc/tetragon"*"/usr/local/bin"*"/usr/share/selfdef"*) ;;
+        *) false ;;
+    esac
+}
