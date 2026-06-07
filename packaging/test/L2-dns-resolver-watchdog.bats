@@ -362,3 +362,44 @@ EOF
     # script doesn't crash + emits a record.
     cap | grep -qE '"event":"[a-z_]+"'
 }
+
+@test "INVARIANT (nameserver-add severity precedence: add + search-removed in same scan → alert wins over warn)" {
+    # When multiple deltas of different severities surface in the
+    # same scan, alert (nameserver add) wins over warn (search-
+    # removed). Sister to sudoers-integrity severity-precedence
+    # INVARIANT.
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 1.1.1.1
+nameserver 9.9.9.9
+nameserver 6.6.6.6
+search example.com
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-dns-resolver -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (multi-IP nameserver-add: 3 attacker resolvers in one scan → still single alert; consolidation)" {
+    # When attacker stacks multiple nameserver entries in one
+    # change, single alert JSON record fires with all IPs in the
+    # added_sample. Locks consolidation discipline.
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 1.1.1.1
+nameserver 9.9.9.9
+nameserver 6.6.6.1
+nameserver 6.6.6.2
+nameserver 6.6.6.3
+search example.com internal.example.com
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-dns-resolver -- ')
+    [ "${main_count}" = "1" ]
+}
