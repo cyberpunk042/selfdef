@@ -254,3 +254,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (relative-path interpreter 'sub/dir/p' → alert)" {
+    # Sister to the writable-root axes already locked. A non-
+    # absolute interpreter path is resolved by the kernel against
+    # PWD-at-exec time — undefined behavior + attacker primitive
+    # because the resolution depends on what dir the matching
+    # binary is invoked from. Locks detection of relative
+    # interpreters alongside the absolute-writable-root family.
+    # Sister to request-key-watchdog relative-callout INVARIANT
+    # already locked on the kernel-trigger code-load family.
+    printf ':evil:M:0:magic:mask:sub/dir/interpreter:OC\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
