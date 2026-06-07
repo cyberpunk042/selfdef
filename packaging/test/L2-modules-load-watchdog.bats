@@ -280,3 +280,21 @@ EOF
     cap | grep -qE '"added":[1-9]'
     cap | grep -qE '"removed":[1-9]'
 }
+
+@test "INVARIANT (pre-existing world-writable modules-load.d/*.conf): baseline_initial fires alert at install-time" {
+    # Sister to every other watchdog pre-existing-world-writable
+    # baseline_initial INVARIANT across the brain. The install-time-
+    # vet contract: if a modules-load.d/*.conf file is ALREADY world-
+    # writable when selfdef first installs the watchdog, the first
+    # run MUST raise alert (or at least warn) — not silently baseline
+    # a broken security posture. Closes the install-time-vet axis on
+    # the kernel-module persistence surface (T1547.006 — world-
+    # writable conf lets any user queue an arbitrary module load at
+    # next boot, sister to the world-writable-during-runtime axis
+    # already locked above).
+    printf 'overlay\nbr_netfilter\n' > "${CONF}"
+    chmod 0666 "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
