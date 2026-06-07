@@ -300,3 +300,17 @@ CCEOF
     run_wd
     cap | grep -qE '"ref_id":'
 }
+
+@test "INVARIANT (DELTA detect — distinctive-attacker NTP ref_id surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker repoints
+    # chrony to a distinctive NTP source (e.g. attacker-controlled
+    # server), the ref_id MUST surface in the JSON sample so
+    # operator dashboard routes triage to the right source —
+    # operators MUST be able to tell WHICH NTP server provided
+    # time without re-querying chronyc themselves. T1565.002 —
+    # Transmitted Data Manipulation via NTP MITM.
+    mk_chronyc 0 "$(tracking_block "0.001" "0.001" "0.001" | sed 's/^Reference ID.*$/Reference ID    : DEAD1337 (distinctive-attacker-ntp.evil.example)/')"
+    run_wd
+    cap | grep -q 'DEAD1337\|distinctive-attacker-ntp'
+}
