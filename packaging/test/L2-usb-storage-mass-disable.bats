@@ -330,3 +330,22 @@ usb_storage            73728  0' DRY_RUN=1 run_wd
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"usb-storage-mass-disable"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (header-marker discipline: drop-in carries 'selfdef' self-identifying header — head-grep stale-cleanup discipline)" {
+    # Sister to brain-wide header-marker discipline INVARIANTs
+    # across L2 drop-in suites. The usb-storage-mass-disable
+    # drop-in under /etc/modprobe.d/50-selfdef-usb-storage.conf
+    # MUST carry a comment marker identifying it as selfdef-
+    # managed so a stale-cleanup head -2 grep at uninstall time
+    # can identify which files selfdef owns vs which is
+    # operator-original. Without a marker, a subsequent
+    # uninstaller could not tell apart operator baseline modprobe
+    # rules from selfdef-injected blacklist directives — risking
+    # accidental rollback of operator changes. Locks marker-
+    # discipline on the usb-storage modprobe.d substrate.
+    write_config "blocked"
+    run_wd
+    dropin="${MODPROBE_D}/50-selfdef-usb-storage.conf"
+    [ -f "${dropin}" ]
+    grep -qE '^#.*(selfdef|usb-storage-mass-disable|managed)' "${dropin}"
+}
