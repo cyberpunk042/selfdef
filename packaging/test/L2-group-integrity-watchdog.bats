@@ -422,3 +422,16 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (kvm group privileged add → alert — VM-launch escape-to-host axis)" {
+    # Sister to shadow / sudo / wheel / docker / adm / disk
+    # privileged-group axes. kvm group → /dev/kvm access → VM
+    # launch that mounts host filesystem r/w → T1611 Escape
+    # to Host.
+    write_passwd_group
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo 'kvm:x:103:evil-kvm-attacker' >> "${GROUP_FILE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
