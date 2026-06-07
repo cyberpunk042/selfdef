@@ -161,3 +161,17 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -qE '^After=.*network-online\.target' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
     grep -qE '^Wants=.*network-online\.target' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
 }
+
+@test "INVARIANT (polarproxy.service template carries RestartSec — restart-storm dampener for systemd-supervised TLS-MITM)" {
+    # Sister to brain-wide systemd RestartSec INVARIANTs
+    # (scheduler, integrity-sentinel). PolarProxy is a TLS MITM
+    # listener; if the binary fails to start (missing CA cert,
+    # bad config) systemd would re-fork it in tight loop without
+    # RestartSec — exhausting the system with CPU + log spam.
+    # The Restart=on-failure directive (already locked above)
+    # MUST be paired with a RestartSec= delay so failed-start
+    # cascades pace at human-tractable rate (1s+) for operator
+    # MTTR. Locks restart-storm-cap contract on the TLS-MITM
+    # substrate.
+    grep -qE '^RestartSec=' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
