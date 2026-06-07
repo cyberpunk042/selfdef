@@ -415,3 +415,18 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (world-writable-watchdog timer unit declares Persistent=true — catch-up-after-downtime contract)" {
+    # Sister to brain-wide timer Persistent INVARIANT family.
+    # Locks Persistent= discipline on the world-writable-watchdog timer
+    # substrate.
+    timer="${BATS_TEST_DIRNAME}/../../modules/world-writable-watchdog/systemd"
+    found=0
+    for t in "${timer}"/*.timer; do
+        [ -f "${t}" ] || continue
+        if grep -qE '^Persistent=true' "${t}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}

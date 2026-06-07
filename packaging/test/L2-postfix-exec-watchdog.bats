@@ -453,3 +453,18 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (postfix-exec-watchdog timer unit declares Persistent=true — catch-up-after-downtime contract)" {
+    # Sister to brain-wide timer Persistent INVARIANT family.
+    # Locks Persistent= discipline on the postfix-exec-watchdog timer
+    # substrate.
+    timer="${BATS_TEST_DIRNAME}/../../modules/postfix-exec-watchdog/systemd"
+    found=0
+    for t in "${timer}"/*.timer; do
+        [ -f "${t}" ] || continue
+        if grep -qE '^Persistent=true' "${t}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
