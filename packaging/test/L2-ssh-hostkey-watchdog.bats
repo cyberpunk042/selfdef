@@ -363,3 +363,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"severity":"alert"'
     cap | grep -qE 'RSA'
 }
+
+@test "INVARIANT (all host keys removed — operator-clearing-state surfaces in JSON observable)" {
+    # When operator wipes /etc/ssh/ host keys (rare but possible —
+    # reinstall, re-image, reset-to-factory), the watchdog should
+    # surface the event as observable: every key REMOVED in one
+    # scan. Sister to access-conf REMOVED + dns-resolver mass-flush
+    # axes. Locks the operator-visibility contract: even a
+    # legitimate state reset must be observable on the dashboard
+    # for operator-confirmation flow.
+    mk_key ed25519 "ssh-ed25519 ORIGINAL root@host"
+    mk_key rsa     "ssh-rsa     BBBBBBBB root@host"
+    run_wd
+    rm -f "${KEYDIR}"/*
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"removed":[1-9]'
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
