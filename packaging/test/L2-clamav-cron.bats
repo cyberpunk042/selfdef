@@ -354,3 +354,17 @@ Scanned files: 1"
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert,high}" ;;
     esac
 }
+
+@test "INVARIANT (no auto-uninstall: clamav-cron watchdog NEVER emits package-remove commands on clamav)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The clamav-cron watchdog invokes freshclam +
+    # clamscan but MUST NEVER emit shell commands that
+    # uninstall the clamav package itself (apt/dpkg/dnf/rpm/yum
+    # remove|purge|uninstall clamav|clamav-daemon|clamav-
+    # freshclam). Silent auto-removal would leave the host
+    # with no AV scanner — T1562.001 Impair Defenses self-
+    # defeat by the very module meant to detect malware.
+    # Locks anti-package-removal contract on the clamav AV
+    # substrate.
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+clamav' "${WD}"
+}
