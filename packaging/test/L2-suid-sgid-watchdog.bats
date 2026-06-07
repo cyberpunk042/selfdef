@@ -406,3 +406,16 @@ mk_suid() { printf 'ELF-%s' "$1" > "${ROOT}/$1"; chmod 4755 "${ROOT}/$1"; }
     [[ "${perms}" =~ ^[6-7][0-9][0-9][0-9]$ ]] || [[ "${perms}" =~ ^4[0-9][0-9][0-9]$ ]] || [[ "${perms}" =~ ^[4-7][0-9]{3}$ ]]
     ! grep -qE 'chmod[[:space:]]+(u-s|-s|0[0-7][0-9][0-9])[[:space:]].*\$\{?(SUID|TARGET|ROOT|file)' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # suid-sgid-watchdog runs ON the timer's scheduled fire —
+    # enumerates suid/sgid binaries across canonical paths +
+    # diffs against baseline, emits a verdict, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the suid-sgid-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/suid-sgid-watchdog/systemd/selfdef-suid-sgid.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
