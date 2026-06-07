@@ -352,3 +352,11 @@ TOMLEOF
     [ ! -f "${JAIL_D}/60-selfdef-recidive.conf" ]
     ! grep -qE 'systemctl (restart|reload) fail2ban' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (drop-in chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs.
+    write_config "standard"
+    run_wd
+    [ -f "${JAIL_D}/50-selfdef.conf" ]
+    [ "$(stat -c '%a' "${JAIL_D}/50-selfdef.conf")" = "644" ]
+}
