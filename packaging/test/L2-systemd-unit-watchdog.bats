@@ -439,3 +439,25 @@ EOF
     # logger line carries the unit name (per SDD-062 detail tag).
     cap | grep -q 'distinctive-attacker'
 }
+
+@test "INVARIANT (.timer enabled-unit added → alert: T1053.006 systemd-timer persistence axis sister to T1543.002)" {
+    # Sister to many other watchdog DELTA-ADDED INVARIANTs across
+    # the brain on adjacent persistence axes. T1543.002 systemd-
+    # service is the canonical axis; T1053.006 systemd-timer is
+    # the sister axis. A .timer enabled at boot can fire any
+    # ExecStart on its OnCalendar/OnBootSec schedule, including
+    # attacker-controlled commands. The watchdog enumerates
+    # enabled units via systemctl list-unit-files; .timer must
+    # surface in the inventory just like .service / .socket.
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    export SYSTEMD_UNITS="sshd.service nginx.service docker.socket attacker-persistence.timer"
+    cat > "${SYSTEMD_UNIT_DIR}/attacker-persistence.timer" <<'EOF'
+[Timer]
+OnCalendar=*:0/5
+ExecStart=/tmp/.x
+EOF
+    run_wd
+    cap | grep -q 'attacker-persistence.timer'
+}
