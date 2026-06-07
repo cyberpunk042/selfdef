@@ -299,3 +299,24 @@ run_wd() {
     run_wd
     ! grep -qE '^allow' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
 }
+
+@test "INVARIANT (production chrony configs carry selfdef self-identifying first-line — head -1 stale-cleanup discipline)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain (ssh-hardening / journal-tune /
+    # slm-cpu-loop / acct-baseline / auditd-immutable). The
+    # actual production configs at modules/chrony-baseline/
+    # configs/*.conf MUST carry a selfdef-prefixed first-line
+    # comment marker. A stale-cleanup pass (operator housekeeping
+    # or uninstall path) inspects the first non-blank comment line
+    # to identify selfdef-rendered config from operator config.
+    # Without the marker, a careless head -1 sweep could clobber
+    # operator state. Locks the provenance contract on BOTH pool
+    # + nts production sources (the L2 fixture configs use minimal
+    # stub source files for test speed but the real shipped configs
+    # MUST carry the marker — locked here so any rewrite-with-stub
+    # regression is caught).
+    first_pool="$(grep -E -m1 -v '^[[:space:]]*$' modules/chrony-baseline/configs/pool.conf)"
+    first_nts="$(grep -E -m1 -v '^[[:space:]]*$' modules/chrony-baseline/configs/nts.conf)"
+    [[ "${first_pool}" == *"selfdef"* ]]
+    [[ "${first_nts}" == *"selfdef"* ]]
+}
