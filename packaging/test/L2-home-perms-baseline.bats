@@ -362,3 +362,21 @@ run_wd() {
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"home-perms-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-delete: home-perms-baseline NEVER deletes /home dirs — chmod-only contract)" {
+    # Sister to brain-wide no-auto-delete + surveillance-not-
+    # destruction INVARIANTs across L2 suites. The home-perms-
+    # baseline installer ONLY narrows /home/* directory modes
+    # (typically 0755 → 0700/0750) but MUST NEVER emit rm/
+    # rmdir/find -delete commands against /home subdirs. Auto-
+    # deletion would catastrophically destroy operator + user
+    # data — files in home dirs are the highest-value forensic
+    # + operational data on the system. Locks anti-data-loss
+    # contract on the home-perms-baseline substrate.
+    write_config "strict"
+    mk_home alice 1001 0755
+    output="$(run_wd 2>&1)"
+    [ -d "${HOMES}/alice" ]
+    ! printf '%s\n' "${output}" | grep -qE '(rm[[:space:]]+(-rf?|-fr?)?[[:space:]]+"?'"${HOMES}"'|rmdir[[:space:]]+|find[[:space:]].*-delete)'
+    ! grep -qE '(rm[[:space:]]+-rf|find[[:space:]].*-delete)[[:space:]].*\$\{?HOME' "${WD}"
+}
