@@ -233,3 +233,54 @@ seed_benign() {
     cap | grep -q '"event":"limits_conf_core_reenabled"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (tab-separated grammar: tab-delimited fields still parsed for core re-enable)" {
+    # Attacker may use tabs to defeat naive ' ' grep. Watchdog parser
+    # MUST treat tab the same as space for the domain/type/item/value
+    # positional grammar.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '*\thard\tcore\tunlimited\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (specific-user domain: 'alice hard core unlimited' → alert; the * wildcard isn't the only triggering domain)" {
+    # Attacker may plant a per-user limit to capture a specific
+    # account's process memory without touching the * wildcard.
+    # Watchdog scope MUST cover ANY domain, not only the wildcard.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '* soft nofile 1024\n* hard core 0\nalice hard core unlimited\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"limits_conf_core_reenabled"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-drop-in: a second limits.d file ALSO planted with core-reenable → still alerts; per-file scope holds)" {
+    # Attacker may layer multiple drop-ins to fragment the scan
+    # surface. Watchdog must enumerate every .conf under limits.d
+    # and evaluate each, not stop at the first one.
+    LIMITSD="${TMP}/limits.d"
+    mkdir -p "${LIMITSD}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        SELFDEF_LIMITS_D="${LIMITSD}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant two evil drop-ins (typical fragmentation pattern).
+    printf '* hard core 0\n' > "${LIMITSD}/01-benign.conf"
+    printf 'bob hard core unlimited\n' > "${LIMITSD}/02-evil.conf"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        SELFDEF_LIMITS_D="${LIMITSD}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
