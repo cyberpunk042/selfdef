@@ -733,3 +733,21 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         grep -qE '^OnBootSec=' "${t}"
     done
 }
+
+@test "INVARIANT (time-skew-watchdog timer unit declares WantedBy=timers.target — timer-enable-graph contract)" {
+    # Sister to brain-wide systemd timer [Install].WantedBy=
+    # INVARIANT family. Watchdog .timer units MUST declare
+    # WantedBy=timers.target so `systemctl enable selfdef-
+    # <slug>.timer` wires the timer into the timers.target
+    # symlink-graph + activates it on every boot. A
+    # regression that swapped to WantedBy=multi-user.target
+    # (the .service-side install target) would make the
+    # timer enable-step a no-op + leave the watchdog
+    # silently inactive. Locks the timer-enable-graph
+    # discipline.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        grep -qE '^WantedBy=timers.target' "${t}"
+    done
+}

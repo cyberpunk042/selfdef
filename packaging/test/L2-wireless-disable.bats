@@ -767,3 +767,25 @@ c = data.get('category', '')
 assert c, f'category must be non-empty, got {c!r}'
 "
 }
+
+@test "INVARIANT (wireless-disable module.toml [profiles] block present — operator-config-variant contract)" {
+    # Sister to brain-wide module.toml [profiles] INVARIANT
+    # family. The [profiles] block declares operator-
+    # selectable configuration variants (canonically
+    # "report" / "enforce" for detection modules, or
+    # category-specific variants for hardening modules). A
+    # regression dropping the [profiles] block would leave
+    # operators without a configuration knob + hard-code
+    # behavior. Locks the operator-config-variant discipline
+    # on the wireless-disable substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wireless-disable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+prof = data.get('profiles')
+assert prof is not None, f'[profiles] must be present, got None'
+assert isinstance(prof, dict), f'[profiles] must be TOML table, got {type(prof).__name__}'
+"
+}
