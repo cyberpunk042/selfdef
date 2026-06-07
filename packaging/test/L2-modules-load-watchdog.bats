@@ -239,3 +239,44 @@ EOF
     # is intentional).
     cap | grep -qE '"event":"modules_load_(changed|intact)"'
 }
+
+@test "INVARIANT (auto-trust): modules-load-watchdog DOES auto-refresh baseline on benign delta — sister-pattern with hosts-file/access-conf family" {
+    # benign module-list changes are common operator action (kernel upgrade,
+    # new container runtime requiring overlay/br_netfilter etc.). The
+    # watchdog flags the delta for THIS run; the baseline catches up on the
+    # next. Locks the auto-trust classification against a regression that
+    # copies the no-auto-trust pattern.
+    seed_benign
+    run_wd
+    printf 'overlay\nbr_netfilter\nip_tables\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — warn
+    cap | grep -q '"severity":"warn"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline refreshed
+    cap | grep -q '"event":"modules_load_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/modules-load.d + /run/modules-load.d + /usr/lib/modules-load.d axes — config in ANY → tracked)" {
+    # systemd-modules-load reads from multiple dirs. Attacker may plant
+    # in any. Lock multi-dir axis.
+    CONFD2="${TMP}/run-modules-load.d"; mkdir -p "${CONFD2}"
+    seed_benign
+    DIRS_V="${CONFD} ${CONFD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant a backdoor module in second dir.
+    printf 'evil_backdoor_module\n' > "${CONFD2}/evil.conf"
+    DIRS_V="${CONFD} ${CONFD2}" run_wd
+    cap | grep -q 'evil_backdoor_module'
+}
+
+@test "INVARIANT (JSON 'added' / 'removed' counts surface for operator triage observability)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'overlay\nip_tables\n' > "${CONF}"           # removes br_netfilter, adds ip_tables
+    run_wd
+    cap | grep -qE '"added":[1-9]'
+    cap | grep -qE '"removed":[1-9]'
+}
