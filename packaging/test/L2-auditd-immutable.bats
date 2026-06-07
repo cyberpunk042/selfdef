@@ -296,3 +296,22 @@ EOF
     # NO -e 2 remnant in downgraded audit-profile file.
     ! grep -qE '^-e[[:space:]]+2' "${RULES_D}/99-selfdef-immutable.rules"
 }
+
+@test "INVARIANT (rule file carries selfdef self-identifying header — head -1 stale-cleanup discipline)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain (ssh-hardening / journal-tune /
+    # slm-cpu-loop / tensor-parallel-inference). The rule file
+    # lands at /etc/audit/rules.d/99-selfdef-immutable.rules
+    # alongside operator-hand-authored / vendor / packaging-
+    # provided rule files. A stale-cleanup pass (operator
+    # housekeeping or uninstall path) inspects the first non-
+    # blank comment line to identify selfdef-rendered config
+    # from operator config. Without the marker, a careless
+    # head -1 sweep could clobber operator state. Locks the
+    # provenance contract.
+    write_config "enforce" "true"
+    run_wd
+    [ -f "${RULES_D}/99-selfdef-immutable.rules" ]
+    first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${RULES_D}/99-selfdef-immutable.rules")"
+    [[ "${first_nonblank}" == *"selfdef"* ]]
+}
