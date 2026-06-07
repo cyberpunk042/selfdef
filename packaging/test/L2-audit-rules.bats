@@ -316,3 +316,24 @@ run_wd() {
     [ -f "${RULES_DIR}/30-operator-custom.rules" ]
     grep -q 'operator-only' "${RULES_DIR}/30-operator-custom.rules"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # audit-rules TOML; parser must tolerate without altering the
+    # profile-gated content. paranoid-with-noise still emits the
+    # paranoid rule set (strictly more watch directives than base)
+    # AND augenrules --load fires (atomic rule activation).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "paranoid"
+operator_note = "audit rules — paranoid for AI substrate forensics"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    # Paranoid rule file is installed.
+    [ -f "${RULES_DIR}/50-selfdef-paranoid.rules" ]
+    # augenrules --load fired.
+    grep -qE 'augenrules.*--load' "${AUGEN_LOG}"
+}
