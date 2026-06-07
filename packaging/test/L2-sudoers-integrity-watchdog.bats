@@ -479,3 +479,17 @@ EOF
     ! grep -qE 'find[[:space:]].*-delete' "${WD}"
     ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(SUDOERS_D_DIR|SUDOERS|FILE|file)' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # sudoers-integrity-watchdog runs ON the timer's scheduled
+    # fire — scans /etc/sudoers + sudoers.d for NOPASSWD/
+    # !authenticate/!requiretty additions across user + Runas
+    # alias indirection, emits a verdict, then exits. Type=
+    # simple would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the sudoers-integrity-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/sudoers-integrity-watchdog/systemd/selfdef-sudoers-integrity.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
