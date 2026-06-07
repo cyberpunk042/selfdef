@@ -413,3 +413,27 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (binfmt-watchdog libexec uses logger -t with selfdef- tag — SDD-062 syslog routing contract)" {
+    # Sister to brain-wide SDD-062 logger-tag INVARIANT family.
+    # All watchdog libexec scripts MUST surface JSON records
+    # via logger -t with a selfdef-prefixed tag so downstream
+    # syslog/journald consumers can route per-watchdog records
+    # via the tag field rather than parsing the JSON payload
+    # for the module field. The tag prefix MUST be "selfdef-"
+    # so cross-watchdog SIEM filters (`syslog-ng-filter "selfdef-*"`)
+    # capture every selfdef-watchdog without per-watchdog tag
+    # enumeration. A regression dropping the selfdef- prefix
+    # would cause SIEM filters to silently miss records. Locks
+    # SDD-062 logger-tag routing discipline on the binfmt-watchdog
+    # libexec substrate.
+    wd_libexec="${BATS_TEST_DIRNAME}/../../modules/binfmt-watchdog/systemd"
+    found=0
+    for sh in "${wd_libexec}"/*.sh; do
+        [ -f "${sh}" ] || continue
+        if grep -qE 'logger[[:space:]]+-t[[:space:]]+selfdef-' "${sh}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
