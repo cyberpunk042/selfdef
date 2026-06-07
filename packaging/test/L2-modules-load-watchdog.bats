@@ -406,3 +406,15 @@ EOF
     mode="$(stat -c '%a' "${BASELINE}")"
     [ "${mode}" = "600" ] || [ "${mode}" = "640" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # modules-load-watchdog runs ON the timer's scheduled fire —
+    # diffs /etc/modules-load.d entries against baseline, emits a
+    # verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the modules-load-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/modules-load-watchdog/systemd/selfdef-modules-load.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
