@@ -359,3 +359,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*binfmt'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # binfmt-watchdog runs ON the timer's scheduled fire — diffs
+    # /proc/sys/fs/binfmt_misc against baseline, emits a verdict
+    # on suspicious interpreter registrations, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the binfmt-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/binfmt-watchdog/systemd/selfdef-binfmt.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
