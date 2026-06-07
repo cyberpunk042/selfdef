@@ -164,6 +164,15 @@ TEMPLATES_DIR="${MODULE_DIR}/templates"
     grep -q '/etc/update-motd.d' "${INSTALL_DIR}/apply.sh"
 }
 
+@test "INVARIANT (50-selfdef-presence script is shell-sourceable — bash -n parses cleanly; pam-motd invocation contract)" {
+    # Sister to many other installer module shell-sourceable INVARIANTs
+    # across the brain. pam-motd invokes the dynamic-motd scripts via
+    # bash; the script MUST parse cleanly (no malformed shebang, no
+    # syntax errors). A regression to invalid shell syntax would
+    # silently break the dynamic motd on every login.
+    bash -n "${TEMPLATES_DIR}/50-selfdef-presence"
+}
+
 @test "INVARIANT (50-selfdef-presence script handles missing MODULES_DIR gracefully — defensive contract)" {
     # If /etc/selfdef/modules doesn't exist (selfdef partially installed
     # or test environment), the dynamic motd MUST NOT crash. Lock that
