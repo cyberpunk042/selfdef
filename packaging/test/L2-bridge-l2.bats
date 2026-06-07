@@ -247,3 +247,27 @@ INSTALL_DIR="${MODULE_DIR}/install"
         ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(nftables|nft)' "${f}"
     done
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. The bridge-l2 module.toml declares the l2-bridge +
+    # forward-policy provides contracts that every downstream
+    # inline module (suricata, NFQUEUE attachers, etc.) consumes;
+    # a malformed manifest would break the dependency-resolver
+    # at install-time + leave consumers wedged. Python's tomllib
+    # is the canonical parser — must parse to a dict with the
+    # canonical top-level keys (name, version, provides,
+    # requires, install). Locks anti-malformed-manifest on the
+    # bridge-l2 substrate.
+    python3 -c "
+import tomllib, sys
+with open('${MODULE_DIR}/module.toml', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'bridge-l2', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'provides' in data and 'l2-bridge' in data['provides'], 'l2-bridge missing from provides'
+assert 'forward-policy' in data['provides'], 'forward-policy missing from provides'
+assert 'requires' in data, 'requires missing'
+assert 'install' in data, 'install missing'
+"
+}
