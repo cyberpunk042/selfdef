@@ -340,3 +340,31 @@ EOF
     run_wd
     cap | grep -q 'distinctive-attacker-grant'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. selfdef-polkit-rules tag
+    # must fire EXACTLY ONCE per scan regardless of how many
+    # YES-grant rules surface across multiple .rules files in
+    # a single scan. Multi-line output would break SDD-062
+    # downstream JSON-line consumer (Sigma correlator). Locks
+    # consolidation discipline on the T1548 polkit YES-grant
+    # surveillance surface.
+    cat > "${RULE}" <<'EOF'
+polkit.addRule(function(action, subject) { return polkit.Result.AUTH_ADMIN; });
+EOF
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RULESD}/99-evil-a.rules" <<'EOF'
+polkit.addRule(function(action, subject) { return polkit.Result.YES; });
+EOF
+    cat > "${RULESD}/99-evil-b.rules" <<'EOF'
+polkit.addRule(function(action, subject) { return polkit.Result.YES; });
+EOF
+    cat > "${RULESD}/99-evil-c.rules" <<'EOF'
+polkit.addRule(function(action, subject) { return polkit.Result.YES; });
+EOF
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-polkit-rules -- ')
+    [ "${main_count}" = "1" ]
+}
