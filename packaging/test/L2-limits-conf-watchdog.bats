@@ -414,3 +414,16 @@ seed_benign() {
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # limits-conf-watchdog runs ON the timer's scheduled fire —
+    # diffs /etc/security/limits.conf + limits.d for core-dump
+    # re-enable patterns, emits a verdict, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the limits-conf-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/limits-conf-watchdog/systemd/selfdef-limits-conf.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
