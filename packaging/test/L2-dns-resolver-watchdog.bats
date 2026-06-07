@@ -403,3 +403,26 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-dns-resolver -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (localhost-nameserver replacement → alert): attacker-fronting-via-local-listener axis covered" {
+    # Sister to nameserver-add axes already locked. An attacker who
+    # gets foothold may swap the nameserver list to ONLY
+    # 127.0.0.1 / ::1 — pointing every DNS query at a local
+    # listener they've planted (e.g. dnsmasq with attacker-
+    # controlled upstreams). This both (a) defeats network-level
+    # DNS-traffic monitoring AND (b) bypasses the host's primary
+    # resolver. The signature is the localhost-only entry in
+    # combination with REMOVED prior real nameservers. Locks the
+    # localhost-DNS-fronting attack axis.
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 127.0.0.1
+search example.com internal.example.com
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-dns-resolver -- ')
+    [ "${main_count}" = "1" ]
+}
