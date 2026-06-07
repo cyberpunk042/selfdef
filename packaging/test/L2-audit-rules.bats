@@ -542,3 +542,21 @@ for r in reqs:
     assert 'kind' in r and 'value' in r, f'requires entry must have kind+value, got {r}'
 "
 }
+
+@test "INVARIANT (module.toml summary field present + non-empty — operator-dashboard one-line description contract)" {
+    # Sister to brain-wide module.toml manifest-completeness
+    # INVARIANT family. The summary field is the operator-facing
+    # one-line description rendered on the install dashboard.
+    # An empty or missing summary would surface as an unlabeled
+    # module-row, harming operator triage. Locks the summary-
+    # present discipline on the audit-rules substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/audit-rules/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+s = data.get('summary', '')
+assert isinstance(s, str) and len(s) > 0, f'summary must be non-empty string, got {repr(s)}'
+"
+}
