@@ -285,3 +285,68 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -qE '"rotated":1'
     ! cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (sample names offending log file in JSON — operator triage routing)" {
+    # When a log truncation alert fires, sample MUST surface the
+    # log file path so operator dashboard routes triage. Sister
+    # contract: many other watchdogs' sample-naming pattern.
+    LOG_DISTINCT="${TMP}/very-distinctive-attacker.log"
+    printf 'aaaaaaa\nbbbbbbb\n' > "${LOG_DISTINCT}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_LOGINT_PROFILE=report \
+    SELFDEF_LOGINT_STATE="${STATE}" \
+    SELFDEF_LOGINT_WATCH="${LOG_DISTINCT}" \
+        bash "${WD}"
+    : > "${LOG_DISTINCT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_LOGINT_PROFILE=report \
+    SELFDEF_LOGINT_STATE="${STATE}" \
+    SELFDEF_LOGINT_WATCH="${LOG_DISTINCT}" \
+        bash "${WD}"
+    cap | grep -q 'very-distinctive-attacker'
+}
+
+@test "INVARIANT (rotated log file: zero-byte rotation is treated as ok — empty new file with new inode does not false-fire)" {
+    # When logrotate creates a fresh empty log file (new inode,
+    # size=0), that's a valid post-rotate state. Lock that it does
+    # NOT false-fire as truncation. Sister axis to the existing
+    # rotation INVARIANT but with a zero-byte new file.
+    printf 'aaaaaaaaaaa\nbbbbbbb\n' > "${LOG1}"
+    run_wd
+    mv "${LOG1}" "${LOG1}.1"
+    : > "${LOG1}"  # new inode, size=0 (fresh logrotate state)
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    cap | grep -qE '"rotated":1'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (severity precedence: 1 shrink + 1 rotation + 1 missing in same scan → alert wins)" {
+    # Mixed scan: attacker truncates one log + logrotate rotates
+    # another + operator deletes a third. Sister to existing
+    # 'shrink+missing' precedence INVARIANT, but with rotation also
+    # present. Locks alert wins ladder.
+    LOG3="${TMP}/log3.log"
+    printf 'a\n' > "${LOG1}"
+    printf 'b\n' > "${LOG2}"
+    printf 'c\n' > "${LOG3}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_LOGINT_PROFILE=report \
+    SELFDEF_LOGINT_STATE="${STATE}" \
+    SELFDEF_LOGINT_WATCH="${LOG1}:${LOG2}:${LOG3}" \
+        bash "${WD}"
+    : > "${LOG1}"                                       # in-place truncate (alert)
+    mv "${LOG2}" "${LOG2}.1"                            # rotation (ok)
+    printf 'new\n' > "${LOG2}"
+    rm -f "${LOG3}"                                     # missing (warn)
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_LOGINT_PROFILE=report \
+    SELFDEF_LOGINT_STATE="${STATE}" \
+    SELFDEF_LOGINT_WATCH="${LOG1}:${LOG2}:${LOG3}" \
+        bash "${WD}"
+    cap | grep -q '"event":"log_truncation_detected"'
+    cap | grep -q '"severity":"alert"'
+}
