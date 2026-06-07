@@ -412,3 +412,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # Two mounts × 3 missing flags each = 6 detail records
     [ "${detail_count}" = "6" ]
 }
+
+@test "INVARIANT (/dev/shm + nodev: missing nodev on /dev/shm surfaces in sample — tmpfs in-RAM device-creation defense)" {
+    # Sister to /tmp+nosuid, /var/tmp+nosuid, /boot+nosuid, /var/log+nodev,
+    # /home+nodev axes already locked. /dev/shm is tmpfs in-RAM
+    # writable-root; missing nodev there lets attacker mknod a
+    # device node in tmpfs for cross-process device-style IPC or
+    # raw-disk shadowing. T1574 hijack execution flow + T1057
+    # process discovery via tmpfs device.
+    mk_findmnt
+    write_fixture $'/dev/shm\tnosuid,noexec,relatime'    # missing nodev only
+    run_wd
+    cap | grep -q '/dev/shm:nodev'
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
