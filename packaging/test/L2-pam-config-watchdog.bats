@@ -320,3 +320,59 @@ EOF
     cap | grep -q 'pamline:common-auth'
     cap | grep -q 'pam_distinctive_backdoor'
 }
+
+@test "INVARIANT (multi-lib-dir scan: pam_*.so in second lib dir ALSO scanned — both /lib/security + /lib64/security)" {
+    # Real distros may have PAM modules in /lib/security OR
+    # /lib64/security OR /usr/lib/x86_64-linux-gnu/security
+    # (Debian multiarch). All must be enumerated. Sister to other
+    # multi-dir scan INVARIANTs across the brain.
+    LIB_DIR2="${TMP}/lib64-security"; mkdir -p "${LIB_DIR2}"
+    write_pam_inventory
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_PAMCFG_PROFILE="report" \
+    SELFDEF_PAMCFG_BASELINE="${BASELINE}" \
+    SELFDEF_PAMCFG_PAM_DIR="${PAM_DIR}" \
+    SELFDEF_PAMCFG_LIB_DIRS="${LIB_DIR} ${LIB_DIR2}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant a backdoor pam in the SECOND lib dir.
+    echo 'fake-backdoor-multiarch' > "${LIB_DIR2}/pam_multiarch_attacker.so"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_PAMCFG_PROFILE="report" \
+    SELFDEF_PAMCFG_BASELINE="${BASELINE}" \
+    SELFDEF_PAMCFG_PAM_DIR="${PAM_DIR}" \
+    SELFDEF_PAMCFG_LIB_DIRS="${LIB_DIR} ${LIB_DIR2}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q 'pam_multiarch_attacker'
+}
+
+@test "INVARIANT (PAM stack-syntax normalization: trailing whitespace/comments stripped before baseline diff — operator-touch tolerance)" {
+    # Operator may add/remove trailing whitespace or end-of-line
+    # comments without semantic change. The watchdog should
+    # normalize these out before diffing.
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add trailing whitespace to existing rule lines.
+    sed -i 's|pam_unix.so try_first_pass nullok|pam_unix.so try_first_pass nullok    |' "${PAM_DIR}/common-auth"
+    run_wd
+    # Severity should be ok or warn (formatting noise), NOT alert.
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (sample names the offending pam.d file in JSON — operator triage routing)" {
+    # When a rule-add fires, sample MUST surface the offending pam.d
+    # file path so operator dashboard routes triage to the right
+    # path. Sister contract: polkit-rules/nfs-exports/rhosts/
+    # sysusers sample-naming pattern.
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${PAM_DIR}/99-very-distinctive-attacker-pam-stack" <<'EOF'
+auth sufficient pam_evil.so
+EOF
+    echo 'fake' > "${LIB_DIR}/pam_evil.so"
+    run_wd
+    cap | grep -q 'very-distinctive-attacker'
+}
