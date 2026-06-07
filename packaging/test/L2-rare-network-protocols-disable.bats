@@ -286,3 +286,19 @@ TOMLEOF
     done
     grep -q 'managed-by: selfdef rare-network-protocols-disable' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (drop-in is chmod 0644 — system-config convention)" {
+    # Sister to rare-filesystems-disable drop-in 0644 INVARIANT
+    # just locked and many other installer module's chmod 0644
+    # INVARIANTs across the brain. The modprobe drop-in lives
+    # in /etc/modprobe.d/ and is parsed by modprobe at module-
+    # autoload time + by initramfs hooks. Must be world-readable
+    # + root-write-only — any other perm would let an attacker
+    # rewrite the blacklist to allow the rare protocol drivers,
+    # re-exposing the memory-corruption CVE surface (DCCP/SCTP/
+    # RDS/TIPC).
+    write_config "baseline"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    [ "$(stat -c '%a' "${MODPROBE_FILE}")" = "644" ]
+}
