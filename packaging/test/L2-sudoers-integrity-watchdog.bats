@@ -413,3 +413,22 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (Runas_Alias indirection STILL alerts — runas-alias-resolution doesn't dodge dangerous-flag detection)" {
+    # Sister to Cmnd_Alias + User_Alias indirection INVARIANTs
+    # already locked. sudoers supports Runas_Alias to indirect
+    # the target-user list (e.g., `Runas_Alias OPS = root,oracle`
+    # + `attacker ALL=(OPS) NOPASSWD: ALL`). The watchdog MUST
+    # alert on Runas_Alias-based NOPASSWD grants too. Closes
+    # axis-parity on the alias-indirection detection family
+    # (Cmnd / User / Runas all alias-indirection axes).
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SUDOERS_D_DIR}/99-runas-alias-attacker" <<'EOF'
+Runas_Alias ATTACKER_TARGETS = root, oracle
+evil ALL=(ATTACKER_TARGETS) NOPASSWD: ALL
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
