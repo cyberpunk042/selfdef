@@ -253,3 +253,19 @@ with open('${MODULE_DIR}/profiles/${p}.toml', 'rb') as f:
         grep -qE '^set[[:space:]]+-euo[[:space:]]+pipefail' "${f}"
     done
 }
+
+@test "INVARIANT (requires entry kind=\"binary\" + value=\"systemctl\" — systemctl gated for service-management lifecycle)" {
+    # Sister to brain-wide module.toml requires-discipline
+    # INVARIANT family. vpn-bridge's three profiles (relay-via-
+    # server / tailscale / cloudflare-tunnel) all manage systemd
+    # service units (selfdef-vpn-bridge.service plus per-profile
+    # tailscaled.service / cloudflared.service). The systemctl
+    # binary MUST be declared as a binary-kind requires entry so
+    # the resolver's PATH lookup gates install on hosts where
+    # systemd is absent (containers without systemd, distro-less
+    # base images). A regression dropping systemctl from requires
+    # would let install proceed on systemd-less hosts and produce
+    # half-installed state. Locks the systemctl binary-requires
+    # discipline on the vpn-bridge manifest substrate.
+    grep -qE '\{[[:space:]]*kind[[:space:]]*=[[:space:]]*"binary"[[:space:]]*,[[:space:]]*value[[:space:]]*=[[:space:]]*"systemctl"[[:space:]]*\}' "${MODULE_DIR}/module.toml"
+}
