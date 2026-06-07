@@ -267,3 +267,18 @@ seed_benign() {
     cap | grep -q '"event":"sysctl_hardening_weakened"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (net.ipv4.ip_forward=1 weakening: enabled IP forwarding → alert — accidental-router pivot axis)" {
+    # Sister to other sysctl-hardening weakening axes already
+    # locked. net.ipv4.ip_forward=1 turns the host into an IP
+    # router — an attacker with foothold can use this to route
+    # traffic between attacker-controlled networks via the
+    # compromised host (T1090.001 — Internal Proxy via accidental-
+    # router). Lock weakening detection on the ip_forward axis.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'kernel.randomize_va_space = 2\nkernel.kptr_restrict = 2\nkernel.yama.ptrace_scope = 1\nnet.ipv4.ip_forward = 1\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
