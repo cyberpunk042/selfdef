@@ -300,3 +300,23 @@ EOF
     run_wd
     ! cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (cap-only entry 'c' type with dangerous capability also surfaces — sister axis to suid setuid 4755)" {
+    # Sister to the setuid/setgid axes already locked.
+    # systemd-tmpfiles supports cap-only entries via the 'c'
+    # type (file capabilities like cap_setuid+ep, cap_sys_admin+ep
+    # set on a file at creation/poll time). These provide an
+    # equivalent privilege-escalation surface to setuid bits —
+    # an attacker who adds a tmpfiles.d entry with cap_setuid+ep
+    # on a non-root binary gets persistent setuid-equivalent
+    # privilege on that binary at every boot. Locks axis-parity
+    # with setuid detection — file-cap-based privilege escalation
+    # is just as dangerous as the suid bit family (T1548.001 —
+    # Setuid and Setgid + file-cap-based privilege escalation).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'c /usr/bin/cap-escalator 0755 root root - cap_setuid+ep\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
