@@ -283,3 +283,24 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (rd.break or rdinit= kernel debug-shell hijack vector → alert)" {
+    # Sister to init= PID-1 hijack INVARIANTs already locked.
+    # The kernel cmdline accepts NOT JUST init= but also
+    # rdinit= (initramfs PID-1 override) AND rd.break /
+    # rd.break=cmdline (drop to dracut emergency shell at
+    # specific phase). A boot with rd.break grants a root
+    # shell from the initramfs BEFORE pivot_root — operator
+    # boots the host, attacker (physical access + reboot)
+    # gets pre-pivot root with no auth. The watchdog MUST
+    # surface rd.break + rdinit= just as firmly as init=.
+    # Locks the rd.* family on the T1542/T1037 boot-time
+    # PID-1 hijack surface — closes the kernel-debug-shell
+    # axis alongside the writable-root init= family.
+    seed_benign
+    run_wd
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="quiet rd.break"\n' > "${DEFAULT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
