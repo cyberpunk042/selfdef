@@ -267,3 +267,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (mechanism .so under /home — user-writable hijack on GSSAPI auth code-load surface)" {
+    # Sister to /var/tmp + relative-with-slash mechanism path
+    # writable-root INVARIANTs already locked. /home/<user> is
+    # writable by the owning user without privilege; an attacker
+    # who pivots into a user account plants /home/<user>/.evil-
+    # gssapi.so AND patches gss.conf to point at it — every
+    # GSSAPI auth (Kerberos / NFS / SSH-with-gssapi /
+    # cyrus-sasl) loads the planted .so AS the consuming daemon
+    # (often root). Closes the /home axis on the GSSAPI mech
+    # writable-root coverage symmetric to /var/tmp. T1574 Hijack
+    # Execution Flow via auth-mechanism plugin substitution.
+    printf 'gssapi_evil 1.2.3.4 /home/alice/.evil-gss.so\n' > "${MECH}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
