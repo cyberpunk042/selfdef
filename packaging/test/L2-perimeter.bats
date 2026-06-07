@@ -528,3 +528,14 @@ assert 'namespace' not in meta, f'metadata.namespace must be absent (cluster-sco
     grep -qE 'chattr \+i' "${POSTINST}"
     grep -qE 'tetragon.service' "${POSTINST}"
 }
+
+@test "INVARIANT (YAML file is at canonical packaging/tetragon-policies/ path — packaging tree-layout contract)" {
+    # Sister to brain-wide packaging-layout INVARIANT family.
+    # The perimeter YAML MUST live at packaging/tetragon-
+    # policies/ so the cargo-deb assets list (or postinst)
+    # can ship it to /etc/tetragon/tracing-policies/. Locks
+    # the canonical packaging/tetragon-policies/ tree-layout
+    # discipline.
+    real_yaml="$(readlink -f "${YAML}")"
+    case "${real_yaml}" in */packaging/tetragon-policies/*) ;; *) false ;; esac
+}

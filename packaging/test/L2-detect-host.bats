@@ -501,3 +501,28 @@ assert s, f'summary must be non-empty, got {s!r}'
 assert len(s) > 10, f'summary should be a real description (>10 chars), got {s!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml [install] has no apply/check/uninstall fields — debian-package install-flow exclusive contract)" {
+    # Sister to brain-wide install.kind dispatch INVARIANT
+    # family. detect-host install.kind = "debian-package" —
+    # this exclusive install kind means apt/dpkg drives the
+    # install entirely, NOT a script-runner. A regression
+    # that ADDED apply/check/uninstall fields alongside
+    # kind=debian-package would create ambiguity in the
+    # installer dispatch (run scripts? defer to apt?). Locks
+    # the debian-package-exclusive install-flow discipline
+    # on the detect-host substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+inst = data.get('install') or {}
+assert inst.get('kind') == 'debian-package'
+# When kind=debian-package, apply/check/uninstall must NOT be set
+for k in ('apply', 'check', 'uninstall'):
+    v = inst.get(k)
+    assert not v, f'install.{k} must NOT be set when kind=debian-package, got {v!r}'
+"
+}

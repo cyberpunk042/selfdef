@@ -445,3 +445,19 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qiE 'Description=.*(doctor|health)' "${SERVICE}"
 }
 
+
+@test "INVARIANT (.timer file is at canonical path packaging/systemd/ — packaging tree-layout contract)" {
+    # Sister to brain-wide packaging layout INVARIANT family.
+    # The .timer + .service files MUST live at packaging/
+    # systemd/ so the cargo-deb assets list can reference
+    # them via relative path. A regression that moved files
+    # to packaging/units/ or modules/<module>/systemd/ would
+    # break the cargo-deb manifest matching. Locks the
+    # canonical packaging/systemd/ tree-layout discipline.
+    [ -f "${TIMER}" ]
+    [ -f "${SERVICE}" ]
+    real_timer="$(readlink -f "${TIMER}")"
+    real_service="$(readlink -f "${SERVICE}")"
+    case "${real_timer}" in */packaging/systemd/*) ;; *) false ;; esac
+    case "${real_service}" in */packaging/systemd/*) ;; *) false ;; esac
+}

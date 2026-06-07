@@ -316,3 +316,16 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # daemon-reload-after-install discipline.
     grep -qE 'systemctl daemon-reload' "${POSTINST}"
 }
+
+@test "INVARIANT (guardian.service ExecStart binary path is NOT identical to selfdef-scheduler — sister-unit-distinguishing path contract)" {
+    # Sister to sister-unit-distinguishing INVARIANT family.
+    # The guardian + scheduler are sister Ring-0 units; each
+    # has its own binary at a distinct path. A regression
+    # that pointed both ExecStart to the same binary (e.g.
+    # symlink coalescence) would let one daemon impersonate
+    # the other in journald + break operator triage. Locks
+    # the guardian-vs-scheduler distinct-binary-path
+    # discipline.
+    grep -qE '^ExecStart=/usr/local/bin/selfdef-guardian' "${UNIT}"
+    ! grep -qE '^ExecStart=/usr/local/bin/selfdef-scheduler' "${UNIT}"
+}

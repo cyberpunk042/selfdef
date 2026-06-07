@@ -622,3 +622,26 @@ assert ph == 'main', f'[metadata].phase must be main, got {ph!r}'
     [ -x "${inst_dir}/check.sh" ]
     [ -x "${inst_dir}/uninstall.sh" ]
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml [requires_hardware] block present — hardware-feature predicate substrate contract)" {
+    # Sister to brain-wide [requires_hardware] INVARIANT
+    # family. slm-cpu-loop is a cycle-3 hardware-exploit
+    # surface (SD-R72) — it MUST declare hardware-feature
+    # predicates so the cluster scheduler / install-time
+    # gate can refuse to apply on incapable hosts (e.g.
+    # CPUs without AVX2 fall outside the slm dense kernel
+    # contract). A regression dropping [requires_hardware]
+    # would let slm-cpu-loop install on incapable hosts +
+    # silently fail at first probe. Locks the hardware-
+    # feature predicate discipline on the slm-cpu-loop
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+rh = data.get('requires_hardware')
+assert rh is not None, f'[requires_hardware] must be present, got None'
+"
+}

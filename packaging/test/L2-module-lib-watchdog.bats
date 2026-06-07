@@ -532,3 +532,16 @@ setup() {
     # session (lib was sourced by setup())
     [[ "${SELFDEF_MODULE_LIB_VERSION}" =~ ^[0-9]+$ ]]
 }
+
+@test "INVARIANT (lib is at canonical packaging/lib/ path — packaging tree-layout contract)" {
+    # Sister to brain-wide packaging-layout INVARIANT family.
+    # The module-lib MUST live at packaging/lib/module-lib.sh
+    # so the cargo-deb assets list ships it to
+    # /usr/share/selfdef/lib/. A regression that moved it to
+    # packaging/scripts/ or modules/lib/ would break
+    # cargo-deb manifest matching + sourcing from apply.sh.
+    # Locks the canonical packaging/lib/ tree-layout
+    # discipline.
+    real_lib="$(readlink -f "${LIB}")"
+    case "${real_lib}" in */packaging/lib/*) ;; *) false ;; esac
+}

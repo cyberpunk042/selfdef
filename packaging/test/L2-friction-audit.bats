@@ -595,3 +595,14 @@ EOF
     # discipline on the friction-audit OCSF-path substrate.
     grep -qE 'SELFDEF_FRICTION_AUDIT_OCSF_PATH' "${SCRIPT}"
 }
+
+@test "INVARIANT (script declares SELFDEF_FRICTION_AUDIT_HOSTNAME override variable — operator-configurable host-identifier for OCSF device.hostname)" {
+    # Sister to operator-config-env-var INVARIANT family.
+    # The OCSF device.hostname field MUST be operator-set so
+    # forensic correlation across hosts works even when the
+    # script runs in a chroot/container where /bin/hostname
+    # returns something unexpected. The SELFDEF_FRICTION_
+    # AUDIT_HOSTNAME env var lets operators override. Locks
+    # the override-env-var canonical discipline.
+    grep -qE 'SELFDEF_FRICTION_AUDIT_HOSTNAME' "${SCRIPT}"
+}

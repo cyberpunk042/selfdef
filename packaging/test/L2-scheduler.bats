@@ -490,3 +490,14 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # discipline.
     grep -qE 'systemctl daemon-reload' "${POSTINST}"
 }
+
+@test "INVARIANT (scheduler.service ExecStart binary path is NOT identical to selfdef-guardian — sister-unit-distinguishing path contract)" {
+    # Sister to sister-unit-distinguishing INVARIANT family.
+    # The scheduler + guardian are sister Ring-0 units; each
+    # has its own binary at a distinct path. A regression
+    # that pointed both ExecStart to the same binary would
+    # break operator triage. Locks the scheduler-vs-guardian
+    # distinct-binary-path discipline.
+    grep -qE '^ExecStart=/usr/local/bin/selfdef-scheduler' "${UNIT}"
+    ! grep -qE '^ExecStart=/usr/local/bin/selfdef-guardian' "${UNIT}"
+}
