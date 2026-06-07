@@ -418,3 +418,21 @@ seed_trust_root() {
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (no auto-restore: selfdef-self-integrity NEVER overwrites tampered files — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-restore + surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # selfdef-self-integrity DETECTS T1565.001 Stored Data
+    # Manipulation / T1014 Rootkit tamper of selfdef's own
+    # files but MUST NEVER emit shell commands that overwrite
+    # the tampered file with the baseline manifest's
+    # original. Auto-restore would destroy forensic evidence
+    # chain (operator can't analyze the tampered content if
+    # silently reverted) AND could overwrite operator-
+    # legitimate updates (operator may have run install.sh to
+    # upgrade selfdef but forgot to re-baseline). Surveillance,
+    # never auto-remediation. Locks anti-evidence-destruction
+    # contract on the self-integrity substrate.
+    ! grep -qE 'cp[[:space:]]+(-[a-z]+[[:space:]]+)?"?\$\{?(MANIFEST|BASELINE)' "${WD}"
+    ! grep -qE '(install -m|tee)[[:space:]]+.*\$\{?(TARGET|TRACKED)' "${WD}"
+}
