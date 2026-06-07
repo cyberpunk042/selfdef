@@ -342,3 +342,20 @@ assert 'spec' in data, 'spec section missing'
 assert isinstance(data['spec'], dict), 'spec must be dict'
 "
 }
+
+@test "INVARIANT (YAML spec.kprobes call=sys_execve exclusively — perimeter MUST attach to execve, not generic syscall)" {
+    # Sister to brain-wide kprobe-specificity INVARIANT family.
+    # The MS047 perimeter is execve-attestation specifically —
+    # it kills processes that exec() from non-allowlisted paths.
+    # A regression that swapped to a generic syscall (e.g.,
+    # sys_open) would attach the SIGKILL action to FILE READS,
+    # breaking every legitimate program. Locks the sys_execve
+    # kprobe target on the perimeter YAML substrate (sister to
+    # the apiVersion / kind / metadata.name contract).
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+calls = [kp['call'] for kp in data['spec']['kprobes']]
+assert calls == ['sys_execve'], f'Expected only sys_execve, got {calls}'
+"
+}
