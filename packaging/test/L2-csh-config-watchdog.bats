@@ -667,3 +667,24 @@ assert 'install' in data, 'install missing'
         grep -qE '^ReadWritePaths=' "${s}"
     done
 }
+
+@test "INVARIANT (csh-config-watchdog service unit ExecStart references /usr/local/libexec/selfdef/ — operator-extension binary-path canonical contract)" {
+    # Sister to brain-wide systemd ExecStart binary-path
+    # INVARIANT family. Watchdog .service units MUST execute
+    # the watchdog script from /usr/local/libexec/selfdef/
+    # (operator-extension path, not /usr/bin which is
+    # Debian-package-only). The canonical libexec/selfdef/
+    # path lets operators override the watchdog script
+    # without rebuilding the .deb (sister to brain-wide
+    # operator-extension /usr/local/* discipline). A
+    # regression that pointed ExecStart at /usr/bin/ would
+    # surface as a "stale-watchdog-binary" on hosts where
+    # operators patched the libexec copy. Locks the
+    # libexec/selfdef ExecStart-path discipline on the
+    # csh-config-watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/csh-config-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^ExecStart=/usr/local/libexec/selfdef/' "${s}"
+    done
+}

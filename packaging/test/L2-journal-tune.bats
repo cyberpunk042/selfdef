@@ -688,3 +688,26 @@ for r in req:
     assert 'kind' in r and 'value' in r, f'requires must have kind+value, got {r!r}'
 "
 }
+
+@test "INVARIANT (journal-tune module.toml instanced field present (boolean) — singleton-vs-instance contract)" {
+    # Sister to brain-wide module.toml instanced INVARIANT
+    # family. The instanced field declares whether the
+    # module supports multiple instances (true; e.g. one per
+    # operator-extension config file) or is a singleton
+    # (false; e.g. host-wide baseline). The selfdef installer
+    # gates the install-options surface on this — a singleton
+    # module rejects --instance=X; an instanced module
+    # requires --instance=X. A regression dropping instanced
+    # would surface as ambiguous install behavior. Locks the
+    # singleton-vs-instance discipline on the journal-tune
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/journal-tune/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+inst = data.get('instanced')
+assert isinstance(inst, bool), f'instanced must be boolean, got {type(inst).__name__}: {inst!r}'
+"
+}
