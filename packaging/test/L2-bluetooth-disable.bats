@@ -257,3 +257,26 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=mask'* ]]
 }
+
+@test "INVARIANT (mask order per unit: stop → disable → mask — terminate-then-clear-then-gate)" {
+    # Sister to rsh-telnet-disable + services-disable-printing mask
+    # order INVARIANT. Lock the symmetric sequencing for bluetooth.
+    # service so any regression that swaps order trips here.
+    write_config "mask"
+    run_wd
+    stop_line="$(grep -n 'systemctl stop bluetooth.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_line="$(grep -n 'systemctl disable bluetooth.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_line="$(grep -n 'systemctl mask bluetooth.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_line}" -lt "${disable_line}" ]
+    [ "${disable_line}" -lt "${mask_line}" ]
+}
+
+@test "INVARIANT (no package-uninstall: bluez package NEVER auto-removed — only stop+disable+mask+rfkill+blacklist)" {
+    # Module's contract is to neutralize, not uninstall.
+    # bluez package removal is operator decision via apt/dnf/yum.
+    # Sister to services-disable-printing CUPS no-auto-uninstall
+    # INVARIANT.
+    write_config "mask"
+    run_wd
+    ! grep -qE 'apt|dnf|yum|rpm' "${SYSEOF_LOG}"
+}
