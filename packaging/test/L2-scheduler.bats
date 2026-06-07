@@ -131,3 +131,27 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     [ -f "${BATS_TEST_DIRNAME}/../systemd/selfdef-guardian.service" ]
     [ -f "${UNIT}" ]
 }
+
+@test "INVARIANT (unit declares Description= or Documentation= containing 'selfdef' — operator-audit-trail)" {
+    grep -qiE '^Description=.*selfdef|^Documentation=.*selfdef' "${UNIT}"
+}
+
+@test "INVARIANT (unit declares ReadWritePaths — strict-mode-permitted-writes manifest)" {
+    # ProtectSystem=strict forbids writes EXCEPT to declared ReadWritePaths.
+    # The unit MUST declare the writeable paths for /var/log + /var/cache
+    # + /mnt/vault/context so scheduler operation isn't EROFS-blocked.
+    grep -qE '^ReadWritePaths=.*/var/log/selfdef' "${UNIT}"
+    grep -qE '^ReadWritePaths=.*/var/cache/selfdef' "${UNIT}"
+}
+
+@test "INVARIANT (postinst enables the unit — service is reachable on next boot)" {
+    # Installation MUST enable the unit so systemctl start works on next
+    # boot without manual operator intervention.
+    grep -qE 'systemctl (enable|preset)' "${POSTINST}"
+}
+
+@test "INVARIANT (postrm cleans /var/cache/selfdef on purge — operator-state-cleanup)" {
+    # On purge, the runtime cache state should be cleaned up (else
+    # purge leaves stale state for re-install operator confusion).
+    grep -q '/var/cache/selfdef' "${POSTRM}"
+}
