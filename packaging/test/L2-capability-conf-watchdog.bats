@@ -273,3 +273,21 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (dangerous-cap detect): cap_chown grant → alert (T1222 ownership-confusion axis)" {
+    # Sister to cap_setuid + cap_dac_override + cap_sys_admin + cap_
+    # audit_control + cap_kill dangerous-cap axes already locked.
+    # cap_chown lets a granted user re-own ANY file regardless of
+    # uid — including /etc/shadow, sudoers, ssh authorized_keys,
+    # binaries in /usr/bin. T1222 (File and Directory Permissions
+    # Modification) — a pre-attack pivot primitive (rewrite a
+    # privileged binary's owner to attacker uid, then patch it).
+    # Locks coverage of the chown-grade capability alongside the
+    # other dangerous-cap families on the pam_cap surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'cap_net_raw netuser\ncap_chown evil\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
