@@ -504,3 +504,16 @@ EOF
     # substrate.
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*(userdel|deluser|passwd[[:space:]]+-l)'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # account-watchdog runs ON the timer's scheduled fire —
+    # diffs /etc/passwd + /etc/shadow against baseline, emits a
+    # verdict on account creation / shell-flip / privilege-
+    # elevation, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the account-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/account-watchdog/systemd/selfdef-accounts.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
