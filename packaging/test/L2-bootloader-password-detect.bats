@@ -329,3 +329,15 @@ TOMLEOF
     run_wd
     grep -qE '^Persistent=true' "${SYSTEMD_DIR}/selfdef-bootloader-password.timer"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on bootloader-password-detect
+    # installer surface across libexec + service + timer +
+    # profile-drop-in phases.
+    write_config "report"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"bootloader-password-detect"')
+    [ "${count}" = "1" ]
+}
