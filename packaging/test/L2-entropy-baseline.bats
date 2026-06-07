@@ -274,3 +274,17 @@ TOMLEOF
     grep -q 'SELFDEF_ENTROPY_PROFILE=enforce' "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf"
     ! grep -q 'SELFDEF_ENTROPY_PROFILE=report' "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf"
 }
+
+@test "INVARIANT (libexec is shell-sourceable: bash -n parses cleanly — service ExecStart contract)" {
+    # Sister to many other installer module's shell-sourceable
+    # INVARIANT across the brain (secure-boot-status / swap-
+    # encryption-detect / mta-loopback-detect). The libexec script
+    # runs from systemd ExecStart. bash -n must parse cleanly. A
+    # syntax regression would silently break the surveillance
+    # every fire (timer scheduled; service can't ExecStart; kernel-
+    # RNG starvation surface — weak TLS host keys / SSH host keys
+    # / ASLR seeds — goes unmonitored).
+    write_config "report"
+    run_wd
+    bash -n "${LIBEXEC_DIR}/entropy-baseline.sh"
+}
