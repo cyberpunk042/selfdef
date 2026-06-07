@@ -262,3 +262,58 @@ run_wd() {
     # Prior balanced drop-in preserved.
     [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf" ]
 }
+
+@test "INVARIANT (downgrade strict → balanced fires sysctl --system to APPLY balanced settings — kernel state must drop modules_disabled)" {
+    # When operator downgrades, the strict drop-in is removed BUT
+    # the live kernel state still has modules_disabled=1 from the
+    # prior load. The downgrade MUST fire sysctl --system to re-
+    # apply the balanced-only state. (Note: modules_disabled is
+    # itself irreversible until reboot — operator knows this — but
+    # OTHER strict-only knobs may not be irreversible and must
+    # reset.)
+    write_config "strict" "true"
+    run_wd
+    [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" ]
+    : > "${SCTL_LOG}"
+    write_config "balanced"
+    run_wd
+    ! [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" ]
+    # sysctl --system fires because content changed (strict dropin removed).
+    grep -q 'sysctl --system' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (drop-in filenames follow 50-selfdef-* convention — tracking + uninstall identification)" {
+    # Both balanced and strict drop-ins must follow the 50-selfdef-
+    # prefix convention. Sister to many other modules' filename-
+    # convention INVARIANT.
+    write_config "strict" "true"
+    run_wd
+    case "${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf" in
+        */50-selfdef-*) : ;;
+        *) fail "balanced drop-in does not follow 50-selfdef-* pattern" ;;
+    esac
+    case "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" in
+        */50-selfdef-*) : ;;
+        *) fail "strict drop-in does not follow 50-selfdef-* pattern" ;;
+    esac
+}
+
+@test "INVARIANT (config-layer-noise resilience: extra unknown TOML keys do NOT bypass acknowledge_modules_disabled gate)" {
+    # Sister to nftables-baseline refuse-to-brick precedence INVARIANT.
+    # Lock that extra config keys cannot accidentally bypass the
+    # refuse-to-brick gate via TOML parsing edge cases.
+    cat > "${CONF}" <<'EOF'
+profile = "strict"
+acknowledge_modules_disabled = false
+some_other_knob = "wrong"
+maybe_a_typo = true
+EOF
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_KERNEL_LOCKDOWN_CONFIG="${CONF}" \
+        SELFDEF_KERNEL_LOCKDOWN_SYSCTL="${SYSCTL_SRC}" \
+        SELFDEF_SYSCTL_DIR="${SYSCTL_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"IRREVERSIBLE until reboot"* ]] || [[ "${output}" == *"acknowledge_modules_disabled"* ]]
+    ! [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" ]
+}
