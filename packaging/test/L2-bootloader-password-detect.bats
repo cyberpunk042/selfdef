@@ -386,3 +386,23 @@ TOMLEOF
     ! grep -vE '^[[:space:]]*#' "${libexec}" | grep -qE 'grub-?mkpasswd'
     ! grep -vE '^[[:space:]]*#' "${libexec}" | grep -qE 'grub2?-set-password'
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. bootloader-password-detect manifest declares
+    # install + profile gating (report / enforce) the resolver
+    # enforces; malformed manifest wedges the GRUB-password-
+    # detection probe. Python's tomllib is the canonical
+    # parser. Locks anti-malformed-manifest on the bootloader-
+    # password-detect substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bootloader-password-detect/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'bootloader-password-detect', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
