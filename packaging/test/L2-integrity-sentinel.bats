@@ -415,3 +415,21 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: integrity-sentinel installer NEVER deletes monitored files — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # integrity-sentinel computes sha256 baselines of policy
+    # artifacts; the no-auto-restore axis is already locked at
+    # runtime. This locks the installer-side equivalent: the
+    # apply.sh/check.sh/uninstall.sh MUST NEVER delete the
+    # monitored files (e.g. /etc/selfdef, /etc/tetragon
+    # tracing-policies) that the baseline tracks. Locks no-auto-
+    # delete on the integrity-sentinel installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/integrity-sentinel/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/selfdef([[:space:]]|$)' "${f}"
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/tetragon([[:space:]]|$)' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/(selfdef|tetragon).*-delete' "${f}"
+    done
+}
