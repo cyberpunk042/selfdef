@@ -283,3 +283,13 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (LD_PRELOAD under /var/tmp — persistent writable-root axis-symmetric expansion)" {
+    # Sister to /tmp + /dev/shm + /home LD_PRELOAD writable-
+    # root INVARIANTs. /var/tmp persistent + writable. T1574.006
+    # Dynamic Linker Hijacking via LD_PRELOAD on every-process
+    # dlopen path.
+    printf '/var/tmp/.evil-preload.so\n' > "${PRELOAD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
