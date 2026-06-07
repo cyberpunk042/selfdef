@@ -278,3 +278,22 @@ teardown() {
     # Pattern: chattr -i ... \<newline>... 2>/dev/null || true
     awk '/chattr -i \/etc\/tetragon\/tracing-policies\/sovereign-perimeter.yaml/{found=1; next} found{ if (/2>\/dev\/null/ && /\|\|[[:space:]]*true/) { ok=1 }; exit } END{ exit ok ? 0 : 1 }' "${POSTRM}"
 }
+
+@test "INVARIANT (postinst + postrm use set -e — anti-half-installed-state contract per Debian Policy)" {
+    # Sister to brain-wide set -e shell-discipline INVARIANT
+    # family. Debian Policy §6.5 prescribes set -e on
+    # maintainer scripts: a mid-script error MUST propagate
+    # as a non-zero exit so dpkg surfaces the failure to the
+    # operator rather than silently leaving a half-installed
+    # package state. The perimeter postinst writes the
+    # TracingPolicy YAML + applies chattr +i + reloads
+    # tetragon; without set -e a mid-step failure (e.g.,
+    # chattr fails because /etc/tetragon doesn't exist on a
+    # tetragon-less host) would silently skip the chattr
+    # while the YAML is on disk, leaving operators with a
+    # mutable trust-root they didn't authorize. Locks the
+    # set -e maintainer-script discipline on the perimeter
+    # postinst + postrm substrates per Debian Policy 6.5.
+    grep -qE '^set -e' "${POSTINST}"
+    grep -qE '^set -e' "${POSTRM}"
+}
