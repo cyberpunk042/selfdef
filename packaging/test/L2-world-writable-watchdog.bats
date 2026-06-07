@@ -237,3 +237,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -qE '"severity":"(warn|alert)"'
     cap | grep -q 'loose-dir'
 }
+
+@test "INVARIANT (DELTA detect — distinctive-attacker-named world-writable file surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When a distinctively-named
+    # world-writable file appears (T1222 — File and Directory
+    # Permissions Modification), the file path MUST surface in
+    # the JSON sample so operator dashboard routes triage to the
+    # right path.
+    printf 'x' > "${ROOT}/distinctive-attacker-world-writable.txt"
+    chmod 0666 "${ROOT}/distinctive-attacker-world-writable.txt"
+    run_wd
+    cap | grep -q 'distinctive-attacker-world-writable'
+}
