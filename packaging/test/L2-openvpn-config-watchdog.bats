@@ -295,3 +295,12 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: script directive invoking binary from /var/tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # VPN-event-trigger root-exec — script directives run AS ROOT
+    # on every connect/disconnect/route-up.
+    printf 'client\ndev tun\nup /var/tmp/staged_payload\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
