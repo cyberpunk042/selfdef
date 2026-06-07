@@ -332,3 +332,14 @@ EOF
     [ ! -f "${APT_CONFD}/50selfdef-unattended-upgrades" ]
     ! grep -qE 'systemctl enable apt-daily' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on unattended-upgrades installer
+    # surface across drop-ins + timer-enable phases.
+    write_config "security-only"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"unattended-upgrades-config"')
+    [ "${count}" = "1" ]
+}
