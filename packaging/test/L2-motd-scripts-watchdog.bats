@@ -478,3 +478,15 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (motd-scripts-watchdog service does NOT declare Restart=always — anti-restart-storm contract on oneshot probe)" {
+    # Sister to brain-wide oneshot-probe INVARIANT family.
+    # Locks anti-restart-storm discipline on the motd-scripts-watchdog
+    # service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/motd-scripts-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        ! grep -qE '^Restart=always' "${s}"
+        ! grep -qE '^Restart=on-failure' "${s}"
+    done
+}
