@@ -256,3 +256,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (relative-path Plugin 'sub/dir/p.so' → alert — relative-path-resolves-against-PWD attacker primitive)" {
+    # Sister to the brain-wide relative-path INVARIANT family
+    # (autofs program: maps, request-key callout, binfmt
+    # interpreter, krb5 plugin, rsyslog omprog, syslog-ng
+    # program(), dnf-plugins action). A relative-path Plugin .so is
+    # resolved by sudo against its own PWD at exec time —
+    # undefined behavior + attacker primitive (sudo may inherit a
+    # PWD-attacker-controls). Locks detection on the sudo plugin-
+    # load axis alongside the absolute-writable-root family.
+    printf 'Plugin policy sub/dir/evil.so\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
