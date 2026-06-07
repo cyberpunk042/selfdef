@@ -277,3 +277,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker'
 }
+
+@test "INVARIANT (writable-dir under /run — boot-recreated tmpfs axis-symmetric expansion)" {
+    # Sister to /tmp + /var/tmp + /dev/shm + /home + /root bare-
+    # root + writable-dir INVARIANTs already locked. /run is a
+    # tmpfs (boot-recreated, like /dev/shm) writable by systemd-
+    # units running as various uids — attacker who pivots via a
+    # unit-owned process plants .so under /run/<svc>/ and adds
+    # /run/<svc>/ to ld.so.conf.d. Closes the /run axis on the
+    # ld.so search path writable-dir coverage symmetric to the
+    # other writable-root family members on T1574 Hijack
+    # Execution Flow surface.
+    printf '/opt/app/lib\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/run/.evil-lib\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
