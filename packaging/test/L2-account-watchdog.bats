@@ -396,3 +396,22 @@ EOF
     cap | grep -qE '"severity":"(warn|alert)"'
     cap | grep -q 'sneaky-svc'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named account surfaces in added_sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain (sudoers / suid-sgid / unowned /
+    # access-conf / systemd-unit). When an attacker creates a new
+    # account, the account NAME MUST surface in the JSON
+    # added_sample so operator dashboard routes triage to the
+    # right account — operators MUST be able to identify which
+    # specific account was created without scrolling through
+    # /etc/passwd diffs. Locks the new-account-discovered
+    # operator-visibility contract on the T1136 (Create Account)
+    # surface.
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo 'distinctive-attacker-acct:x:1500:1500:DistinctiveAttacker:/home/distinctive-attacker-acct:/bin/bash' >> "${PASSWD_FILE}"
+    run_wd
+    cap | grep -q 'distinctive-attacker-acct'
+}
