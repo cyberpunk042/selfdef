@@ -409,3 +409,18 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: kernel-lockdown installer NEVER deletes operator-pre-existing sysctl/systemd configs — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # kernel-lockdown writes its own /etc/sysctl.d or /etc/systemd
+    # drop-in; it MUST NEVER rm/find-delete an operator's
+    # pre-existing /etc/sysctl.conf, /etc/sysctl.d, or
+    # /etc/systemd entries not owned by THIS module. Locks
+    # no-auto-delete on the kernel-lockdown installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/kernel-lockdown/install"
+    for sh in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${sh}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/sysctl\.conf' "${sh}"
+        ! grep -qE 'find[[:space:]]+/etc/sysctl\.d.*-delete' "${sh}"
+    done
+}
