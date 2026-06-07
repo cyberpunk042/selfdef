@@ -221,3 +221,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"severity":"alert"'
     cap | grep -qE '"finding_count":2[6-9]|"finding_count":[3-9][0-9]'
 }
+
+@test "INVARIANT (world-writable directory ALSO flagged — sister axis to world-writable regular file)" {
+    # Sister to the world-writable file axis already locked. A world-
+    # writable DIRECTORY (mode 0777 without sticky bit) is equally
+    # dangerous — any user can plant or replace files in it,
+    # including a setuid binary they then chmod into existence. The
+    # whitelisted /tmp + /var/tmp + /dev/shm have the sticky bit
+    # (1777) which restricts deletion to owner; a non-sticky 0777
+    # directory does NOT have that protection. Locks axis-symmetry
+    # between world-writable-file and world-writable-dir-without-
+    # sticky-bit on the file-mode surveillance surface.
+    mkdir -p "${ROOT}/loose-dir"; chmod 0777 "${ROOT}/loose-dir"
+    run_wd
+    cap | grep -qE '"severity":"(warn|alert)"'
+    cap | grep -q 'loose-dir'
+}
