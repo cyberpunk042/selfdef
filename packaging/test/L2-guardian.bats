@@ -343,3 +343,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postrm runs systemctl daemon-reload after unit removal — cleanup-systemd-cache-refresh contract)" {
     grep -qE 'systemctl daemon-reload' "${POSTRM}"
 }
+
+@test "INVARIANT (guardian unit ExecStart binary path is in /usr/local/bin/ — operator-extension path consistency)" {
+    grep -qE '^ExecStart=/usr/local/bin/' "${UNIT}"
+}

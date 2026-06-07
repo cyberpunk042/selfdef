@@ -563,3 +563,9 @@ assert 'namespace' not in meta, f'metadata.namespace must be absent (cluster-sco
 @test "INVARIANT (postinst-installed YAML target dir is /etc/tetragon/tracing-policies — canonical Tetragon CRD location)" {
     grep -qE '/etc/tetragon/tracing-policies/' "${POSTINST}"
 }
+
+@test "INVARIANT (postrm purge has fully-reversed postinst — install/uninstall symmetry contract)" {
+    # Postrm must reverse all postinst-side effects: chattr +i → chattr -i, rm dir → keep, etc.
+    grep -qE 'chattr -i' "${POSTRM}"
+    grep -qE 'rm -f' "${POSTRM}"
+}

@@ -864,3 +864,16 @@ assert 'install' in data, 'install missing'
         grep -qE '^Documentation=' "${s}"
     done
 }
+
+@test "INVARIANT (dns-resolver-watchdog timer unit declares OnBootSec= — boot-catchup-delay contract)" {
+    # Sister to brain-wide systemd OnBootSec= INVARIANT
+    # family. Watchdog .timer units MUST declare OnBootSec=
+    # so the first watchdog fire is delayed until after boot
+    # finishes settling. Locks the boot-catchup-delay
+    # discipline on the dns-resolver-watchdog timer substrate.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/dns-resolver-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        grep -qE '^OnBootSec=' "${t}"
+    done
+}

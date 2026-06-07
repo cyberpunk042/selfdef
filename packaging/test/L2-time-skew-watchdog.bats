@@ -720,3 +720,16 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         grep -qE '^Documentation=' "${s}"
     done
 }
+
+@test "INVARIANT (time-skew-watchdog timer unit declares OnBootSec= — boot-catchup-delay contract)" {
+    # Sister to brain-wide systemd OnBootSec= INVARIANT
+    # family. Watchdog .timer units MUST declare OnBootSec=
+    # so the first watchdog fire is delayed until after boot
+    # finishes settling. Locks the boot-catchup-delay
+    # discipline on the time-skew-watchdog timer substrate.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        grep -qE '^OnBootSec=' "${t}"
+    done
+}

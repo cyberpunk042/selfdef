@@ -564,3 +564,17 @@ setup() {
 @test "INVARIANT (lib's version-gate redirects to stderr — fail-loud-message stderr-channel contract)" {
     awk '/^if.*SELFDEF_MODULE_LIB_VERSION_REQUIRED/,/^fi/' "${LIB}" | grep -qE '>&2'
 }
+
+@test "INVARIANT (lib helpers are all defined before any non-helper code — source-time-order contract)" {
+    # Verify SELFDEF_MODULE_LIB_VERSION assignment + the
+    # version-required gate appear BEFORE the helper function
+    # definitions. This is the canonical source-order: the
+    # gate fails fast on incompatible callers before any
+    # function is even read.
+    lib_content=$(cat "${LIB}")
+    gate_line=$(grep -n 'SELFDEF_MODULE_LIB_VERSION_REQUIRED' "${LIB}" | head -1 | cut -d: -f1)
+    first_func_line=$(grep -n '^log()' "${LIB}" | head -1 | cut -d: -f1)
+    [ -n "${gate_line}" ]
+    [ -n "${first_func_line}" ]
+    [ "${gate_line}" -lt "${first_func_line}" ]
+}

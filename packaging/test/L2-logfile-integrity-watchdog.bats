@@ -810,3 +810,16 @@ assert 'install' in data, 'install missing'
         grep -qE '^Documentation=' "${s}"
     done
 }
+
+@test "INVARIANT (logfile-integrity-watchdog timer unit declares OnBootSec= — boot-catchup-delay contract)" {
+    # Sister to brain-wide systemd OnBootSec= INVARIANT
+    # family. Watchdog .timer units MUST declare OnBootSec=
+    # so the first watchdog fire is delayed until after boot
+    # finishes settling. Locks the boot-catchup-delay
+    # discipline on the logfile-integrity-watchdog timer substrate.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/logfile-integrity-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        grep -qE '^OnBootSec=' "${t}"
+    done
+}

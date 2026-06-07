@@ -610,3 +610,16 @@ p = data.get('provides')
 assert isinstance(p, list), f'provides must be TOML list, got {type(p).__name__}'
 "
 }
+
+@test "INVARIANT (bridge-l2 module.toml conflicts field present as TOML list — mutual-exclusion contract)" {
+    # Sister to brain-wide module.toml conflicts INVARIANT family.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+c = data.get('conflicts')
+assert isinstance(c, list), f'conflicts must be TOML list (may be empty), got {type(c).__name__}'
+"
+}

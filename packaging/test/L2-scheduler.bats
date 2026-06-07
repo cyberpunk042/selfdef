@@ -521,3 +521,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^RestrictSUIDSGID=true' "${UNIT}"
     grep -qE '^SystemCallArchitectures=native' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler unit ExecStart binary path is in /usr/local/bin/ — operator-extension path consistency)" {
+    grep -qE '^ExecStart=/usr/local/bin/' "${UNIT}"
+}

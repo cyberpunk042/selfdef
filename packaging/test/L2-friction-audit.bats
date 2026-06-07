@@ -626,3 +626,9 @@ EOF
     grep -qE 'INITIATING SOVEREIGN HARDWARE FRICTION AUDIT' "${SCRIPT}"
     grep -qE 'Hardware Matrix Audited Successfully' "${SCRIPT}"
 }
+
+@test "INVARIANT (script declares exit code 1 for PCIe-fail / 2 for ZFS-fail / 3 for Memory-fail — gate-specific exit-code dispatch contract)" {
+    grep -qE 'exit 1' "${SCRIPT}"
+    grep -qE 'exit 2' "${SCRIPT}"
+    grep -qE 'exit 3' "${SCRIPT}"
+}

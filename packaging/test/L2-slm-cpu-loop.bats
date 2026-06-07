@@ -684,3 +684,15 @@ sc = (data.get('install_paths') or {}).get('scope', '')
 assert sc == 'system', f'scope must be system, got {sc!r}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml [install_paths].paths is non-empty TOML list — mutation-manifest must surface ≥1 path)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+paths = (data.get('install_paths') or {}).get('paths', [])
+assert isinstance(paths, list) and len(paths) > 0, f'install_paths.paths must be non-empty list, got {paths!r}'
+"
+}

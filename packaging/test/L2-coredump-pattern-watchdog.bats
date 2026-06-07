@@ -708,3 +708,16 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         grep -qE '^Documentation=' "${s}"
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog timer unit declares OnBootSec= — boot-catchup-delay contract)" {
+    # Sister to brain-wide systemd OnBootSec= INVARIANT
+    # family. Watchdog .timer units MUST declare OnBootSec=
+    # so the first watchdog fire is delayed until after boot
+    # finishes settling. Locks the boot-catchup-delay
+    # discipline on the coredump-pattern-watchdog timer substrate.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        grep -qE '^OnBootSec=' "${t}"
+    done
+}

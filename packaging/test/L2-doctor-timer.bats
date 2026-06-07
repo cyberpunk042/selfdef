@@ -506,3 +506,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qE '^RestrictSUIDSGID=true' "${SERVICE}"
     grep -qE '^SystemCallArchitectures=native' "${SERVICE}"
 }
+
+@test "INVARIANT (.timer's OnUnitActiveSec is hours-or-longer cadence — anti-too-frequent-probe contract)" {
+    grep -qE '^OnUnitActiveSec=([0-9]+h|[0-9]+d)' "${TIMER}"
+}
