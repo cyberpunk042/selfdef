@@ -361,3 +361,22 @@ TOMLEOF
     output="$(run_wd 2>&1)"
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(libpam|shadow|passwd)'
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. umask-baseline manifest declares install + profile
+    # gating (default / strict) the resolver enforces; malformed
+    # manifest wedges the umask-baseline drop-in. Python's
+    # tomllib is the canonical parser. Locks anti-malformed-
+    # manifest on the umask-baseline substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/umask-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'umask-baseline', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
