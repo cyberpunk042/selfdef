@@ -510,3 +510,28 @@ v = data.get('version', '')
 assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r}'
 "
 }
+
+@test "INVARIANT (shell-timeout-baseline module.toml [install] apply = \"install/apply.sh\" — install apply path canonical contract)" {
+    # Sister to brain-wide module.toml [install] INVARIANT
+    # family. The selfdefctl installer resolves apply scripts
+    # via module.toml's [install].apply field — the canonical
+    # value is the relative path "install/apply.sh" (under the
+    # module's own directory). A regression that swapped to
+    # an absolute /usr/local/libexec/... path would break the
+    # in-tree test runner (which executes apply scripts from
+    # the source tree, not /usr/local/libexec/). A regression
+    # to a non-existent path would surface as "apply script
+    # not found" at install time. Locks the canonical
+    # install/apply.sh path discipline on the shell-timeout-baseline module
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/shell-timeout-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+inst = data.get('install') or {}
+ap = inst.get('apply', '')
+assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {ap!r}'
+"
+}

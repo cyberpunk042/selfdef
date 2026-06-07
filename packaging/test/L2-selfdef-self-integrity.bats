@@ -593,3 +593,28 @@ assert 'install' in data, 'install missing'
         grep -qE '^Description=' "${s}"
     done
 }
+
+@test "INVARIANT (selfdef-self-integrity module.toml [install] apply = \"install/apply.sh\" — install apply path canonical contract)" {
+    # Sister to brain-wide module.toml [install] INVARIANT
+    # family. The selfdefctl installer resolves apply scripts
+    # via module.toml's [install].apply field — the canonical
+    # value is the relative path "install/apply.sh" (under the
+    # module's own directory). A regression that swapped to
+    # an absolute /usr/local/libexec/... path would break the
+    # in-tree test runner (which executes apply scripts from
+    # the source tree, not /usr/local/libexec/). A regression
+    # to a non-existent path would surface as "apply script
+    # not found" at install time. Locks the canonical
+    # install/apply.sh path discipline on the selfdef-self-integrity module
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+inst = data.get('install') or {}
+ap = inst.get('apply', '')
+assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {ap!r}'
+"
+}
