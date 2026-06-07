@@ -329,3 +329,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (RUN+= under /var/tmp — writable-root axis-symmetric expansion on udev device-event-trigger surface)" {
+    # Sister to /home RUN+= writable-root INVARIANT. /var/tmp
+    # writable by ALL users + persists across reboots.
+    # Attacker plants binary in /var/tmp + adds udev rule with
+    # RUN+=/var/tmp/.evil — every USB insert / NIC add / block
+    # device discover fires the planted exec AS ROOT.
+    printf 'SUBSYSTEM=="block", SYMLINK+="d"\n' > "${RULE}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'SUBSYSTEM=="block", RUN+="/var/tmp/.evil"\n' > "${RULE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
