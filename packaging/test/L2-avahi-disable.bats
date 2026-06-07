@@ -313,3 +313,23 @@ TOMLEOF
     grep -q 'systemctl mask avahi-daemon.service' "${SYSEOF_LOG}"
     grep -q 'systemctl mask avahi-daemon.socket' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO systemctl mask/disable/stop fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain (acct-baseline / aslr-baseline / apport-
+    # disable / at-disable / many others). Operator's exploratory
+    # --dry-run MUST preview without firing systemctl stop/disable/
+    # mask against avahi-daemon.service OR avahi-daemon.socket.
+    # Without strict DRY_RUN gating, a previewed dry-run would
+    # silently neutralize mDNS broadcast on a host where operator
+    # legitimately uses it (Linux desktop with print-server
+    # discovery, IoT-control nodes). Locks the dry-run-preserves-
+    # state contract on the mDNS-broadcast neutralization
+    # substrate.
+    write_config "mask"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    ! grep -q 'systemctl mask avahi-daemon.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask avahi-daemon.socket' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl stop avahi-daemon.service' "${SYSEOF_LOG}"
+}
