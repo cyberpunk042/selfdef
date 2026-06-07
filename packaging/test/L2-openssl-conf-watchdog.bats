@@ -244,3 +244,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         bash "${WD}"
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (engine .so under /home — user-writable hijack on OpenSSL engine dlopen surface)" {
+    # Sister to many other watchdog's /home user-writable
+    # INVARIANT across the brain. /home is the user-writable
+    # surface — an attacker with regular user account can drop
+    # a malicious OpenSSL engine .so into their home and have
+    # it dlopen()'d into EVERY OpenSSL-using daemon (sshd, nginx,
+    # openvpn, postgres, every TLS client). Locks axis-symmetry
+    # across the writable-root family on the OpenSSL engine
+    # dlopen-load surface (T1574 — Hijack Execution Flow via
+    # shared object substitution; OpenSSL engines run AS the
+    # consuming process with full TLS-key access).
+    printf 'engine_id = evil\ndynamic_path = /home/user/.evil-engine.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
