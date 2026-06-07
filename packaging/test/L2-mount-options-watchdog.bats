@@ -375,3 +375,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '/var/log:nodev'
     cap | grep -qE '"severity":"(warn|alert)"'
 }
+
+@test "INVARIANT (/home + nodev: missing nodev on /home surfaces in sample — cross-user device-creation defense)" {
+    # Sister to /tmp+nosuid, /var/tmp+nosuid, /dev/shm+noexec,
+    # /boot+nosuid, /var/log+nodev axes already locked. /home
+    # is shared user-data surface — attacker with regular user
+    # account who creates a device-node in their home dir gets
+    # cross-user / cross-namespace access if the device node is
+    # owned by the user (e.g. mknod c /dev/sda for raw disk
+    # access). Lock axis-symmetry on /home: missing nodev
+    # surfaces in sample so operator dashboard routes triage
+    # to the home-dir mount integrity.
+    mk_findmnt
+    write_fixture $'/home\tnosuid,noexec,relatime'       # missing nodev only
+    run_wd
+    cap | grep -q '/home:nodev'
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
