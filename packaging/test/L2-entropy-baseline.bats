@@ -337,3 +337,19 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"entropy-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family
+    # for timer-driven scheduled probes (secure-boot-status,
+    # swap-encryption-detect, doctor-timer, bootloader-password-
+    # detect). The entropy-baseline probe runs ON the timer's
+    # scheduled fire — executes ONCE, reads /proc/sys/kernel/
+    # random/entropy_avail, compares to threshold, emits a
+    # verdict, then exits. Type=simple would leave systemd
+    # thinking the probe is a long-running daemon, breaking
+    # timer's OnSuccess / OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the entropy-baseline substrate.
+    write_config "report"
+    run_wd
+    grep -qE '^Type=oneshot' "${SYSTEMD_DIR}/selfdef-entropy.service"
+}
