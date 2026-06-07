@@ -330,3 +330,20 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"swap-encryption-detect"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics, not persistent service)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family
+    # for timer-driven scheduled probes (entropy-baseline,
+    # secure-boot-status, mta-loopback-detect, doctor-timer).
+    # The swap-encryption-detect probe runs ON the timer's
+    # scheduled fire — it executes ONCE, emits a verdict, then
+    # exits. Type=simple would leave systemd thinking the probe
+    # is a long-running daemon, breaking timer's OnSuccess /
+    # OnFailure / OnUnitActiveSec semantics (which depend on
+    # the service reaching inactive(dead) before the next fire).
+    # Locks oneshot-probe contract on the swap-encryption-
+    # detect substrate.
+    write_config "report"
+    run_wd
+    grep -qE '^Type=oneshot' "${SVC_DST}"
+}
