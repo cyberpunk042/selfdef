@@ -329,3 +329,21 @@ TOMLEOF
     [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
     grep -qE '^Storage=none' "${DROPIN_DIR}/50-selfdef.conf"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in render AND NO systemctl restart fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/systemd/coredump.conf.d/
+    # 50-selfdef.conf AND without restarting coredump.socket. A
+    # silent dry-run that committed would flip systemd-coredump's
+    # storage location/policy on a host under investigation.
+    # Locks dry-run-preserves-state on the coredumpd-redirect
+    # substrate (kernel-memory-leak via crash-dump surface
+    # neutralization).
+    rm -f "${DROPIN_DIR}/50-selfdef.conf"
+    write_config "redirect"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    ! grep -qE 'systemctl restart coredump' "${SYSEOF_LOG}"
+}
