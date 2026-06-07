@@ -305,3 +305,14 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named CA hook surfaces in sample for operator-triage routing)" {
+    # Sister to brain-wide DELTA-detect sample-naming INVARIANTs.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\necho new\n' > "${HOOKD}/99-distinctive-attacker-ca-hook"
+    chmod 0755 "${HOOKD}/99-distinctive-attacker-ca-hook"
+    run_wd
+    cap | grep -qE 'distinctive-attacker-ca-hook|"severity":"(alert|warn|ok)"'
+}
