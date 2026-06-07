@@ -349,3 +349,26 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-grant'
 }
+
+@test "INVARIANT (commented grant NOT flagged: # prefix filtered from user-list inventory)" {
+    # Sister to many other watchdog's commented-line filter
+    # INVARIANTs across the brain (anacrontab-watchdog #-prefix,
+    # apt-hooks current-behavior //-non-filtered, aliases-watchdog
+    # #-filter, bash-completion #-filter). cron.allow/at.allow
+    # parse # as a comment prefix per crontab(5) semantics — a
+    # commented line is NOT a grant. The watchdog MUST filter
+    # comment-prefixed entries from the inventory so operator
+    # annotations ("# alice removed 2026-04-12") don't surface as
+    # current grants. Without the filter, operator's audit
+    # comments would inflate the grant count + flood the
+    # dashboard with phantom alerts.
+    printf 'alice\n' > "${CA}"
+    printf 'someone\n' > "${AA}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'alice\n# bob added 2026-04-12 then removed\n# evil commented out\n' > "${CA}"
+    run_wd
+    # commented users MUST NOT count as grants → no schedule_
+    # capability_granted event fires.
+    ! cap | grep -q '"event":"schedule_capability_granted"'
+}
