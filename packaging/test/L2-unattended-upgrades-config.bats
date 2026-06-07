@@ -299,3 +299,21 @@ EOF
     # download (apt-daily) line comes before upgrade (apt-daily-upgrade) line.
     [ "${download_line}" -lt "${upgrade_line}" ]
 }
+
+@test "INVARIANT (security-only profile narrows to security advisories — anti-feature-update regression-risk)" {
+    # Sister to dnf-automatic-config upgrade_type=security INVARIANT
+    # already locked. The selfdef security-only profile MUST
+    # explicitly narrow the unattended-upgrades transaction to
+    # security-advisory-only patches, NOT the full updates +
+    # backports stream which would auto-apply ALL repo updates
+    # (including potential regression-risk feature updates the
+    # operator hasn't tested). Locks Unattended-Upgrade::Allowed-
+    # Origins to the security suite (Debian-Security / Ubuntu
+    # security-updates).
+    write_config "security-only"
+    run_wd
+    drop_in="${APT_CONFD}/50selfdef-unattended-upgrades"
+    [ -f "${drop_in}" ]
+    grep -qE 'Unattended-Upgrade::(Origins-Pattern|Allowed-Origins)' "${drop_in}"
+    grep -qE 'security|Debian-Security|UbuntuESM' "${drop_in}"
+}
