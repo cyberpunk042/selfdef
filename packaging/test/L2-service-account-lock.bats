@@ -913,3 +913,15 @@ assert prof is not None, f'[profiles] must be present, got None'
 assert isinstance(prof, dict), f'[profiles] must be TOML table, got {type(prof).__name__}'
 "
 }
+
+@test "INVARIANT (service-account-lock module.toml [profiles].default field present + non-empty — default-profile-selector contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/service-account-lock/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+d = (data.get('profiles') or {}).get('default', '')
+assert d, f'profiles.default must be non-empty string, got {d!r}'
+"
+}

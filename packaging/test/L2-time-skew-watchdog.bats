@@ -751,3 +751,16 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         grep -qE '^WantedBy=timers.target' "${t}"
     done
 }
+
+@test "INVARIANT (time-skew-watchdog timer unit declares Description= — operator-list-timers identification contract)" {
+    # Sister to brain-wide systemd Description= INVARIANT
+    # family. Watchdog .timer units MUST declare Description=
+    # so operators triaging `systemctl list-timers` output
+    # see a human-readable label per timer. Locks the
+    # timer-Description discipline.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        grep -qE '^Description=' "${t}"
+    done
+}
