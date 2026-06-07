@@ -212,3 +212,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-autofs -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): autofs-watchdog does NOT refresh baseline on suspicious-map detection — alert STAYS until operator updates" {
+    # T1546 mount-access-triggered root-exec persistence — suspicious-
+    # map alert MUST persist across runs until operator explicitly
+    # re-baselines. Sister to every other no-auto-trust persistence
+    # INVARIANT across the brain (sshrc, cron-job, anacrontab,
+    # bash-completion, shell-init, apt-hooks, auditd-plugins).
+    printf '/mnt/data program:/usr/sbin/auto.smb\n' > "${CONF}"
+    run_wd
+    printf '/mnt/x program:/tmp/evil.sh\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
