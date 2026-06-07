@@ -321,3 +321,18 @@ teardown_real_run() {
         ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(selfdefctl|rustc|cargo)' "${f}"
     done
 }
+
+@test "INVARIANT (apply.sh phase = \"pre\" honored — manifest declares pre-runtime hook so env file lands before consumers fire)" {
+    # Sister to brain-wide module.toml manifest-completeness +
+    # phase-order contract family. hardware-tune-cache provides
+    # the hardware-tune-env contract every downstream rust/cargo/
+    # cc/c++ build step in selfdef consumes. To guarantee the
+    # env file is on disk BEFORE those downstream module-install
+    # steps fire, the manifest declares phase = "pre" — the
+    # selfdef installer's topological sort honors this and
+    # schedules pre-phase modules first. Renaming "pre" to a
+    # different label or omitting it would break the downstream-
+    # consumer install ordering. Locks pre-phase contract on the
+    # hardware-tune-cache substrate.
+    grep -qE '^phase[[:space:]]*=[[:space:]]*"pre"' "${MODULE_DIR}/module.toml"
+}
