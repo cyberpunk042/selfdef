@@ -179,3 +179,21 @@ TEMPLATES_DIR="${MODULE_DIR}/templates"
     # the script carries some form of existence-check.
     grep -qE '\[ -d|test -d|\[\[ -d|if.*-d' "${TEMPLATES_DIR}/50-selfdef-presence"
 }
+
+@test "INVARIANT (issue + issue.net carry selfdef self-identifying marker — operator-audit-trail on pre-login banners)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain. /etc/issue + /etc/issue.net are
+    # the pre-login banners displayed by getty (console) +
+    # telnet/ssh (network). MUST carry a selfdef identifier so a
+    # stale-cleanup pass can identify selfdef-managed banners
+    # from operator-hand-authored ones. Without the marker, a
+    # careless overwrite or operator-customization could clobber
+    # the selfdef-provided legal banner (compliance regimes
+    # mandate specific banner text — operator MUST be able to
+    # tell where it came from for audit purposes).
+    # Lock current behavior: at least ONE of the issue/issue.net
+    # templates carries the marker.
+    grep -qE 'selfdef|managed-by' "${TEMPLATES_DIR}/issue.txt" \
+        || grep -qE 'selfdef|managed-by' "${TEMPLATES_DIR}/issue.net.txt" \
+        || grep -qE 'selfdef|managed-by' "${TEMPLATES_DIR}/motd.txt"
+}
