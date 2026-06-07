@@ -298,3 +298,20 @@ EOF
     cap | grep -q '"event":"baseline_initial"'
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (sample names offending .conf in JSON — operator triage routing)" {
+    # Sister to many other watchdog sample-naming INVARIANTs across
+    # the brain. When the inventory delta surfaces a new module
+    # entry, the sample MUST name the source .conf so operator
+    # dashboard routes triage to the right path. Sister contract
+    # to polkit-rules/nfs-exports/rhosts/tmpfiles/sysusers
+    # sample-naming pattern.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${CONFD}/distinctive-attacker-conf.conf" <<'EOF'
+evil_backdoor_module
+EOF
+    run_wd
+    cap | grep -q 'distinctive-attacker-conf\|evil_backdoor_module'
+}
