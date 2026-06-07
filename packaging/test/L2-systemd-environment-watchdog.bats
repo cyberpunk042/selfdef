@@ -290,3 +290,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (PYTHONPATH injection — sister axis to LD_* on the python-loader family)" {
+    # Sister to LD_PRELOAD/LD_AUDIT/LD_LIBRARY_PATH ld.so axes
+    # already locked. PYTHONPATH is the equivalent dynamic-
+    # loader env var for the Python runtime — every python
+    # process initiated under the affected systemd unit will
+    # prepend the attacker-controlled path to sys.path,
+    # hijacking 'import os' / 'import json' / any module
+    # resolution. Equally powerful for code injection as LD_*
+    # for native binaries. Locks coverage of the Python-loader
+    # axis on the systemd manager DefaultEnvironment surface
+    # (T1574 — Hijack Execution Flow via runtime loader; the
+    # python-runtime sister of the ld.so family).
+    printf '[Manager]\nDefaultEnvironment=LANG=en_US.UTF-8\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Manager]\nDefaultEnvironment=PYTHONPATH=/tmp/evil-py-libs\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
