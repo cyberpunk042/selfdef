@@ -267,3 +267,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (plugin .so under /var/tmp — writable-root axis-symmetric expansion on NM VPN dlopen surface)" {
+    # Sister to /home + relative-with-slash plugin .so writable-
+    # root INVARIANTs already locked. /var/tmp is writable by ALL
+    # users (sticky-bit doesn't gate exec/dlopen) AND persists
+    # across reboots (unlike /tmp /dev/shm tmpfs). Attackers
+    # prefer it for boot-survival persistence. NetworkManager
+    # MUST recognize /var/tmp plugin .so paths just as firmly as
+    # /home — locks axis-symmetric writable-root coverage on
+    # the T1574 NM-VPN-plugin Hijack Execution Flow surface.
+    printf '[libnm]\nplugin=/var/tmp/.evil-nm-plugin.so\n' > "${NAME}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
