@@ -226,3 +226,29 @@ run_wd() {
     [ "${stop_line}" -lt "${disable_line}" ]
     [ "${disable_line}" -lt "${mask_line}" ]
 }
+
+@test "INVARIANT (mask order symmetric across .socket — rpcbind.socket follows stop→disable→mask too)" {
+    # Sister to bluetooth-disable + services-disable-printing
+    # symmetric-mask-order INVARIANT. rpcbind.socket is the event-
+    # source unit; must terminate-then-clear-then-gate consistently.
+    write_config "mask"
+    run_wd
+    s="$(grep -n 'systemctl stop rpcbind.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    d="$(grep -n 'systemctl disable rpcbind.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    m="$(grep -n 'systemctl mask rpcbind.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${s}" -lt "${d}" ]
+    [ "${d}" -lt "${m}" ]
+}
+
+@test "INVARIANT (profile downgrade mask → stop: rewrites stop+disable + does NOT re-issue mask — bidirectional contract)" {
+    # Sister to bluetooth-disable + services-disable-printing
+    # downgrade-bidirectional INVARIANT.
+    write_config "mask"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop rpcbind.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable rpcbind.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask' "${SYSEOF_LOG}"
+}
