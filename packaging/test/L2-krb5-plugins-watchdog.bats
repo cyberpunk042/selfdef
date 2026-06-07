@@ -318,3 +318,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (plugin .so under /var/tmp — writable-root axis-symmetric expansion)" {
+    # Sister to /tmp + /home + /dev/shm + relative-with-slash
+    # krb5 plugin writable-root INVARIANTs.
+    printf '[plugins]\n  clpreauth = { module = pkinit:/usr/lib/krb5/plugins/preauth/pkinit.so }\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[plugins]\n  kdcpreauth = { module = evil:/var/tmp/.evil-krb5.so }\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
