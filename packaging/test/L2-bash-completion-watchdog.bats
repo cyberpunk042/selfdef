@@ -980,3 +980,10 @@ seed_benign() {
         grep -qE '^ExecStart=/usr/local/libexec/selfdef/' "${s}"
     done
 }
+
+@test "INVARIANT (bash-completion-watchdog .timer file exists at canonical path modules/bash-completion-watchdog/systemd — canonical-systemd-dir layout)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/bash-completion-watchdog/systemd"
+    [ -d "${timer_dir}" ]
+    n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

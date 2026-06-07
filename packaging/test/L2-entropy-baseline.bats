@@ -938,3 +938,8 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ target, got {ps!r}'
 "
 }
+
+@test "INVARIANT (entropy-baseline module.toml exists at canonical path modules/entropy-baseline/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/entropy-baseline/module.toml"
+    [ -f "${mtoml}" ]
+}

@@ -943,3 +943,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (rsh-telnet-disable module.toml exists at canonical path modules/rsh-telnet-disable/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/rsh-telnet-disable/module.toml"
+    [ -f "${mtoml}" ]
+}

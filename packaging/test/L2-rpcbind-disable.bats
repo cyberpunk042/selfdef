@@ -909,3 +909,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (rpcbind-disable module.toml exists at canonical path modules/rpcbind-disable/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/rpcbind-disable/module.toml"
+    [ -f "${mtoml}" ]
+}

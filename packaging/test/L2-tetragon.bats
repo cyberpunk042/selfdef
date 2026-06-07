@@ -838,3 +838,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (tetragon module.toml exists at canonical path modules/tetragon/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/tetragon/module.toml"
+    [ -f "${mtoml}" ]
+}

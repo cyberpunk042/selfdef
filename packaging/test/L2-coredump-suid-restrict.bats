@@ -960,3 +960,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (coredump-suid-restrict module.toml exists at canonical path modules/coredump-suid-restrict/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/module.toml"
+    [ -f "${mtoml}" ]
+}

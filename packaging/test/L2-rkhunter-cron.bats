@@ -867,3 +867,8 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ target, got {ps!r}'
 "
 }
+
+@test "INVARIANT (rkhunter-cron module.toml exists at canonical path modules/rkhunter-cron/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/rkhunter-cron/module.toml"
+    [ -f "${mtoml}" ]
+}

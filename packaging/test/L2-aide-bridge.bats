@@ -981,3 +981,8 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ target, got {ps!r}'
 "
 }
+
+@test "INVARIANT (aide-bridge module.toml exists at canonical path modules/aide-bridge/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/aide-bridge/module.toml"
+    [ -f "${mtoml}" ]
+}

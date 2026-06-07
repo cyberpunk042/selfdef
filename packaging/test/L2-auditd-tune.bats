@@ -970,3 +970,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (auditd-tune module.toml exists at canonical path modules/auditd-tune/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-tune/module.toml"
+    [ -f "${mtoml}" ]
+}

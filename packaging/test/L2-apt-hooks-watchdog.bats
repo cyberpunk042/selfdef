@@ -1019,3 +1019,10 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         grep -qE '^ExecStart=/usr/local/libexec/selfdef/' "${s}"
     done
 }
+
+@test "INVARIANT (apt-hooks-watchdog .timer file exists at canonical path modules/apt-hooks-watchdog/systemd — canonical-systemd-dir layout)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/systemd"
+    [ -d "${timer_dir}" ]
+    n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

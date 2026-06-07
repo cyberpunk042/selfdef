@@ -949,3 +949,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (unattended-upgrades-config module.toml exists at canonical path modules/unattended-upgrades-config/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/unattended-upgrades-config/module.toml"
+    [ -f "${mtoml}" ]
+}

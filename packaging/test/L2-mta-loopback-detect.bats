@@ -944,3 +944,8 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ target, got {ps!r}'
 "
 }
+
+@test "INVARIANT (mta-loopback-detect module.toml exists at canonical path modules/mta-loopback-detect/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect/module.toml"
+    [ -f "${mtoml}" ]
+}

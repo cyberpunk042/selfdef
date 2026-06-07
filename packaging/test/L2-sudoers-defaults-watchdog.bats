@@ -995,3 +995,10 @@ assert 'install' in data, 'install missing'
         grep -qE '^ExecStart=/usr/local/libexec/selfdef/' "${s}"
     done
 }
+
+@test "INVARIANT (sudoers-defaults-watchdog .timer file exists at canonical path modules/sudoers-defaults-watchdog/systemd — canonical-systemd-dir layout)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/sudoers-defaults-watchdog/systemd"
+    [ -d "${timer_dir}" ]
+    n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

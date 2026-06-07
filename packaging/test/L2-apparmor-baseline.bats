@@ -1081,3 +1081,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (apparmor-baseline module.toml exists at canonical path modules/apparmor-baseline/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/apparmor-baseline/module.toml"
+    [ -f "${mtoml}" ]
+}

@@ -972,3 +972,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (fail2ban-bridge module.toml exists at canonical path modules/fail2ban-bridge/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge/module.toml"
+    [ -f "${mtoml}" ]
+}

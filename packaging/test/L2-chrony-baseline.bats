@@ -978,3 +978,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (chrony-baseline module.toml exists at canonical path modules/chrony-baseline/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/chrony-baseline/module.toml"
+    [ -f "${mtoml}" ]
+}

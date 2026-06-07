@@ -932,3 +932,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (sysctl-network-baseline module.toml exists at canonical path modules/sysctl-network-baseline/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/sysctl-network-baseline/module.toml"
+    [ -f "${mtoml}" ]
+}

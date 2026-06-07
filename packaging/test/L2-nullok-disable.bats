@@ -1026,3 +1026,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (nullok-disable module.toml exists at canonical path modules/nullok-disable/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/nullok-disable/module.toml"
+    [ -f "${mtoml}" ]
+}

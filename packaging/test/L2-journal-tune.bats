@@ -944,3 +944,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (journal-tune module.toml exists at canonical path modules/journal-tune/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/journal-tune/module.toml"
+    [ -f "${mtoml}" ]
+}

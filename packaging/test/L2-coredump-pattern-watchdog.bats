@@ -948,3 +948,10 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         grep -qE '^ExecStart=/usr/local/libexec/selfdef/' "${s}"
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .timer file exists at canonical path modules/coredump-pattern-watchdog/systemd — canonical-systemd-dir layout)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    [ -d "${timer_dir}" ]
+    n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

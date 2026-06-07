@@ -932,3 +932,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (nscd-disable module.toml exists at canonical path modules/nscd-disable/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/nscd-disable/module.toml"
+    [ -f "${mtoml}" ]
+}

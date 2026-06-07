@@ -944,3 +944,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (services-disable-printing module.toml exists at canonical path modules/services-disable-printing/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/module.toml"
+    [ -f "${mtoml}" ]
+}

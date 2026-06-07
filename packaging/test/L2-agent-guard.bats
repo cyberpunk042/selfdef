@@ -846,3 +846,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (agent-guard module.toml exists at canonical path modules/agent-guard/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/agent-guard/module.toml"
+    [ -f "${mtoml}" ]
+}

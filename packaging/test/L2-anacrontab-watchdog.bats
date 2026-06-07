@@ -1028,3 +1028,10 @@ EOF
         grep -qE '^ExecStart=/usr/local/libexec/selfdef/' "${s}"
     done
 }
+
+@test "INVARIANT (anacrontab-watchdog .timer file exists at canonical path modules/anacrontab-watchdog/systemd — canonical-systemd-dir layout)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/anacrontab-watchdog/systemd"
+    [ -d "${timer_dir}" ]
+    n=$(ls "${timer_dir}"/*.timer 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

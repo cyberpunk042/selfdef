@@ -986,3 +986,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (host-sentinel module.toml exists at canonical path modules/host-sentinel/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/host-sentinel/module.toml"
+    [ -f "${mtoml}" ]
+}

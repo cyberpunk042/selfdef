@@ -948,3 +948,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (ctrlaltdel-disable module.toml exists at canonical path modules/ctrlaltdel-disable/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ctrlaltdel-disable/module.toml"
+    [ -f "${mtoml}" ]
+}

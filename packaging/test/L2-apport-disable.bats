@@ -1009,3 +1009,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (apport-disable module.toml exists at canonical path modules/apport-disable/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/apport-disable/module.toml"
+    [ -f "${mtoml}" ]
+}

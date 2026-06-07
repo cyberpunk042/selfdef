@@ -927,3 +927,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (pam-faillock module.toml exists at canonical path modules/pam-faillock/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-faillock/module.toml"
+    [ -f "${mtoml}" ]
+}

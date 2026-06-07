@@ -981,3 +981,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict), 'TOML root must be table'
 "
 }
+
+@test "INVARIANT (ssh-hardening module.toml exists at canonical path modules/ssh-hardening/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ssh-hardening/module.toml"
+    [ -f "${mtoml}" ]
+}
