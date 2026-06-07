@@ -287,3 +287,22 @@ TOMLEOF
     run_wd
     grep -qE '^[[:space:]]*rotate[[:space:]]+[0-9]+' "${LOGROTATE_DST}"
 }
+
+@test "INVARIANT (logrotate drop-in carries selfdef self-identifying header — head -1 stale-cleanup discipline)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain (ssh-hardening / journal-tune /
+    # slm-cpu-loop / tensor-parallel-inference / hardware-tune-
+    # cache). The drop-in lands at /etc/logrotate.d/selfdef-acct
+    # alongside operator-hand-authored / packaging-provided
+    # logrotate drop-ins (cron, syslog, etc.). A stale-cleanup
+    # pass (operator housekeeping or uninstall path) inspects the
+    # first non-blank comment line to identify selfdef-rendered
+    # config from operator config. Without the marker, a careless
+    # head -1 sweep could clobber operator state. Locks the
+    # provenance contract on the BSD-style process accounting
+    # surface.
+    write_config "enabled"
+    run_wd
+    first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${LOGROTATE_DST}")"
+    [[ "${first_nonblank}" == *"selfdef"* ]]
+}
