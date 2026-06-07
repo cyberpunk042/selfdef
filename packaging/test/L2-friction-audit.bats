@@ -420,3 +420,20 @@ EOF
     # OCSF substrate.
     grep -qE '"gate":' "${SCRIPT}"
 }
+
+@test "INVARIANT (OCSF jsonl has severity_id 1..4 numeric — OCSF severity dimension contract)" {
+    # Sister to brain-wide OCSF schema-fidelity INVARIANT family.
+    # OCSF severity_id is a numeric enumeration:
+    #   1=Informational, 2=Low, 3=Medium, 4=High, 5=Critical
+    # SIEM dashboards filter on severity_id (not the textual
+    # severity field) for cross-source comparison. The
+    # emit_ocsf() helper appends severity_id as a numeric
+    # value (e.g. severity_id=1 for Audit success, =4 for High
+    # for critical PCIe-fail). A regression emitting
+    # severity_id as a string ("severity_id":"high") would
+    # break numeric-range filters in OpenSearch/Wazuh. Locks
+    # numeric severity_id discipline on the friction-audit
+    # OCSF substrate.
+    # The printf in the script: severity_id":%d ensures integer.
+    grep -qE '"severity_id":%d' "${SCRIPT}"
+}
