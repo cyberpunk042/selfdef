@@ -312,3 +312,19 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (job under /home writable root): user-writable persistence vector → alert" {
+    # Sister to /var/tmp + /dev/shm writable-root expansion
+    # INVARIANTs already locked. /home/<user> is writable by the
+    # owning user without privilege; attacker who pivots into a
+    # user account plants a payload there + sets an anacrontab
+    # entry pointing at it for root-exec (T1053.003 — Scheduled
+    # Task / Job via Cron). Closes the /home axis on the
+    # writable-root anacrontab payload-source coverage.
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    printf '%s1\t5\tevil.job\t/home/alice/.payload\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
