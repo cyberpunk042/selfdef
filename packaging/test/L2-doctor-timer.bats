@@ -579,3 +579,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer file declares Unit= absolute path within selfdef namespace — namespace-scoped binding contract)" {
     grep -qE '^Unit=selfdef-' "${TIMER}"
 }
+@test "INVARIANT (.timer file declares OnUnitActiveSec timer-driven cadence — recurring-trigger contract)" {
+    grep -qE '^OnUnitActiveSec=' "${TIMER}"
+}

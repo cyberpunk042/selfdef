@@ -742,3 +742,8 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
     apply="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install/apply.sh"
     head -1 "${apply}" | grep -qE '#!/.*bash'
 }
+
+@test "INVARIANT (bridge-l2 install/check.sh declares bash shebang — bash-interpreter contract)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install/check.sh"
+    head -1 "${chk}" | grep -qE '#!/.*bash'
+}

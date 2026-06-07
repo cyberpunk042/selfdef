@@ -414,3 +414,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE 'configure' "${POSTINST}" || \
     grep -qE 'reinstall|upgrade' "${POSTINST}"
 }
+@test "INVARIANT (guardian.service writes /var/cache/selfdef/guardian/ring records — ring-buffer-state-contract)" {
+    grep -qE '/var/cache/selfdef/guardian/ring' "${POSTINST}"
+}

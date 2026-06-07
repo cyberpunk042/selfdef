@@ -928,3 +928,11 @@ assert 'install' in data, 'install missing'
         grep -qE 'PROFILE.*enforce|enforce.*PROFILE|profile.*enforce' "${s}"
     done
 }
+
+@test "INVARIANT (nfs-mount-watchdog .sh script uses printf-format JSON output — structured-event-emission contract)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/nfs-mount-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'printf' "${s}"
+    done
+}

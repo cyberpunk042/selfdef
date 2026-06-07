@@ -894,3 +894,11 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         grep -qE 'PROFILE.*enforce|enforce.*PROFILE|profile.*enforce' "${s}"
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .sh script uses printf-format JSON output — structured-event-emission contract)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'printf' "${s}"
+    done
+}

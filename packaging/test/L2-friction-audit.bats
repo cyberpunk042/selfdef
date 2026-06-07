@@ -700,3 +700,6 @@ EOF
 @test "INVARIANT (script's Hardware Matrix Audited Successfully verbatim — operator-success-signal terminal-message contract)" {
     grep -qE 'Hardware Matrix Audited Successfully' "${SCRIPT}"
 }
+@test "INVARIANT (script declares hostname env-var resolved at startup — operator-trace contract)" {
+    grep -qE 'hostname|HOSTNAME' "${SCRIPT}"
+}

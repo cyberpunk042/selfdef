@@ -678,3 +678,6 @@ s = data['spec']['kprobes'][0]['syscall']
 assert s == True, f'syscall must be True, got {s!r}'
 "
 }
+@test "INVARIANT (postinst signals Tetragon to reload — operator-config-effective contract)" {
+    grep -qE 'tetragon.service|tetragon-operator|systemctl.*tetragon' "${POSTINST}"
+}

@@ -658,3 +658,7 @@ setup() {
     out="$(selfdef_injection_patterns)"
     echo "${out}" | grep -q 'wget'
 }
+@test "INVARIANT (lib selfdef_injection_patterns includes python exec — known-attack coverage)" {
+    out="$(selfdef_injection_patterns)"
+    echo "${out}" | grep -qE 'python.*exec|python.*-c|eval'
+}

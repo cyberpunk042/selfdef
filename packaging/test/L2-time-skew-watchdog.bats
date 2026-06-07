@@ -905,3 +905,11 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         grep -qE 'chronyc' "${s}"
     done
 }
+
+@test "INVARIANT (time-skew-watchdog .sh script uses printf-format JSON output — structured-event-emission contract)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'printf' "${s}"
+    done
+}

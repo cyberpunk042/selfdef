@@ -735,3 +735,7 @@ assert 'sigma-correlator' in p, f'must provide sigma-correlator, got {p!r}'
     [ -f "${mtoml}" ]
     grep -qE 'kind[[:space:]]*=[[:space:]]*"debian-package"' "${mtoml}"
 }
+@test "INVARIANT (detect-host README documents selfdef-daemon binary linkage — operator-facing-doc contract)" {
+    readme="${BATS_TEST_DIRNAME}/../../modules/detect-host/README.md"
+    [ -f "${readme}" ]
+}

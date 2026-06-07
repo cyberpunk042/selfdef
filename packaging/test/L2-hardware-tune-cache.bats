@@ -796,3 +796,8 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
     apply="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/install/apply.sh"
     head -1 "${apply}" | grep -qE '#!/.*bash'
 }
+
+@test "INVARIANT (hardware-tune-cache install/check.sh declares bash shebang — bash-interpreter contract)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/install/check.sh"
+    head -1 "${chk}" | grep -qE '#!/.*bash'
+}
