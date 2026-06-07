@@ -308,3 +308,16 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-fail2ban-action -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (exec-path under writable-root: actionban invoking binary from /var/tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # fail2ban-ban-event-trigger root-exec — actionban fires AS
+    # ROOT on every ban-trigger (remotely-triggerable via failed
+    # auth attempts).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Definition]\nactionban = /var/tmp/staged_payload\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
