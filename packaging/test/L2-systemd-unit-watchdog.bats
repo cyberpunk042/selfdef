@@ -461,3 +461,25 @@ EOF
     run_wd
     cap | grep -q 'attacker-persistence.timer'
 }
+
+@test "INVARIANT (.path enabled-unit added → alert: T1546 path-trigger persistence axis sister to T1543.002 + T1053.006)" {
+    # Sister to .service (T1543.002) + .timer (T1053.006) axes
+    # already locked. .path units are the THIRD systemd persistence
+    # axis — a .path unit watches a filesystem path + activates an
+    # associated .service when the path changes. Attacker may plant
+    # a .path unit watching a routinely-modified file (e.g.,
+    # /var/log/syslog) + activate their callback service on every
+    # log rotation — a recurring trigger fired by operator-routine
+    # log writes. Locks .path axis on the systemd-unit-inventory
+    # surveillance brain alongside .service + .timer.
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    export SYSTEMD_UNITS="sshd.service nginx.service docker.socket attacker-path-watch.path"
+    cat > "${SYSTEMD_UNIT_DIR}/attacker-path-watch.path" <<'EOF'
+[Path]
+PathChanged=/var/log/syslog
+EOF
+    run_wd
+    cap | grep -q 'attacker-path-watch.path'
+}
