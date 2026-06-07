@@ -347,3 +347,20 @@ EOF
         [ "${mode}" = "600" ] || [ "${mode}" = "640" ] || [ "${mode}" = "644" ]
     done
 }
+
+@test "INVARIANT (script uses '#!/bin/bash' shebang verbatim — POSIX-only sh would lose bash arrays/regex)" {
+    # Sister to R10808 (shebang locked) and brain-wide shebang
+    # discipline. The friction-audit gate script relies on bash-
+    # specific features (regex matching [[ =~ ]], arrays, $RANDOM,
+    # arithmetic comparators >= <=). Silent shebang downgrade to
+    # /bin/sh would break these constructs at runtime — the gate
+    # would silently misbehave during friction probing. Locks
+    # shebang-bash contract on the friction-audit gate script.
+    # This INVARIANT complements R10808 by extending coverage to
+    # match against multi-line script structures.
+    head -1 "${SCRIPT}" | grep -qE '^#!/bin/bash$'
+    # Negative coverage: only one shebang line exists in the
+    # script (no stray inline #! that could confuse interpreters).
+    shebang_count=$(grep -cE '^#!/' "${SCRIPT}")
+    [ "${shebang_count}" = "1" ]
+}
