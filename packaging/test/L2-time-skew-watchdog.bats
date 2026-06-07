@@ -379,3 +379,15 @@ CCEOF
     ! grep -qE 'date[[:space:]]+-s' "${WD}"
     ! grep -qE 'hwclock[[:space:]]+--systohc' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # time-skew-watchdog runs ON the timer's scheduled fire —
+    # queries chronyc tracking, emits a verdict on clock-offset
+    # beyond threshold, then exits. Type=simple would break
+    # timer OnUnitActiveSec semantics. Locks oneshot-probe
+    # contract on the time-skew-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd/selfdef-time-skew-watchdog.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
