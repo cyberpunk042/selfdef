@@ -255,3 +255,18 @@ MODULE_DIR="${BATS_TEST_DIRNAME}/../../modules/detect-host"
     grep -qE '^default[[:space:]]*=[[:space:]]*"default"' "${MODULE_DIR}/module.toml"
     grep -qE 'available[[:space:]]*=[[:space:]]*\[[[:space:]]*"default"[[:space:]]*\]' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (install_paths.scope = \"system\" — manifest declares root-level install scope so resolver schedules root-mounts before user-mounts)" {
+    # Sister to brain-wide install_paths manifest-completeness
+    # INVARIANT family. detect-host's install_paths declares
+    # scope = "system" so the selfdef installer's topological
+    # sort schedules root-mount filesystem dependencies (e.g.,
+    # /etc/selfdef, /var/lib/selfdef, /etc/systemd/system) BEFORE
+    # any user-scope module-install steps fire. A regression
+    # that swapped "system" for "user" or omitted scope would
+    # break the install-ordering contract and cause downstream
+    # module installs to fail because their /etc/selfdef parent
+    # dirs would not yet exist. Locks system-scope discipline on
+    # the detect-host install_paths substrate.
+    grep -qE '^scope[[:space:]]*=[[:space:]]*"system"' "${MODULE_DIR}/module.toml"
+}
