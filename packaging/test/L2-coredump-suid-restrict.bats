@@ -288,3 +288,20 @@ TOMLEOF
     [ -f "${SYSCTL_DROPIN}" ]
     ! [ -f "${LIMITS_DROPIN}" ]
 }
+
+@test "INVARIANT (sysctl drop-in is sysctl.d-parseable: fs.suid_dumpable=0 format — boot-time persistence contract)" {
+    # Sister to kernel-yama-baseline + aslr-baseline sysctl.d-
+    # parseable INVARIANTs already locked. The drop-in lives at
+    # /etc/sysctl.d/50-selfdef-coredump-suid.conf and is parsed
+    # by systemd-sysctl.service at boot. The format MUST be
+    # 'fs.suid_dumpable = 0' (or '=0' without space, both
+    # sysctl.d-valid). A malformed line would silently fail at
+    # boot — the runtime sysctl -w would set the value for
+    # current boot but it would NOT persist across reboot,
+    # leaving the host with degraded suid-coredump-restriction
+    # on next boot.
+    write_config "suid-only"
+    run_wd
+    [ -f "${SYSCTL_DROPIN}" ]
+    grep -qE '^fs\.suid_dumpable[[:space:]]*=[[:space:]]*0$' "${SYSCTL_DROPIN}"
+}
