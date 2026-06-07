@@ -345,3 +345,21 @@ run_wd() {
     grep -qE 'net\.ipv4\.conf\..*\.log_martians\s*=\s*1' "${DROPIN}" \
         || grep -qE 'log_martians\s*=\s*1' "${DROPIN}"
 }
+
+@test "INVARIANT (drop-in carries icmp_echo_ignore_broadcasts=1 — smurf-amplification denial-of-service defense)" {
+    # Sister to rp_filter + tcp_syncookies + accept_redirects +
+    # log_martians sysctl-baseline directive INVARIANTs. net.
+    # ipv4.icmp_echo_ignore_broadcasts=1 instructs the kernel
+    # to silently drop ICMP echo requests targeted at broadcast
+    # addresses — without it, the host becomes a smurf-attack
+    # amplifier (attacker spoofs source as victim, broadcasts
+    # ICMP echo to subnet, all hosts in subnet reply to
+    # victim — 1:N amplification denial-of-service). Sister
+    # to anti-spoof family but on the broadcast-amplification
+    # axis. Lock that baseline carries the directive — host
+    # cannot be weaponized as a smurf amplifier.
+    write_config "baseline"
+    run_wd
+    grep -qE 'net\.ipv4\.icmp_echo_ignore_broadcasts\s*=\s*1' "${DROPIN}" \
+        || grep -qE 'icmp_echo_ignore_broadcasts\s*=\s*1' "${DROPIN}"
+}
