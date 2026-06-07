@@ -399,3 +399,17 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: chrony-baseline installer NEVER deletes operator-pre-existing chrony.conf — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # chrony-baseline writes its own /etc/chrony/conf.d drop-in;
+    # it MUST NEVER rm/find-delete an operator's /etc/chrony/
+    # chrony.conf or chrony.d/* not owned by THIS module. Locks
+    # no-auto-delete on the chrony-baseline installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/chrony-baseline/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/chrony/chrony\.conf' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/chrony.*-delete' "${f}"
+    done
+}
