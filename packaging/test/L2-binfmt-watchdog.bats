@@ -284,3 +284,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-binfmt'
 }
+
+@test "INVARIANT (interpreter under /home — user-writable persistence vector → alert; writable-root axis-symmetric expansion)" {
+    # Sister to /tmp + /var/tmp + /dev/shm writable-root interpreter
+    # INVARIANTs already locked. /home/<user> is writable by the
+    # owning user without privilege; an attacker who pivots into a
+    # user account plants an interpreter at /home/<user>/.bin/sh
+    # AND registers a binfmt entry pointing at it — every exec of
+    # a matching binary fires the planted interpreter (T1574 —
+    # Hijack Execution Flow). Locks the /home axis on the binfmt
+    # writable-root coverage symmetric to /tmp /var/tmp /dev/shm.
+    printf ':evil:M:0:magic:mask:/home/alice/.binfmt-interp:OC\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
