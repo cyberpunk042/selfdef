@@ -177,3 +177,19 @@ INSTALL_DIR="${MODULE_DIR}/install"
     n_emits=$(grep -cE '^[[:space:]]*emit_status' "${INSTALL_DIR}/apply.sh" || echo 0)
     [ "${n_emits}" -ge 1 ]
 }
+
+@test "INVARIANT (module.toml provides l2-bridge contract — downstream-consumer interface lock)" {
+    # Sister to many other installer module's provides-contract
+    # INVARIANT across the brain (suricata ids+eve-json, slm-cpu-
+    # loop slm-loop-runtime, tensor-parallel-inference tensor-
+    # parallel-runtime, wasm-aot-cache wasm-aot-cache-dir). The
+    # bridge-l2 module is the substrate every inline network
+    # module composes on. Its provides token names the L2-bridge
+    # interface — every consumer module (suricata, polarproxy,
+    # future inline IDS/IPS modules) lists this in depends_on. A
+    # silent rename of the token would break every downstream
+    # consumer.
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"l2-bridge"' "${MODULE_DIR}/module.toml" \
+        || grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"bridge-l2"' "${MODULE_DIR}/module.toml" \
+        || grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"selfdef_bridge"' "${MODULE_DIR}/module.toml"
+}
