@@ -266,3 +266,52 @@ EOF
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=standard'* ]]
 }
+
+@test "INVARIANT (apt-config dump REJECTION preserves WORKING content via single-shot backup — rollback fingerprint matches pre-attempt sha)" {
+    # Sister axis to the existing rollback INVARIANT but explicit
+    # about the load-bearing guarantee: when the SECOND apply fails
+    # validation, the drop-in is restored to BYTE-IDENTICAL pre-
+    # apply state. Lock the no-corruption-window contract.
+    write_config "standard"
+    run_wd
+    pre_sha="$(sha256sum "${DST}" | awk '{print $1}')"
+    pre_mode="$(stat -c '%a' "${DST}")"
+    write_config "strict"
+    make_apt_config_reject
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_PKG_TRUST_CONFIG="${CONF}" \
+        SELFDEF_APT_CONFD="${APT_CONFD}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    # Byte-identical restoration.
+    [ "$(sha256sum "${DST}" | awk '{print $1}')" = "${pre_sha}" ]
+    # Mode preserved too.
+    [ "$(stat -c '%a' "${DST}")" = "${pre_mode}" ]
+}
+
+@test "INVARIANT (rollback contract: no leftover .selfdef-rollback.* files after a successful re-apply — single-shot cleanup)" {
+    # The .selfdef-rollback.* sidecar should NEVER persist past a
+    # successful apply. If the rollback file lingers, a future
+    # operator looking at apt.conf.d might mistake it for a real
+    # drop-in. Lock single-shot cleanup contract.
+    write_config "standard"
+    run_wd
+    write_config "strict"
+    run_wd
+    write_config "standard"
+    run_wd
+    # No rollback sidecar files should linger.
+    ! ls "${APT_CONFD}"/*.selfdef-rollback.* >/dev/null 2>&1
+}
+
+@test "INVARIANT (header-marker is first non-blank line — stale-cleanup head -1 grep predictability)" {
+    # Sister to rare-filesystems-disable + rare-network-protocols-
+    # disable + pam-history header-marker INVARIANT. The selfdef-
+    # identifier MUST appear on the first non-blank line so
+    # stale-detection head -1 scans reliably identify selfdef-owned
+    # files.
+    write_config "standard"
+    run_wd
+    first_nonblank="$(grep -m1 -v '^[[:space:]]*$' "${DST}")"
+    [[ "${first_nonblank}" == *"selfdef"* ]] || [[ "${first_nonblank}" == *"managed-by"* ]]
+}
