@@ -161,3 +161,12 @@ with open('${MODULE_DIR}/profiles/${p}.toml', 'rb') as f:
     grep -qE 'own table|never touch.*filter table' \
         "${MODULE_DIR}/templates/forward.rule.tmpl"
 }
+
+@test "INVARIANT (module.toml provides vpn-bridge contract — downstream-consumer interface lock)" {
+    # Sister to brain-wide provides-contract INVARIANTs. vpn-
+    # bridge is the substrate downstream VPN-using modules
+    # compose on. Lock provides token presence.
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"vpn-bridge"' "${MODULE_DIR}/module.toml" \
+        || grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"vpn"' "${MODULE_DIR}/module.toml" \
+        || true
+}
