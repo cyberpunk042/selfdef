@@ -267,3 +267,17 @@ Warning: rootkit-D found"
     main_count=$(cap | grep -cE '^-t selfdef-rkhunter -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (severity field is bounded vocabulary {ok,warn,alert} — operator dashboard severity axis lock)" {
+    # Sister to brain-wide bounded-vocabulary INVARIANTs. severity
+    # field surfaces on operator dashboard color-coded severity
+    # axis. A future refactor introducing a fifth value would
+    # silently bucket as unknown. Bounded set locked.
+    mk_rk 1 "Warning: rootkit-A found"
+    run_wd
+    sev=$(cap | grep -oE '"severity":"[^"]+"' | head -1)
+    case "${sev}" in
+        '"severity":"ok"'|'"severity":"warn"'|'"severity":"alert"') : ;;
+        *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
+    esac
+}
