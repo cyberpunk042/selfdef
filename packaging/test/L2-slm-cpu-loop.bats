@@ -357,3 +357,15 @@ INSTALL_DIR="${MODULE_DIR}/install"
         || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
         || skip "no tomllib/tomli available; parser-contract check skipped"
 }
+
+@test "INVARIANT (no auto-uninstall: slm-cpu-loop installer NEVER emits package-remove commands on llama-cpp/ollama)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANT family.
+    # slm-cpu-loop installs the CPU-side SLM inference daemon
+    # (llama-cpp / ollama runtime); package-removal of the
+    # underlying SLM runtime is operator-domain (the runtime is
+    # not installed by THIS module). Locks no-auto-uninstall on
+    # the slm-cpu-loop substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(llama|ollama|llama-cpp)' "${f}"
+    done
+}
