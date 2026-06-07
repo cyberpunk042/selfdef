@@ -325,3 +325,19 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (sensitive-domain: Google Play / firebase / Apple App Store — mobile-supply-chain MITM → alert)" {
+    # Sister to docker.io / github.com / PyPI / npmjs supply-
+    # chain pin INVARIANTs. Mobile app update channels are
+    # equally MITM-sensitive — attacker can pin app-store/
+    # play.googleapis.com / firebaseinstallations.googleapis.com
+    # / apps.apple.com to redirect mobile-app metadata + binary
+    # delivery. T1195.001 supply-chain compromise via mobile-
+    # app-store MITM.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '127.0.0.1 localhost\n0.0.0.0 play.googleapis.com\n' > "${HOSTS}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
