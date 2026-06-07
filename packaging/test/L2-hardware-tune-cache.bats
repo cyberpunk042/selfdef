@@ -308,3 +308,16 @@ teardown_real_run() {
         || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
         || skip "no tomllib/tomli available; parser-contract check skipped"
 }
+
+@test "INVARIANT (no auto-uninstall: hardware-tune-cache installer NEVER emits package-remove commands)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANT family.
+    # hardware-tune-cache writes a CFLAGS/RUSTFLAGS env file
+    # consumed by downstream module-build steps; package-removal
+    # of the underlying selfdefctl/rustc/cargo toolchains is
+    # operator-domain (the toolchain is not installed by THIS
+    # module). Locks no-auto-uninstall on the hardware-tune-
+    # cache substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(selfdefctl|rustc|cargo)' "${f}"
+    done
+}
