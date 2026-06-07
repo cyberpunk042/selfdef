@@ -866,3 +866,9 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     readme="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/README.md"
     [ -f "${readme}" ]
 }
+
+@test "INVARIANT (services-disable-printing install/apply.sh uses set -euo pipefail — Bash strict-mode contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/install/apply.sh"
+    [ -f "${apply}" ]
+    grep -qE '^set -euo pipefail' "${apply}"
+}

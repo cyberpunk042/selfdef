@@ -876,3 +876,9 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     readme="${BATS_TEST_DIRNAME}/../../modules/wwan-disable/README.md"
     [ -f "${readme}" ]
 }
+
+@test "INVARIANT (wwan-disable install/apply.sh uses set -euo pipefail — Bash strict-mode contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/wwan-disable/install/apply.sh"
+    [ -f "${apply}" ]
+    grep -qE '^set -euo pipefail' "${apply}"
+}

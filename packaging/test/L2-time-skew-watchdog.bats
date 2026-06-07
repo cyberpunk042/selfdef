@@ -833,3 +833,15 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
     readme="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/README.md"
     [ -f "${readme}" ]
 }
+
+@test "INVARIANT (time-skew-watchdog service Documentation URL references github.com/cyberpunk042/selfdef — canonical-vcs operator-doc-resolve contract)" {
+    # Sister to brain-wide Documentation URL canonical INVARIANT
+    # family. The Documentation= URL MUST reference the github
+    # repo + module README path so operators can resolve docs
+    # offline (via git checkout) or online (via github browser).
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^Documentation=.*github.com/cyberpunk042/selfdef' "${s}"
+    done
+}

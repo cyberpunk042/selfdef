@@ -909,3 +909,9 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     readme="${BATS_TEST_DIRNAME}/../../modules/aslr-baseline/README.md"
     [ -f "${readme}" ]
 }
+
+@test "INVARIANT (aslr-baseline install/apply.sh uses set -euo pipefail — Bash strict-mode contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/aslr-baseline/install/apply.sh"
+    [ -f "${apply}" ]
+    grep -qE '^set -euo pipefail' "${apply}"
+}

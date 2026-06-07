@@ -832,3 +832,9 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     readme="${BATS_TEST_DIRNAME}/../../modules/pam-pwquality/README.md"
     [ -f "${readme}" ]
 }
+
+@test "INVARIANT (pam-pwquality install/apply.sh uses set -euo pipefail — Bash strict-mode contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/pam-pwquality/install/apply.sh"
+    [ -f "${apply}" ]
+    grep -qE '^set -euo pipefail' "${apply}"
+}

@@ -866,3 +866,9 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     readme="${BATS_TEST_DIRNAME}/../../modules/wireless-disable/README.md"
     [ -f "${readme}" ]
 }
+
+@test "INVARIANT (wireless-disable install/apply.sh uses set -euo pipefail — Bash strict-mode contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/wireless-disable/install/apply.sh"
+    [ -f "${apply}" ]
+    grep -qE '^set -euo pipefail' "${apply}"
+}
