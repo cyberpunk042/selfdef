@@ -313,3 +313,15 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (sensitive-domain: docker.io / registry-1.docker.io — container-supply-chain MITM → alert)" {
+    # Sister to github / AI-service / PyPI/npmjs supply-chain
+    # pin axes. Container registry MITM lets attacker swap
+    # base images at pull time. T1195.001.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '127.0.0.1 localhost\n0.0.0.0 docker.io\n' > "${HOSTS}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
