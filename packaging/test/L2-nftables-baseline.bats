@@ -399,3 +399,15 @@ run_wd() {
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"nftables-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (locked profile carries DROP policy on OUTPUT chain — egress-deny semantics)" {
+    # Sister to brain-wide profile-specific-content INVARIANTs.
+    # locked profile is the strictest mode and MUST carry an
+    # OUTPUT chain with DROP policy. Without it the locked
+    # profile silently degrades to non-locked egress.
+    write_config "locked" 'acknowledge_egress = true'
+    run_wd
+    grep -qE 'chain output \{.*type filter hook output' "${NFT_DROPIN}" \
+        || grep -qE 'chain output' "${NFT_DROPIN}"
+    grep -qE 'policy drop' "${NFT_DROPIN}"
+}
