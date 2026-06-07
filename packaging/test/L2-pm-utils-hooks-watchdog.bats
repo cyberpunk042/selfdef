@@ -291,3 +291,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: pm-utils hook invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. Beyond
+    # inline reverse-shell payloads, attackers stage benign-
+    # looking pm-utils hooks that invoke a binary in writable-
+    # root. T1546 pm-utils sleep/wake-trigger root-exec
+    # persistence runs writable-root binary AS ROOT on every
+    # workstation suspend/resume — recurring trigger fires
+    # multiple times per day. Locks writable-root-exec axis on
+    # pm-utils hook surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/tmp/staged_payload\n' > "${HOOKD}/00logging"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
