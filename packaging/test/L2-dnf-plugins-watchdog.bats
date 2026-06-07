@@ -300,3 +300,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-action'
 }
+
+@test "INVARIANT (action under /var/tmp — writable-root axis-symmetric expansion on dnf-plugins surface)" {
+    # Sister to /tmp + /home action writable-root INVARIANTs
+    # already locked. /var/tmp is writable by ALL users (sticky-
+    # bit doesn't gate exec) AND persists across reboots (unlike
+    # /tmp tmpfs on most distros). Attackers prefer it for boot-
+    # survival persistence. The dnf-plugins action scanner MUST
+    # recognize /var/tmp paths just as firmly as the /tmp + /home
+    # family — locks axis-symmetric writable-root coverage on
+    # the T1546 dnf-post-transaction-trigger root-exec surface.
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '*:in:/var/tmp/.evil-action\n' > "${ACTION}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
