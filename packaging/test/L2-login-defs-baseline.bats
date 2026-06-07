@@ -312,3 +312,11 @@ TOMLEOF
     run_wd
     grep -qE '^PASS_WARN_AGE[[:space:]]+[0-9]+' "${DROPIN}"
 }
+
+@test "INVARIANT (drop-in is chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs.
+    write_config "standard"
+    run_wd
+    [ -f "${DROPIN}" ]
+    [ "$(stat -c '%a' "${DROPIN}")" = "644" ]
+}
