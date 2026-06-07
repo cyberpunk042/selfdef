@@ -774,3 +774,7 @@ assert isinstance(data, dict)
 @test "INVARIANT (detect-host module.toml file readable — file-mode-access contract)" {
     [ -r "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml" ]
 }
+@test "INVARIANT (detect-host module dir is non-empty — module-content-existence 73)" {
+    n=$(ls "${BATS_TEST_DIRNAME}/../../modules/detect-host" | wc -l)
+    [ "${n}" -ge 1 ]
+}

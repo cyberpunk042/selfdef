@@ -607,3 +607,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service file readable — file-mode-access contract)" {
     [ -r "${SERVICE}" ]
 }
+@test "INVARIANT (.timer file readable — file-mode-access contract 73-cycle)" {
+    [ -r "${TIMER}" ]
+}

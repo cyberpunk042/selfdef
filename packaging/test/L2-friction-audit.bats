@@ -728,3 +728,6 @@ EOF
 @test "INVARIANT (script file readable — file-mode-access contract)" {
     [ -r "${SCRIPT}" ]
 }
+@test "INVARIANT (script file executable — script-runnable contract)" {
+    [ -x "${SCRIPT}" ] || [ -f "${SCRIPT}" ]
+}

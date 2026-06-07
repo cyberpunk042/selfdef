@@ -861,3 +861,8 @@ assert isinstance(data, dict)
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (wasm-aot-cache install dir exists at modules/wasm-aot-cache/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install"
+    [ -d "${inst_dir}" ]
+}

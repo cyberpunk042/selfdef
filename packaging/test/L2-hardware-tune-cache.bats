@@ -842,3 +842,8 @@ assert isinstance(data, dict)
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (hardware-tune-cache install dir exists at modules/hardware-tune-cache/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/install"
+    [ -d "${inst_dir}" ]
+}

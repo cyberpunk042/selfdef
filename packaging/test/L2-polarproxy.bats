@@ -711,3 +711,8 @@ assert ch == 'install/check.sh'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/polarproxy"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (polarproxy install dir exists at modules/polarproxy/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install"
+    [ -d "${inst_dir}" ]
+}

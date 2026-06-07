@@ -860,3 +860,7 @@ assert isinstance(data, dict)
 @test "INVARIANT (slm-cpu-loop module.toml file readable — file-mode-access contract)" {
     [ -r "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml" ]
 }
+@test "INVARIANT (slm-cpu-loop install dir exists at modules/slm-cpu-loop/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install"
+    [ -d "${inst_dir}" ]
+}

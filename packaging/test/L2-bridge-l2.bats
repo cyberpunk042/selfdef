@@ -788,3 +788,8 @@ assert isinstance(data, dict)
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/bridge-l2"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (bridge-l2 install dir exists at modules/bridge-l2/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install"
+    [ -d "${inst_dir}" ]
+}

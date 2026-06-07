@@ -443,3 +443,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service file readable — file-mode-access contract)" {
     [ -r "${UNIT}" ]
 }
+@test "INVARIANT (postinst readable — file-mode-access contract)" {
+    [ -r "${POSTINST}" ]
+}

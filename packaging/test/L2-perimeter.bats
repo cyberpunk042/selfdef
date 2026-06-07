@@ -710,3 +710,6 @@ assert c == 'sys_execve', f'call must be sys_execve, got {c!r}'
 @test "INVARIANT (YAML file readable — file-mode-access contract)" {
     [ -r "${YAML}" ]
 }
+@test "INVARIANT (YAML parent dir exists at packaging/tetragon-policies/ — packaging tree-layout 73)" {
+    [ -d "$(dirname "${YAML}")" ]
+}

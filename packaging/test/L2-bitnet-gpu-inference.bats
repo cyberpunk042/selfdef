@@ -826,3 +826,8 @@ assert isinstance(data, dict)
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (bitnet-gpu-inference install dir exists at modules/bitnet-gpu-inference/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install"
+    [ -d "${inst_dir}" ]
+}

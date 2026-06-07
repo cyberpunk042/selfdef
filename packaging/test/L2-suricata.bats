@@ -758,3 +758,8 @@ assert ch == 'install/check.sh'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/suricata"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (suricata install dir exists at modules/suricata/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/suricata/install"
+    [ -d "${inst_dir}" ]
+}

@@ -878,3 +878,8 @@ assert isinstance(data, dict)
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (tensor-parallel-inference install dir exists at modules/tensor-parallel-inference/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/install"
+    [ -d "${inst_dir}" ]
+}

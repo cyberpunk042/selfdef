@@ -686,3 +686,6 @@ setup() {
 @test "INVARIANT (lib file readable — file-mode-access contract)" {
     [ -r "${LIB}" ]
 }
+@test "INVARIANT (lib parent dir exists at packaging/lib/ — packaging tree-layout 73)" {
+    [ -d "$(dirname "${LIB}")" ]
+}
