@@ -260,3 +260,24 @@ SCEOF
     grep -qE '^#.*selfdef|^#.*managed-by' "${PROFILE_D}/50-selfdef-umask.sh"
     grep -qE '^#.*selfdef|^#.*managed-by' "${LOGIN_DEFS_D}/50-selfdef-umask.conf"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # umask-baseline TOML; parser must tolerate without altering
+    # the profile-gated content. strict-with-noise still emits the
+    # strict drop-ins (the more-restrictive umask), NOT the group
+    # drop-ins (the less-restrictive default) — anti-downgrade
+    # under noise.
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "strict"
+operator_note = "stricter umask = tighter default file perms"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    # strict drop-ins emitted (not group).
+    cmp -s modules/umask-baseline/configs/strict-profile.sh "${PROFILE_D}/50-selfdef-umask.sh"
+    cmp -s modules/umask-baseline/configs/strict-login.conf "${LOGIN_DEFS_D}/50-selfdef-umask.conf"
+}
