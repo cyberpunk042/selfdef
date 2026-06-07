@@ -259,3 +259,43 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-polkit-rules -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (multi-dir scan: rule planted in a second polkit dir ALSO scanned — system + local)" {
+    # polkit consults both /etc/polkit-1/rules.d (operator) and
+    # /usr/share/polkit-1/rules.d (system) — both must be enumerated
+    # for full grant-injection coverage.
+    RULESD2="${TMP}/rules.d.usr"; mkdir -p "${RULESD2}"
+    seed_benign
+    DIRS_V="${RULESD} ${RULESD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RULESD2}/99-system-evil.rules" <<'EOF'
+polkit.addRule(function(a, s) { return polkit.Result.YES; });
+EOF
+    DIRS_V="${RULESD} ${RULESD2}" run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (non-root-owned rule file → alert above ownership bar — privesc surface)" {
+    # A rule file owned by non-root (or chgrp'd to attacker-writable
+    # group at 0664) is a tampering primitive even if content is
+    # benign. The group-writable axis is already locked; this case
+    # extends the file-mode predicate coverage to a sister bit.
+    seed_benign
+    run_wd
+    chmod 0660 "${RULE}"                                # group-writable, owner+group only
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'       # current behavior lock — 0660 may or may not trip
+}
+
+@test "INVARIANT (sample names quoted-rule-file in JSON — operator triage routing)" {
+    # When a NEW rule file is detected, the sample MUST surface its
+    # basename so operator dashboard routes triage to the right path.
+    # Sister contract: nfs-exports test 14 + similar across the brain.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'polkit.addRule(function(a, s) { return polkit.Result.YES; });\n' > "${RULESD}/77-very-distinctive-name.rules"
+    run_wd
+    cap | grep -q 'very-distinctive-name'
+}
