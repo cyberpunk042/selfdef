@@ -294,3 +294,21 @@ TOMLEOF
     run_wd
     grep -qE '^SHA_CRYPT_MIN_ROUNDS[[:space:]]+([5-9][0-9]{3}|[0-9]{5,})' "${DROPIN}"
 }
+
+@test "INVARIANT (PASS_WARN_AGE present — operator-facing warning lead-time before account lockout)" {
+    # Sister to PASS_MAX_DAYS / PASS_MIN_DAYS / ENCRYPT_METHOD /
+    # SHA_CRYPT_MIN_ROUNDS login-defs policy INVARIANTs already
+    # locked. The PASS_WARN_AGE directive controls how many days
+    # before password expiry the user gets a warning at login.
+    # Without it, users see lockout-without-warning when the
+    # PASS_MAX_DAYS counter fires — they bypass via emergency-
+    # access, then leave the policy-trip undiagnosed. selfdef
+    # MUST set PASS_WARN_AGE explicitly (7-14 day typical) so
+    # the password-policy substrate gives operator visibility
+    # before lockout. A regression that omitted PASS_WARN_AGE
+    # would silently fall to libc default behavior. Locks the
+    # warning-lead-time directive on the password-aging policy.
+    write_config "standard"
+    run_wd
+    grep -qE '^PASS_WARN_AGE[[:space:]]+[0-9]+' "${DROPIN}"
+}
