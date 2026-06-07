@@ -183,3 +183,17 @@ INSTALL_DIR="${MODULE_DIR}/install"
         || grep -qE 'chmod[[:space:]]+0?644' "${install_sh}" \
         || true
 }
+
+@test "INVARIANT (apply.sh + check.sh + uninstall.sh use set -euo pipefail — fail-loud invariant)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs
+    # across the brain. Bash's silent-failure-on-undefined-var
+    # + silent-failure-on-pipe-error are major sources of
+    # silent-regression. The suricata module is the network-
+    # IDS sentinel; any silent failure in its install/check/
+    # uninstall path means the IDS isn't actually inserted
+    # into the path (or isn't fully removed on uninstall —
+    # leaving orphan NFQUEUE rules that drop traffic).
+    grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/apply.sh"
+    grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/check.sh"
+    grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/uninstall.sh"
+}
