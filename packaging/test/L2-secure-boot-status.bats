@@ -280,3 +280,13 @@ TOMLEOF
     grep -q '^Environment=SELFDEF_SECURE_BOOT_PROFILE=require$' "${DROPIN_PROFILE}"
     ! grep -q '^Environment=SELFDEF_SECURE_BOOT_PROFILE=monitor$' "${DROPIN_PROFILE}"
 }
+
+@test "INVARIANT (libexec is shell-sourceable: bash -n parses cleanly — service ExecStart contract)" {
+    # Sister to many other installer module's shell-sourceable
+    # INVARIANT across the brain. The libexec script runs from
+    # systemd ExecStart. bash -n must parse cleanly. A syntax
+    # regression would silently break the surveillance every boot.
+    write_config "monitor"
+    run_wd
+    bash -n "${SCRIPT_DST}"
+}
