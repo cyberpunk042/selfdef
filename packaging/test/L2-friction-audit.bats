@@ -703,3 +703,6 @@ EOF
 @test "INVARIANT (script declares hostname env-var resolved at startup — operator-trace contract)" {
     grep -qE 'hostname|HOSTNAME' "${SCRIPT}"
 }
+@test "INVARIANT (script ring_dir uses /var/cache/selfdef/friction-audit/ring — canonical-state-path)" {
+    grep -qE '/var/cache/selfdef/friction-audit/ring|FRICTION_AUDIT_RING_DIR' "${SCRIPT}"
+}

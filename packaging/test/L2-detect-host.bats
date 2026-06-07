@@ -739,3 +739,6 @@ assert 'sigma-correlator' in p, f'must provide sigma-correlator, got {p!r}'
     readme="${BATS_TEST_DIRNAME}/../../modules/detect-host/README.md"
     [ -f "${readme}" ]
 }
+@test "INVARIANT (detect-host module.toml file size is non-zero — non-empty manifest)" {
+    [ -s "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml" ]
+}

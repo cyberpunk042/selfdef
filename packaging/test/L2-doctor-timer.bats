@@ -582,3 +582,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer file declares OnUnitActiveSec timer-driven cadence — recurring-trigger contract)" {
     grep -qE '^OnUnitActiveSec=' "${TIMER}"
 }
+@test "INVARIANT (.service file size is non-zero — non-empty unit file)" {
+    [ -s "${SERVICE}" ]
+}

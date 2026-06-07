@@ -596,3 +596,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service uses /proc/pressure/ surface — PSI canonical query path)" {
     grep -qE '/proc/pressure|PSI' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service file size is non-zero — non-empty unit file)" {
+    [ -s "${UNIT}" ]
+}

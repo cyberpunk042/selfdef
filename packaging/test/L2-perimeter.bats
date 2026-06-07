@@ -681,3 +681,6 @@ assert s == True, f'syscall must be True, got {s!r}'
 @test "INVARIANT (postinst signals Tetragon to reload — operator-config-effective contract)" {
     grep -qE 'tetragon.service|tetragon-operator|systemctl.*tetragon' "${POSTINST}"
 }
+@test "INVARIANT (YAML file size is non-zero — non-empty TracingPolicy)" {
+    [ -s "${YAML}" ]
+}

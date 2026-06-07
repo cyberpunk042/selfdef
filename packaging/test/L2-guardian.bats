@@ -417,3 +417,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service writes /var/cache/selfdef/guardian/ring records — ring-buffer-state-contract)" {
     grep -qE '/var/cache/selfdef/guardian/ring' "${POSTINST}"
 }
+@test "INVARIANT (guardian.service file size is non-zero — non-empty unit file)" {
+    [ -s "${UNIT}" ]
+}

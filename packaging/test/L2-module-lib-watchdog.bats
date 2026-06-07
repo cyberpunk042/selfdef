@@ -662,3 +662,6 @@ setup() {
     out="$(selfdef_injection_patterns)"
     echo "${out}" | grep -qE 'python.*exec|python.*-c|eval'
 }
+@test "INVARIANT (lib file size is non-zero — non-empty library)" {
+    [ -s "${LIB}" ]
+}

@@ -826,3 +826,7 @@ chk_path = os.path.join('${BATS_TEST_DIRNAME}', '..', '..', 'modules', 'slm-cpu-
     chk="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/check.sh"
     head -1 "${chk}" | grep -qE '#!/.*bash'
 }
+@test "INVARIANT (slm-cpu-loop install/uninstall.sh declares bash shebang — bash-interpreter contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh"
+    head -1 "${uni}" | grep -qE '#!/.*bash'
+}
