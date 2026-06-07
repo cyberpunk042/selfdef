@@ -988,3 +988,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     uni="${BATS_TEST_DIRNAME}/../../modules/umask-baseline/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (umask-baseline install/check.sh is non-empty file — non-trivial-check-script 82)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/umask-baseline/install/check.sh"
+    [ -s "${chk}" ]
+}

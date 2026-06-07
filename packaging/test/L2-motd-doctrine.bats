@@ -898,3 +898,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     uni="${BATS_TEST_DIRNAME}/../../modules/motd-doctrine/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (motd-doctrine install/check.sh is non-empty file — non-trivial-check-script 82)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/motd-doctrine/install/check.sh"
+    [ -s "${chk}" ]
+}

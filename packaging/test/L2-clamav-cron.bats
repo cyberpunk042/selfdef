@@ -1025,3 +1025,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     uni="${BATS_TEST_DIRNAME}/../../modules/clamav-cron/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (clamav-cron install/check.sh is non-empty file — non-trivial-check-script 82)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/clamav-cron/install/check.sh"
+    [ -s "${chk}" ]
+}

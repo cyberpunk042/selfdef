@@ -1008,3 +1008,11 @@ assert 'install' in data, 'install missing'
     size=$(stat -c '%s' "${mtoml}")
     [ "${size}" -gt 200 ]
 }
+
+@test "INVARIANT (motd-scripts-watchdog .service file is non-empty — non-trivial-unit-file 82)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/motd-scripts-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        [ -s "${s}" ]
+    done
+}

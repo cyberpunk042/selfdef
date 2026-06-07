@@ -1189,3 +1189,11 @@ setup_baseline_state() {
     size=$(stat -c '%s' "${mtoml}")
     [ "${size}" -gt 200 ]
 }
+
+@test "INVARIANT (audit-config-watchdog .service file is non-empty — non-trivial-unit-file 82)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/audit-config-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        [ -s "${s}" ]
+    done
+}

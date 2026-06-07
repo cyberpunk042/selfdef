@@ -1036,3 +1036,11 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
     size=$(stat -c '%s' "${mtoml}")
     [ "${size}" -gt 200 ]
 }
+
+@test "INVARIANT (time-skew-watchdog .service file is non-empty — non-trivial-unit-file 82)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        [ -s "${s}" ]
+    done
+}

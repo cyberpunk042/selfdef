@@ -850,3 +850,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     uni="${BATS_TEST_DIRNAME}/../../modules/vpn-bridge/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (vpn-bridge install/check.sh is non-empty file — non-trivial-check-script 82)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/vpn-bridge/install/check.sh"
+    [ -s "${chk}" ]
+}
