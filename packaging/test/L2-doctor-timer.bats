@@ -151,3 +151,17 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
         return 1
     fi
 }
+
+@test "INVARIANT (doctor-timer carries OnUnitActiveSec — recurrent re-armed cadence beyond OnBootSec one-shot)" {
+    # Sister to many other selfdef timer units' OnUnitActiveSec
+    # INVARIANTs across the brain. A one-shot timer that fires
+    # only on OnBootSec would let a long-uptime host run for
+    # weeks without health-check. The selfdef-doctor.timer MUST
+    # carry OnUnitActiveSec=<period> so health-check runs
+    # recurrently across long uptimes. Locks the recurrent-fire
+    # contract — the foundational discipline that all selfdef-
+    # doctor watchdog-of-watchdogs coverage depends on (without
+    # recurrent-fire, the whole system substrate's monitoring
+    # decays silently).
+    grep -qE '^OnUnitActiveSec=' "${TIMER}"
+}
