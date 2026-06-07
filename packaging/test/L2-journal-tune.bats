@@ -301,3 +301,20 @@ TOMLEOF
     [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
     [ "$(stat -c '%a' "${DROPIN_DIR}/50-selfdef.conf")" = "644" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in written AND NO journald restart fired when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/systemd/journald.conf.d/
+    # 50-selfdef.conf AND without restarting systemd-journald.
+    # A silent dry-run that committed would re-tune journal
+    # storage AT PREVIEW TIME on a host where operator was
+    # investigating journal behavior. Locks dry-run-preserves-
+    # state on the journal-retention substrate.
+    write_config "standard"
+    rm -f "${DROPIN_DIR}/50-selfdef.conf"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    ! grep -qE 'systemctl (restart|reload) systemd-journald' "${SYSEOF_LOG}"
+}
