@@ -632,3 +632,7 @@ EOF
     grep -qE 'exit 2' "${SCRIPT}"
     grep -qE 'exit 3' "${SCRIPT}"
 }
+
+@test "INVARIANT (PCIe gate test uses lspci LnkSta — kernel-PCIe-link-status canonical query path)" {
+    grep -qE 'lspci.*LnkSta' "${SCRIPT}"
+}

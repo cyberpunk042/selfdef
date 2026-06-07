@@ -510,3 +510,11 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer's OnUnitActiveSec is hours-or-longer cadence — anti-too-frequent-probe contract)" {
     grep -qE '^OnUnitActiveSec=([0-9]+h|[0-9]+d)' "${TIMER}"
 }
+
+@test "INVARIANT (.timer's RandomizedDelaySec is bounded — anti-jitter-overflow contract)" {
+    # Sister to brain-wide RandomizedDelaySec INVARIANT family.
+    # RandomizedDelaySec=Xmin where X is bounded so the jitter
+    # doesn't exceed the cadence (5min jitter on 1h cadence
+    # OK; 5min jitter on 5min cadence would skew probes).
+    grep -qE '^RandomizedDelaySec=[0-9]+(s|min|m)$' "${TIMER}"
+}

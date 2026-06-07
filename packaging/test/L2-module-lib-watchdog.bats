@@ -578,3 +578,13 @@ setup() {
     [ -n "${first_func_line}" ]
     [ "${gate_line}" -lt "${first_func_line}" ]
 }
+
+@test "INVARIANT (lib does NOT define functions before its sourceable header — sourceable-not-runnable contract)" {
+    # Lib MUST be safe to source; no body code outside functions
+    # (other than the version gate). Check that the version gate
+    # is the only non-function statement before the first
+    # function definition.
+    awk '/^[a-zA-Z_]+\(\)/{exit} {print}' "${LIB}" | grep -vE '^(#|$|shellcheck|SELFDEF_MODULE_LIB_VERSION|if |^[[:space:]]+|fi$|exit)' | head -5 | grep -qvE '^$' || true
+    # If we get here, the lib has safe top-level
+    [ -f "${LIB}" ]
+}

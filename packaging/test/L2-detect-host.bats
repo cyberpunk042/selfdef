@@ -577,3 +577,15 @@ paths = (data.get('install_paths') or {}).get('paths', [])
 assert isinstance(paths, list) and len(paths) > 0, f'install_paths.paths must be non-empty list, got {paths!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml conflicts field present as TOML list — mutual-exclusion contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+c = data.get('conflicts')
+assert isinstance(c, list), f'conflicts must be TOML list (may be empty), got {type(c).__name__}'
+"
+}

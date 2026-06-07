@@ -623,3 +623,15 @@ c = data.get('conflicts')
 assert isinstance(c, list), f'conflicts must be TOML list (may be empty), got {type(c).__name__}'
 "
 }
+
+@test "INVARIANT (bridge-l2 module.toml depends_on field present as TOML list — module-dependency-resolver contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+d = data.get('depends_on')
+assert isinstance(d, list), f'depends_on must be TOML list (may be empty), got {type(d).__name__}'
+"
+}

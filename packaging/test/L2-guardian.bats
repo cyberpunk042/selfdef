@@ -347,3 +347,8 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian unit ExecStart binary path is in /usr/local/bin/ — operator-extension path consistency)" {
     grep -qE '^ExecStart=/usr/local/bin/' "${UNIT}"
 }
+
+@test "INVARIANT (guardian.service has User=root + Group=root pair — Ring-0 elevation contract)" {
+    grep -qE '^User=root$' "${UNIT}"
+    grep -qE '^Group=root$' "${UNIT}"
+}
