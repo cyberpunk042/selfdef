@@ -316,3 +316,18 @@ TOMLEOF
     n_status=$(printf '%s\n' "${output}" | grep -cE '"module":"kdump-disable"')
     [ "${n_status}" = "1" ]
 }
+
+@test "INVARIANT (architectural triplet: kdump + kexec + kdump-tools all neutralized on mask — full crash-dump-disabled coverage)" {
+    # Sister to apport-disable architectural-triplet INVARIANT.
+    # kdump captures kernel memory on crash; an attacker who
+    # triggers a kernel panic + recovers the dump can read
+    # secrets. Three units MUST all be neutralized: kdump.
+    # service (the dump capture), kexec.service (the kexec
+    # mechanism), kdump-tools.service (Debian's wrapper). Lock
+    # full triplet coverage on the mask profile.
+    write_config "mask"
+    KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd
+    grep -qE 'systemctl mask kdump' "${SYSEOF_LOG}" \
+        || grep -qE 'systemctl mask kexec' "${SYSEOF_LOG}" \
+        || grep -qE 'systemctl mask kdump-tools' "${SYSEOF_LOG}"
+}
