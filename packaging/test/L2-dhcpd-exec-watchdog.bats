@@ -302,3 +302,13 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (execute() under /dev/shm → alert: tmpfs in-RAM writable-root axis-symmetric expansion on dhcpd exec surface)" {
+    # Sister to /home + /var/tmp + /tmp dhcpd execute() writable-
+    # root INVARIANTs. /dev/shm tmpfs in-RAM: no on-disk forensic
+    # trace. T1546 DHCP-lease-event-trigger root-exec — execute()
+    # fires AS ROOT on every commit/release/expiry event.
+    printf 'on commit { execute("/dev/shm/.evil-dhcpd-exec"); }\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
