@@ -425,3 +425,18 @@ TOMLEOF
     # selfdef OR tmpfs-baseline OR managed-by.
     grep -qE '^#.*(selfdef|tmpfs-baseline|managed)' "${drop_in}"
 }
+
+@test "INVARIANT (no auto-uninstall: tmpfs-baseline NEVER emits package-remove commands)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The tmpfs-baseline installer writes a tmp.mount/
+    # var-tmp.mount drop-in pinning noexec/nosuid/nodev but MUST
+    # NEVER emit shell commands that uninstall systemd or other
+    # mount-related packages (apt/dpkg/dnf/rpm/yum remove|purge|
+    # uninstall systemd|util-linux|mount). Auto-removal would
+    # be catastrophic at the init system level — host becomes
+    # unbootable. Locks anti-package-removal contract on the
+    # tmpfs-baseline substrate.
+    write_config "noexec"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(systemd|util-linux|mount)'
+}
