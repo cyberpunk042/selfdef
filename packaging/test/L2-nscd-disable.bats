@@ -269,3 +269,14 @@ TOMLEOF
     grep -q 'systemctl mask nscd.service' "${SYSEOF_LOG}"
     grep -q 'systemctl mask nscd.socket' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (no auto-uninstall: nscd package NEVER auto-removed — only stop+disable+mask)" {
+    # Sister to many other disable installer no-auto-uninstall
+    # INVARIANTs across the brain. Module's contract is to
+    # neutralize, not uninstall. nscd package removal is operator
+    # decision via apt/dnf/yum. Locks against scope-creep into
+    # package management — only systemctl operations fire.
+    write_config "mask"
+    run_wd
+    ! grep -qE 'apt|dnf|yum|rpm' "${SYSEOF_LOG}"
+}
