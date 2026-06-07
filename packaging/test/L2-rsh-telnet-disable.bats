@@ -373,3 +373,23 @@ TOMLEOF
     LEGACY_PRESENT=1 run_wd
     ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(rsh|telnet|inetutils)' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. rsh-telnet-disable manifest declares install +
+    # profile gating (mask / stop) the resolver enforces;
+    # malformed manifest wedges the rsh/telnet neutralization
+    # sequence. Python's tomllib is the canonical parser. Locks
+    # anti-malformed-manifest on the rsh-telnet-disable
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/rsh-telnet-disable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'rsh-telnet-disable', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
