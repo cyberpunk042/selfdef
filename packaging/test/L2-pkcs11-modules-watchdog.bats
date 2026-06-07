@@ -249,3 +249,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (relative-with-slash module path 'sub/dir/p.so' → alert: PWD-at-exec attacker primitive on PKCS#11 loader)" {
+    # Sister to krb5-plugins-watchdog + musl-ld-path-watchdog +
+    # gss-mech-watchdog + nm-vpn-plugin-watchdog relative-with-
+    # slash INVARIANTs already locked. A module path with
+    # embedded slashes BUT no leading slash (e.g. 'sub/dir/p.so'
+    # instead of '/sub/dir/p.so') is NOT a fully-qualified
+    # absolute path — p11-kit's dlopen() will resolve it
+    # relative to the CWD of the consuming process at load time.
+    # An attacker who can affect the consumer's CWD (PWD-at-exec
+    # primitive — via systemd WorkingDirectory= injection) gets
+    # to control where the PKCS#11 .so loads from. Locks
+    # detection of the relative-with-slash variant on the PKCS#11
+    # credential-handler surface.
+    printf 'module: sub/dir/p.so\n' > "${MOD}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
