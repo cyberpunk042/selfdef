@@ -206,3 +206,18 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # Elevation Control Mechanism).
     grep -qE '^NoNewPrivileges=true' "${UNIT}"
 }
+
+@test "INVARIANT (unit declares MemoryDenyWriteExecute=true — W^X enforcement against JIT/shellcode-stage)" {
+    # Sister to NoNewPrivileges + ProtectSystem + Ring-0
+    # hardening INVARIANTs. MemoryDenyWriteExecute=true enforces
+    # the W^X memory protection at the systemd-unit level —
+    # blocks mmap/mprotect with PROT_WRITE+PROT_EXEC and
+    # PROT_EXEC after PROT_WRITE on the same region. Without
+    # it, a memory-corruption exploit in the scheduler could
+    # stage shellcode by writing then jumping to it. Selfdef
+    # scheduler runs AS ROOT for filesystem inventory; W^X
+    # blocks the standard exploit primitive even if a memory
+    # bug exists. T1027.007 Dynamic API Resolution + T1055
+    # Process Injection containment via memory-protection axis.
+    grep -qE '^MemoryDenyWriteExecute=true' "${UNIT}"
+}
