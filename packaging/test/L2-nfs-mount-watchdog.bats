@@ -466,3 +466,18 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (nfs-mount-watchdog libexec uses logger -t with selfdef- tag — SDD-062 syslog routing contract)" {
+    # Sister to brain-wide SDD-062 logger-tag INVARIANT family.
+    # Locks SDD-062 logger-tag routing discipline on the
+    # nfs-mount-watchdog libexec substrate.
+    wd_libexec="${BATS_TEST_DIRNAME}/../../modules/nfs-mount-watchdog/systemd"
+    found=0
+    for sh in "${wd_libexec}"/*.sh; do
+        [ -f "${sh}" ] || continue
+        if grep -qE 'logger[[:space:]]+-t[[:space:]]+selfdef-' "${sh}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}

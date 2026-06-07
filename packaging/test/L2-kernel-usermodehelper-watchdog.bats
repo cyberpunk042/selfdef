@@ -393,3 +393,18 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (kernel-usermodehelper-watchdog libexec uses logger -t with selfdef- tag — SDD-062 syslog routing contract)" {
+    # Sister to brain-wide SDD-062 logger-tag INVARIANT family.
+    # Locks SDD-062 logger-tag routing discipline on the
+    # kernel-usermodehelper-watchdog libexec substrate.
+    wd_libexec="${BATS_TEST_DIRNAME}/../../modules/kernel-usermodehelper-watchdog/systemd"
+    found=0
+    for sh in "${wd_libexec}"/*.sh; do
+        [ -f "${sh}" ] || continue
+        if grep -qE 'logger[[:space:]]+-t[[:space:]]+selfdef-' "${sh}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
