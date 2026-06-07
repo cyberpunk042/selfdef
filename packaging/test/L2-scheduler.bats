@@ -296,3 +296,19 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     ! grep -qE '^Wants=tetragon\.service' "${UNIT}"
     grep -qE '^After=tetragon\.service' "${UNIT}"
 }
+
+@test "INVARIANT (.service Restart=always pairs with RestartSec + StartLimitBurst — complete restart-storm contract)" {
+    # Sister to brain-wide systemd Restart-discipline INVARIANT
+    # family. The scheduler unit's restart policy MUST be
+    # complete: Restart=always alone produces a restart-storm on
+    # a chronically-failing scheduler; only the combination of
+    # Restart=always + RestartSec=2s + StartLimitIntervalSec +
+    # StartLimitBurst dampens the storm. The 3 directives must
+    # all be present together — a regression dropping any one
+    # breaks the dampener. Locks the complete restart-storm
+    # contract on the scheduler unit substrate (sister to the
+    # individual-directive INVARIANTs already locked above).
+    grep -qE '^Restart=always' "${UNIT}"
+    grep -qE '^RestartSec=' "${UNIT}"
+    grep -qE '^StartLimitBurst=' "${UNIT}"
+}
