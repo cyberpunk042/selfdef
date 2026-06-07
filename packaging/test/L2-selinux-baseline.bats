@@ -374,3 +374,22 @@ TOMLEOF
     ! [ -f "${AUTORELABEL_FILE}" ]
     grep -qE '^SELINUX=disabled$' "${SELINUX_CONFIG}"
 }
+
+@test "INVARIANT (SELINUXTYPE preserved across SELINUX= mutations — policy-load substrate not corrupted)" {
+    # Sister to many other installer module's adjacent-config-line
+    # preservation INVARIANTs across the brain. The script tunes the
+    # SELINUX= line only; SELINUXTYPE= (targeted / minimum / mls)
+    # selects which policy module loads at boot. If the mutator
+    # accidentally clobbered SELINUXTYPE during the SELINUX= rewrite,
+    # the next boot would attempt to load a non-existent policy and
+    # leave the kernel in a degraded state (or worse, fall back to
+    # disabled). Lock that SELINUXTYPE survives every profile path.
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=permissive
+SELINUXTYPE=mls
+EOF
+    write_config "enforcing"
+    run_wd
+    grep -qE '^SELINUX=enforcing$' "${SELINUX_CONFIG}"
+    grep -qE '^SELINUXTYPE=mls$' "${SELINUX_CONFIG}"
+}
