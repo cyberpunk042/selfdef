@@ -332,3 +332,14 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: mailbox_command invoking binary from /dev/shm → alert)" {
+    # Sister to /var/tmp postfix mail-delivery writable-root.
+    # /dev/shm tmpfs in-RAM.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'mailbox_command = /dev/shm/staged_payload\n' > "${MAIN}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
