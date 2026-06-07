@@ -264,3 +264,24 @@ run_wd() {
     run_wd
     grep -qE 'kernel\.sysrq\s*=\s*1' "${DROPIN}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # kernel-sysrq-restrict TOML; parser must tolerate without
+    # altering the profile-gated behavior. off-with-noise still
+    # installs the kernel.sysrq=0 drop-in (the sysrq full-disable
+    # — closes the physical-console attack surface that lets
+    # anyone with keyboard access send unauthenticated kernel
+    # commands).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "off"
+operator_note = "sysrq = physical-console unauthenticated kernel cmd surface"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE 'kernel\.sysrq\s*=\s*0' "${DROPIN}"
+}
