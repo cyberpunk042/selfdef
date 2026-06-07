@@ -221,3 +221,13 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # Process Injection containment via memory-protection axis.
     grep -qE '^MemoryDenyWriteExecute=true' "${UNIT}"
 }
+
+@test "INVARIANT (unit declares LockPersonality=true — disable personality(2) syscall for kernel-attack reduction)" {
+    # Sister to NoNewPrivileges + ProtectSystem + MDWE + Ring-0
+    # hardening INVARIANTs. LockPersonality=true prevents the
+    # personality(2) syscall from changing process personality
+    # (e.g., requesting old buggy READ_IMPLIES_EXEC behavior).
+    # Reduces kernel attack surface against personality-syscall
+    # vulnerabilities (CVE-2014-9745 family).
+    grep -qE '^LockPersonality=true' "${UNIT}"
+}
