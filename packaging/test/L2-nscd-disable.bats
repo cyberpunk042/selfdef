@@ -280,3 +280,16 @@ TOMLEOF
     run_wd
     ! grep -qE 'apt|dnf|yum|rpm' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (DRY_RUN does not fire any systemctl mask/disable/stop)" {
+    # Sister to many other installer module's DRY_RUN INVARIANT
+    # across the brain. The nscd-disable DRY_RUN path MUST be a
+    # no-op against live systemd state — operator using --dry-run
+    # to preview expects ZERO mutations. Locks the dry-run side-
+    # effect-freedom contract so a regression that fires mask
+    # through DRY_RUN would be caught (silent mask would break
+    # operator's intentional nscd usage during preview).
+    write_config "mask"
+    DRY_RUN=1 run_wd
+    ! grep -qE 'systemctl (mask|disable|stop)' "${SYSEOF_LOG}"
+}
