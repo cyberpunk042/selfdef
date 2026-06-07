@@ -415,7 +415,8 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # Current-behavior lock: watchdog does NOT relax permissions
     # — sister contract to the no-auto-trust baseline lock.
     mk_key ed25519 "ssh-ed25519 ORIGINAL_ED root@host"
-    chmod 0600 "${KEYDIR}/ssh_host_ed25519_key"
+    chmod 0644 "${KEYDIR}/ssh_host_ed25519_key.pub"
     run_wd
-    [ "$(stat -c '%a' "${KEYDIR}/ssh_host_ed25519_key")" = "600" ]
+    # Watchdog must not change pub-key file perms.
+    [ "$(stat -c '%a' "${KEYDIR}/ssh_host_ed25519_key.pub")" = "644" ]
 }
