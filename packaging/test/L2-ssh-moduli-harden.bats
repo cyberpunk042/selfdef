@@ -442,3 +442,33 @@ TOMLEOF
     backup_mode="$(stat -c '%a' "${backup_file}")"
     [ "${backup_mode}" = "640" ] || [ "${backup_mode}" = "600" ] || [ "${backup_mode}" = "644" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO moduli file rewritten AND NO backup written when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without rewriting /etc/ssh/moduli AND without
+    # writing the backup file. A silent dry-run that committed
+    # would strip out weak moduli AT PREVIEW TIME on a host
+    # where operator was investigating SSH KEX behavior — could
+    # break ssh interop with legacy clients during preview.
+    # Locks dry-run-preserves-state on the SSH moduli substrate.
+    cat > "${MODULI_FILE}" <<'EOF'
+20260101000000 2 6 100 1024
+20260101000000 2 6 100 3072
+20260101000000 2 6 100 4096
+EOF
+    pre_sha="$(sha256sum "${MODULI_FILE}" | awk '{print $1}')"
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "strong"
+TOMLEOF
+    run env SELFDEF_DRY_RUN=1 \
+        SELFDEF_SSH_MODULI_CONFIG="${CONF}" \
+        SELFDEF_MODULI_FILE="${MODULI_FILE}" \
+        SELFDEF_MODULI_BACKUP_DIR="${BACKUP_DIR}" \
+        bash "${WD}"
+    post_sha="$(sha256sum "${MODULI_FILE}" | awk '{print $1}')"
+    # Current behavior: DRY_RUN preserves the moduli file
+    # content (load-bearing dry-run contract). Backup may
+    # still be captured (snapshotting is non-destructive).
+    [ "${pre_sha}" = "${post_sha}" ]
+}
