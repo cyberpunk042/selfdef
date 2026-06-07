@@ -314,3 +314,17 @@ teardown_real_run() {
     # broken. Lock fail-loud discipline on apply.sh.
     grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/apply.sh"
 }
+
+@test "INVARIANT (check.sh + uninstall.sh use set -euo pipefail — fail-loud invariant across full module surface)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # apply.sh fail-loud locked above; check.sh + uninstall.sh
+    # are the OTHER two operator-facing scripts in the module
+    # surface. Silent check.sh failure would mask slice-plan.json
+    # + runtime.env corruption from operator observation; silent
+    # uninstall.sh failure leaves the tensor-parallel-inference
+    # runtime layer in half-removed state during package purge.
+    # Locks fail-loud contract on the full module-script surface
+    # (apply + check + uninstall) on the tensor-parallel substrate.
+    grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/check.sh"
+    grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/uninstall.sh"
+}
