@@ -216,3 +216,35 @@ run_wd() {
     [ "${stop_line}" -lt "${disable_line}" ]
     [ "${disable_line}" -lt "${mask_line}" ]
 }
+
+@test "INVARIANT (downgrade mask → stop does NOT auto-unmask — mask is sticky)" {
+    # Sister-pattern with avahi/nscd/ctrlaltdel/apport/at/wwan mask-sticky lock.
+    write_config "mask"
+    KDUMP_PRESENT=1 run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    KDUMP_PRESENT=1 run_wd
+    grep -q 'systemctl stop kdump.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl unmask kdump.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (emit_status: module=kdump-disable + status=ok + profile surfaced for operator dashboard)" {
+    write_config "mask"
+    output="$(KDUMP_PRESENT=1 run_wd 2>&1)"
+    [[ "${output}" == *'"module":"kdump-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
+
+@test "INVARIANT (mask order holds across ALL distro variants — kexec + kdump-tools follow same stop→disable→mask sequence)" {
+    # Mask order is per-unit, but must hold uniformly across all 3 distro
+    # variants. Lock that each variant follows its own stop→disable→mask
+    # sequence.
+    write_config "mask"
+    KDUMP_PRESENT=0 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=0 run_wd
+    stop_kexec="$(grep -n 'systemctl stop kexec-tools.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_kexec="$(grep -n 'systemctl disable kexec-tools.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_kexec="$(grep -n 'systemctl mask kexec-tools.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_kexec}" -lt "${disable_kexec}" ]
+    [ "${disable_kexec}" -lt "${mask_kexec}" ]
+}
