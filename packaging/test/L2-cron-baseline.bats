@@ -311,3 +311,20 @@ TOMLEOF
     grep -q '^alice$' "${CRON_ALLOW}"
     grep -q '^bob$' "${CRON_ALLOW}"
 }
+
+@test "INVARIANT (root always present even under operator-list — anti-lockout floor)" {
+    # Sister to firewalld-baseline ssh-always-allowed anti-lockout
+    # floor INVARIANT. Even when the operator deliberately enables
+    # operator-list with a small operator set (e.g., 'alice' only),
+    # root MUST always be in the .allow list — otherwise a
+    # regression that drops root from the rendered file would lock
+    # out cron from operating at all (root is what runs the system
+    # crontab + every daily/weekly/monthly job). Locks the anti-
+    # lockout floor on the cron scheduler-access policy substrate.
+    write_config "operator-list" "alice"
+    run_wd
+    grep -q '^root$' "${CRON_ALLOW}"
+    grep -q '^alice$' "${CRON_ALLOW}"
+    # And root is present in at.allow too (symmetric anti-lockout).
+    grep -q '^root$' "${AT_ALLOW}"
+}
