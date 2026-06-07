@@ -286,3 +286,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-autofs -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (program: map under /dev/shm — tmpfs in-RAM writable-root axis-symmetric expansion on autofs map surface)" {
+    # Sister to /home + /var/tmp + /tmp program: map writable-
+    # root INVARIANTs. /dev/shm tmpfs in-RAM writable-root that
+    # survives no on-disk forensic trace. autofs invokes program
+    # map AS ROOT for each automount trigger; planted attacker
+    # binary in /dev/shm fires AS ROOT on every mount-attempt.
+    # T1546 autofs program-map root-exec persistence.
+    printf '/mnt/data program:/dev/shm/.auto.evil\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
