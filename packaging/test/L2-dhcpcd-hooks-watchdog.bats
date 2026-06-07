@@ -349,3 +349,16 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-dhcpcd-hooks -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (exec-path under writable-root: dhcpcd hook invoking binary from /var/tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # DHCP-lease-trigger root-exec — dhcpcd hooks fire AS ROOT
+    # on every lease renewal (typical 30min-24hr cadence in
+    # corporate networks).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/var/tmp/staged_payload\n' > "${HOOKD}/test-hook"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
