@@ -281,3 +281,20 @@ TOMLEOF
     run_wd
     grep -qE '^upgrade_type[[:space:]]*=[[:space:]]*security' "${DNF_AUTO_CONF}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO automatic.conf written AND NO timer enable fired)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/dnf/automatic.conf AND without
+    # enabling dnf-automatic.timer. A silent dry-run that
+    # committed would enable recurring auto-update on a host
+    # where operator was investigating package-management
+    # behavior. Locks dry-run-preserves-state on the dnf-
+    # automatic config substrate.
+    write_config "security-only"
+    rm -f "${DNF_AUTO_CONF}"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DNF_AUTO_CONF}" ]
+    ! grep -qE 'systemctl (enable|start) dnf-automatic' "${SYSEOF_LOG}"
+}
