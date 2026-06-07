@@ -374,3 +374,23 @@ TOMLEOF
     bad=$(printf '%s\n' "${output}" | grep -oE '"severity":"[^"]+"' | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. services-disable-printing manifest declares
+    # install + profile gating (mask / stop) the resolver
+    # enforces; malformed manifest wedges the cups/avahi
+    # neutralization sequence. Python's tomllib is the canonical
+    # parser. Locks anti-malformed-manifest on the services-
+    # disable-printing substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'services-disable-printing', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
