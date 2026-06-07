@@ -356,3 +356,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(AUTOD|FILE|file)'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # xdg-autostart-watchdog runs ON the timer's scheduled fire
+    # — scans /etc/xdg/autostart + per-user ~/.config/autostart
+    # for Exec= injection patterns in .desktop entries, emits a
+    # verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the xdg-autostart-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/xdg-autostart-watchdog/systemd/selfdef-xdg-autostart.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
