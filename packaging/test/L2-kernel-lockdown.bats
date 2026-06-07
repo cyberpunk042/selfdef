@@ -357,7 +357,7 @@ EOF
     # Sister to brain-wide chmod 0644 INVARIANTs.
     write_config "balanced"
     run_wd
-    file="${SYSCTL_DIR}/50-selfdef-kernel-lockdown-balanced.conf"
+    file="${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf"
     [ -f "${file}" ]
     [ "$(stat -c '%a' "${file}")" = "644" ]
 }
