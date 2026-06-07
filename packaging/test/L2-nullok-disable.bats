@@ -476,3 +476,17 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: nullok-disable installer NEVER deletes operator-pre-existing configs in target dir — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # nullok-disable writes its own drop-in or config; it MUST NEVER
+    # rm/find-delete an operator's pre-existing entries not
+    # owned by THIS module. Locks no-auto-delete on the
+    # nullok-disable installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/nullok-disable/install"
+    for sh in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${sh}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/etc/(postfix|exim|sendmail|nftables|nscd|pam|prometheus|grafana)' "${sh}"
+        ! grep -qE 'find[[:space:]]+/etc/(postfix|exim|sendmail|nftables|nscd|pam|prometheus|grafana).*-delete' "${sh}"
+    done
+}
