@@ -336,3 +336,28 @@ EOF
     # Locks that no full var-tmp.mount replacement file appears.
     ! [ -f "${SYSTEMD_DIR}/var-tmp.mount" ]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass refuse-to-brick gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # tmpfs-baseline TOML; parser must tolerate without altering
+    # the gated behavior. tmpfs-with-noise WITHOUT ack MUST still
+    # refuse-to-brick (unbootable-system precedence over noise —
+    # no silent escalation to /tmp=tmpfs flip via parser tolerance
+    # which would lose every file under /tmp at next reboot).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "tmpfs"
+acknowledge_tmpfs = false
+operator_note = "tmpfs-on-/tmp = volatile-by-reboot — operator MUST ack"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_TMPFS_BASELINE_CONFIG="${CONF}" \
+        SELFDEF_SYSTEMD_DIR="${SYSTEMD_DIR}" \
+        bash "${WD}"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"acknowledge_tmpfs"* ]]
+    ! [ -f "${SYSTEMD_DIR}/tmp.mount" ]
+}
