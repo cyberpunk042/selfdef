@@ -330,3 +330,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: acpi-hooks-watchdog NEVER deletes acpi event bindings — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # acpi-hooks-watchdog DETECTS T1546 ACPI-event-trigger
+    # root-exec persistence but MUST NEVER emit rm/unlink
+    # commands to auto-clean the event binding. The detected
+    # binding may be operator-legitimate (custom power-button
+    # action, lid-close suspend script, battery-low warning).
+    # Silent auto-delete would destroy operator baseline state
+    # AND break operator's intended power-event handling.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the acpi-hooks surveillance substrate.
+    printf 'event=button/power\naction=/tmp/.evil\n' > "${BIND}"
+    run_wd
+    [ -f "${BIND}" ]
+    grep -q 'event=' "${BIND}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(BIND|EVENTS|FILE|file)'
+}
