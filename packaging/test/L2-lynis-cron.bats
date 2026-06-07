@@ -247,3 +247,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"profile":"(quick|full|report)"'
 }
+
+@test "INVARIANT (sample names distinctive warning ID in JSON for operator-triage routing — DELTA-detect sample-naming axis)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain (clamav-cron FOUND-file,
+    # aide-bridge sample). When lynis fires a distinctively-
+    # named warning, the warning ID MUST surface in the JSON
+    # sample so operator dashboard routes triage to the right
+    # finding — operators MUST be able to tell WHICH warning
+    # fired without re-running the scan or scrolling the
+    # full report.
+    cat > "${REPORT}" <<'EOF'
+warning[]=DISTINCTIVE-ATTACKER-FINDING|This is a specific tamper signal|/etc|none
+warning[]=BENIGN-CHECK|operator review needed|/var|low
+hardening_index=80
+EOF
+    run_wd
+    cap | grep -q 'DISTINCTIVE-ATTACKER-FINDING'
+}
