@@ -314,3 +314,22 @@ seed_benign() {
     cap | grep -q '"event":"baseline_initial"'
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named broad-permit user surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker adds a broad-
+    # permit (+) rule with a distinctively-named user, the user
+    # name MUST surface in the JSON sample so operator dashboard
+    # routes triage to the right path — operators MUST be able to
+    # tell WHICH backdoor account got added without scrolling
+    # through grep history. Locks the new-rule-discovered
+    # operator-visibility contract on the access-conf permit
+    # surveillance surface (T1098 — Account Manipulation via
+    # broad-permit backdoor account).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '+ : root : LOCAL\n+ : distinctive-attacker-account : ALL\n- : ALL : ALL\n' > "${CONF}"
+    run_wd
+    cap | grep -q 'distinctive-attacker-account'
+}
