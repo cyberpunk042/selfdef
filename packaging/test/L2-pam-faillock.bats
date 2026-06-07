@@ -330,3 +330,14 @@ run_wd() {
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"pam-faillock"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (faillock.conf chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs. faillock.conf
+    # is system-config that pam_faillock reads at every auth
+    # event — must be world-readable for module + root-write-only
+    # for operator integrity.
+    write_config "strict"
+    run_wd
+    [ -f "${FAILLOCK_CONF}" ]
+    [ "$(stat -c '%a' "${FAILLOCK_CONF}")" = "644" ]
+}
