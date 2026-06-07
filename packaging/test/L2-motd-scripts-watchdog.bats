@@ -267,3 +267,19 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named motd script surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # update-motd.d script (T1546.004 — pam_motd runs scripts AS
+    # ROOT around every interactive login; recurring trigger),
+    # the file name MUST surface in the JSON sample so operator
+    # dashboard routes triage to the right path.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\necho new\n' > "${HOOKD}/99-distinctive-attacker-motd"
+    chmod 0755 "${HOOKD}/99-distinctive-attacker-motd"
+    run_wd
+    cap | grep -q 'distinctive-attacker-motd'
+}
