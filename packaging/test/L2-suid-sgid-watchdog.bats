@@ -383,3 +383,26 @@ mk_suid() { printf 'ELF-%s' "$1" > "${ROOT}/$1"; chmod 4755 "${ROOT}/$1"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-chmod: suid-sgid-watchdog NEVER chmods detected suid binaries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-remediation / surveillance-
+    # not-destruction INVARIANTs across L2 watchdog suites. The
+    # suid-sgid-watchdog DETECTS T1548.001 Abuse Elevation
+    # Control Mechanism: setuid/setgid planted binaries but
+    # MUST NEVER emit chmod commands to auto-strip the suid bit.
+    # The detected suid may be operator-legitimate (operator
+    # installed a new privileged tool but forgot to re-baseline)
+    # — silent auto-chmod would break the binary's intended
+    # operation. Forensic evidence value of a live planted suid
+    # binary is high (binary content analysis, file-cap analysis,
+    # operator-attribution). Surveillance, never remediation.
+    # Locks anti-data-loss contract on the suid-sgid
+    # surveillance substrate.
+    mk_suid attacker_planted_suid
+    run_wd
+    # Planted binary MUST retain setuid bit after detection.
+    [ -f "${ROOT}/attacker_planted_suid" ]
+    perms=$(stat -c '%a' "${ROOT}/attacker_planted_suid")
+    [[ "${perms}" =~ ^[6-7][0-9][0-9][0-9]$ ]] || [[ "${perms}" =~ ^4[0-9][0-9][0-9]$ ]] || [[ "${perms}" =~ ^[4-7][0-9]{3}$ ]]
+    ! grep -qE 'chmod[[:space:]]+(u-s|-s|0[0-7][0-9][0-9])[[:space:]].*\$\{?(SUID|TARGET|ROOT|file)' "${WD}"
+}
