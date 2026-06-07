@@ -324,3 +324,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (weakener-detect: nokaslr → alert): KASLR-disable boot-time hardening-bypass axis" {
+    # Sister to other kernel-cmdline weakener INVARIANTs already
+    # locked (nosmep / noexec=off / selinux=0 / apparmor=0 /
+    # init= / rd.break / mitigations=off). nokaslr disables
+    # Kernel Address Space Layout Randomization at boot —
+    # exploits that need known kernel addresses (most ROP-based
+    # privesc, kernel LPE chains) work reliably against the
+    # static layout. An operator-edited cmdline with nokaslr
+    # for debugging is a boot-time hardening downgrade; if
+    # left in place it persists across every boot. Locks the
+    # nokaslr axis on the live-cmdline observation surface
+    # alongside the weakener family.
+    write_cmdline "BOOT_IMAGE=/vmlinuz ro nokaslr"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
