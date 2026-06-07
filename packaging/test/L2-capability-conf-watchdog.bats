@@ -362,3 +362,21 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-fix: capability-conf-watchdog NEVER writes to /etc/security/capability.conf — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-{delete,uninstall,restore,
+    # chmod,fix} family. capability-conf-watchdog is a DETECT
+    # module: surveils pam_cap grants + emits alert on
+    # dangerous-cap deltas, NEVER auto-edits
+    # /etc/security/capability.conf, NEVER invokes setcap, NEVER
+    # tees grants into the config. Auto-remediation on pam_cap
+    # grants is operator-domain (login-grant changes require
+    # operator-conscious access-control review). Surveillance-
+    # not-remediation is the canonical selfdef DETECT-module
+    # contract. Locks no-auto-fix on the capability-conf-
+    # watchdog substrate.
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE 'sed[[:space:]]+-i.*capability\.conf'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '>[[:space:]]*/etc/security/capability'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE 'tee[[:space:]].*capability\.conf'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '[[:space:]]setcap[[:space:]]'
+}
