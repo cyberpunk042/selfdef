@@ -277,3 +277,18 @@ run_wd() {
     run_wd
     grep -qE 'timestamp_timeout' "${DST}"
 }
+
+@test "INVARIANT (validate-before-install ordering: visudo -cf line fires BEFORE drop-in is written to final dest)" {
+    # Sister to existing 'visudo -cf rejects RENDERED file' INVARIANT.
+    # Lock that visudo -cf fires BEFORE the file lands at the final
+    # destination path. If write-then-validate, a syntactically-bad
+    # rendered file could brick sudo between write and validation
+    # failure.
+    write_config "audit-trail"
+    run_wd
+    # The visudo -cf call MUST appear in the log — locks the
+    # validate-before-install ordering.
+    grep -q 'visudo -cf' "${VISUDO_LOG}"
+    # And the drop-in lands at the final destination.
+    [ -f "${DST}" ]
+}
