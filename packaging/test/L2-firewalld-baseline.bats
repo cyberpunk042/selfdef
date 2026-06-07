@@ -369,3 +369,24 @@ TOMLEOF
     ! grep -q -- '--permanent --zone=selfdef --add-service' "${FW_LOG}"
     ! grep -q -- '--set-default-zone=selfdef' "${FW_LOG}"
 }
+
+@test "INVARIANT (block profile carries REJECT (not DROP) target — visible-deny ICMP/TCP-RST semantic)" {
+    # Sister to block-profile preserves ssh-allow INVARIANT
+    # already locked. block profile's target is REJECT (not
+    # DROP) — semantic difference: REJECT sends ICMP/TCP-RST
+    # back to the source so connection attempts fail fast
+    # client-side (visible deny); DROP silently discards
+    # packets (invisible deny — appears as connection
+    # timeout). Operator's choice for block was REJECT
+    # specifically — visible-deny is debuggable + doesn't
+    # waste client retry-budget. A silent regression to DROP
+    # would change behavior with no operator signal. Locks
+    # the REJECT-not-DROP semantic on the block-profile
+    # surface. Sister to brain-wide asymmetric profile-
+    # content INVARIANTs.
+    write_config "block"
+    run_wd
+    grep -q -- '--permanent --zone=selfdef --set-target=REJECT' "${FW_LOG}" \
+        || grep -q -- '--permanent --zone=selfdef --set-target=%%REJECT%%' "${FW_LOG}" \
+        || grep -q -- 'set-target=REJECT' "${FW_LOG}"
+}
