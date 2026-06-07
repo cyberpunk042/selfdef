@@ -268,3 +268,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (payload under /dev/shm — tmpfs writable-root expansion axis on at job surface)" {
+    # Sister to /tmp + /var/tmp writable-root INVARIANTs already
+    # locked. /dev/shm is a tmpfs writable by ALL users, lives in
+    # RAM (no disk persistence — wiped on reboot), and is rarely
+    # surveilled by ops tooling. Attackers prefer /dev/shm for
+    # high-velocity persistence drops + fast cleanup. The at-job
+    # scanner MUST recognize /dev/shm payload paths just as
+    # firmly as /tmp + /var/tmp — locks tmpfs-writable-root axis
+    # symmetry on the T1053.001 (at-scheduled-task) surface.
+    printf '#!/bin/sh\n/dev/shm/.payload\n' > "${JOB}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
