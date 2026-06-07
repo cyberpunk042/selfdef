@@ -343,3 +343,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # discipline: source-level grep excluding comments.
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*touch[[:space:]]+(-[dmrtaA])'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # timestomp-watchdog runs ON the timer's scheduled fire —
+    # scans canonical paths for mtime-pre-installation anomalies
+    # (T1070.006 indicator-removal), emits a verdict, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the timestomp-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/timestomp-watchdog/systemd/selfdef-timestomp.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
