@@ -330,3 +330,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"schedule_capability_granted"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named user grant surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker (or operator
+    # under attacker influence) adds a distinctively-named user
+    # to cron.allow, the user NAME MUST surface in the JSON
+    # sample so operator dashboard routes triage to the right
+    # account. Locks the operator-visibility contract on the
+    # scheduler-access grant surface (T1053.003 — cron scheduled
+    # task persistence; granting cron access = granting per-
+    # minute root-callback opportunity).
+    printf 'alice\n' > "${CA}"
+    printf 'someone\n' > "${AA}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'alice\ndistinctive-attacker-grant\n' > "${CA}"
+    run_wd
+    cap | grep -q 'distinctive-attacker-grant'
+}
