@@ -341,3 +341,22 @@ TOMLEOF
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(libpwquality|libpam-pwquality|cracklib)'
     [ ! -f "${DST}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${DST}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. pam-pwquality manifest declares install + profile
+    # gating the resolver enforces; malformed manifest wedges
+    # the PAM pwquality complexity baseline. Python's tomllib is
+    # the canonical parser. Locks anti-malformed-manifest on
+    # the pam-pwquality substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-pwquality/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'pam-pwquality', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
