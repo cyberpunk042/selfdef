@@ -311,3 +311,23 @@ TOMLEOF
     grep -qE '^remember[[:space:]]*=[[:space:]]*[0-9]+' "${PWHISTORY_CONF}"
     grep -q 'managed-by: selfdef pam-history' "${PWHISTORY_CONF}"
 }
+
+@test "INVARIANT (strict remember >= standard remember — profile-rank monotonic depth)" {
+    # Sister to many other installer module's profile-rank
+    # monotonic INVARIANT across the brain (kernel-sysrq, file-
+    # protections, audit-rules). The strict profile MUST hold
+    # at LEAST as deep a password-history as the standard
+    # profile. If strict had a smaller remember=N than standard,
+    # operator's intent ("tighten password reuse defense") would
+    # be silently inverted. Lock the monotonic depth ordering
+    # across profiles.
+    write_config "standard"
+    run_wd
+    standard_n="$(grep -oE '^remember[[:space:]]*=[[:space:]]*[0-9]+' "${PWHISTORY_CONF}" | grep -oE '[0-9]+$' | head -1)"
+    write_config "strict"
+    run_wd
+    strict_n="$(grep -oE '^remember[[:space:]]*=[[:space:]]*[0-9]+' "${PWHISTORY_CONF}" | grep -oE '[0-9]+$' | head -1)"
+    [ -n "${standard_n}" ]
+    [ -n "${strict_n}" ]
+    [ "${strict_n}" -ge "${standard_n}" ]
+}
