@@ -317,3 +317,18 @@ EOF
     grep -qE 'Unattended-Upgrade::(Origins-Pattern|Allowed-Origins)' "${drop_in}"
     grep -qE 'security|Debian-Security|UbuntuESM' "${drop_in}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-ins written AND NO timer enable fired when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/apt/apt.conf.d/50selfdef-* AND
+    # without enabling apt-daily.timer + apt-daily-upgrade.timer.
+    # Silent dry-run could activate auto-update on a host where
+    # operator was investigating package-management behavior.
+    write_config "security-only"
+    rm -f "${APT_CONFD}/50selfdef-unattended-upgrades"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${APT_CONFD}/50selfdef-unattended-upgrades" ]
+    ! grep -qE 'systemctl enable apt-daily' "${SYSEOF_LOG}"
+}
