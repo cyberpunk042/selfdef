@@ -256,3 +256,21 @@ run_wd() {
     grep -qE 'missingok' "${LOGROTATE_DST}"
     grep -qE 'notifempty' "${LOGROTATE_DST}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # TOML; parser must tolerate without altering the profile-gated
+    # behavior. enabled-with-noise still fires accton on; disabled-
+    # with-noise still fires accton off.
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "enabled"
+operator_note = "process accounting tier-1 substrate"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -qE "accton ${PACCT_FILE}" "${ACCT_LOG}"
+    [ -f "${LOGROTATE_DST}" ]
+}
