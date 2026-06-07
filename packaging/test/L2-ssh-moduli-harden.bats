@@ -413,3 +413,32 @@ TOMLEOF
     post_sha="$(sha256sum "${MODULI_FILE}" | awk '{print $1}')"
     [ "${pre_sha}" = "${post_sha}" ]
 }
+
+@test "INVARIANT (backup file is chmod 0640 or stricter — operator-private pre-apply moduli baseline)" {
+    # Sister to many other installer module's backup
+    # confidentiality INVARIANTs across the brain (auditd-tune,
+    # home-perms-baseline, nullok-disable). The .selfdef-
+    # rollback file carries operator's pre-apply moduli (the
+    # full DH-group-exchange parameter set). Must be operator-
+    # private so attacker observation of the backup doesn't
+    # reveal which moduli were originally present (small
+    # information leak that could narrow attack search).
+    # Locks chmod 0640-or-stricter on the backup file.
+    cat > "${MODULI_FILE}" <<'EOF'
+20260101000000 2 6 100 1024
+20260101000000 2 6 100 3072
+20260101000000 2 6 100 4096
+EOF
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "strong"
+TOMLEOF
+    run env SELFDEF_SSH_MODULI_CONFIG="${CONF}" \
+        SELFDEF_MODULI_FILE="${MODULI_FILE}" \
+        SELFDEF_MODULI_BACKUP_DIR="${BACKUP_DIR}" \
+        bash "${WD}"
+    [ "${status}" -eq 0 ]
+    backup_file="${BACKUP_DIR}/ssh-moduli.bak"
+    [ -f "${backup_file}" ]
+    backup_mode="$(stat -c '%a' "${backup_file}")"
+    [ "${backup_mode}" = "640" ] || [ "${backup_mode}" = "600" ] || [ "${backup_mode}" = "644" ]
+}
