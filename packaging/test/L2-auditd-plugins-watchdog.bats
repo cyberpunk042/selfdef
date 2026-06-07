@@ -322,3 +322,19 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (plugin path under /dev/shm — tmpfs in-RAM writable-root axis-symmetric expansion on auditd dispatcher)" {
+    # Sister to /home + /var/tmp + /tmp auditd plugin writable-
+    # root INVARIANTs. /dev/shm is canonical tmpfs in-RAM
+    # writable-root that survives no on-disk forensic trace.
+    # auditd dispatcher invokes plugin AS ROOT for every audit
+    # event; planted attacker binary in /dev/shm fires AS ROOT
+    # on every audit event. T1562.001 SIEM-evasion at the
+    # source via dispatcher plugin substitution.
+    seed_benign
+    run_wd
+    printf 'active = yes\npath = /dev/shm/.audisp\ntype = always\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
