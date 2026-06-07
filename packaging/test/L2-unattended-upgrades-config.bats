@@ -362,3 +362,21 @@ EOF
     mode="$(stat -c '%a' "${dropin}")"
     [ "${mode}" = "644" ]
 }
+
+@test "INVARIANT (no auto-uninstall: unattended-upgrades-config NEVER emits package-remove commands on unattended-upgrades)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The unattended-upgrades-config installer writes
+    # an apt.conf.d drop-in + enables systemd timers but MUST
+    # NEVER emit shell commands that uninstall the unattended-
+    # upgrades package itself (apt/dpkg/dnf/rpm/yum remove|
+    # purge|uninstall unattended-upgrades). Silent auto-removal
+    # would leave the host with no automatic CVE-patch
+    # mechanism — degrading the security-patch defense
+    # substrate. Locks anti-package-removal contract on the
+    # unattended-upgrades-config substrate.
+    write_config "security-only"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+unattended-upgrades'
+    dropin="${APT_CONFD}/50selfdef-unattended-upgrades"
+    [ ! -f "${dropin}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${dropin}"
+}
