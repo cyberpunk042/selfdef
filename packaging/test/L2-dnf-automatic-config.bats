@@ -305,3 +305,14 @@ TOMLEOF
     [ -f "${DNF_AUTO_CONF}" ]
     [ "$(stat -c '%a' "${DNF_AUTO_CONF}")" = "644" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on dnf-automatic-config installer
+    # surface across automatic.conf + timer-enable phases.
+    write_config "security-only"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"dnf-automatic-config"')
+    [ "${count}" = "1" ]
+}
