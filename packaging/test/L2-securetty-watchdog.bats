@@ -368,3 +368,16 @@ seed_benign() {
     mode="$(stat -c '%a' "${BASELINE}")"
     [ "${mode}" = "600" ] || [ "${mode}" = "640" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # securetty-watchdog runs ON the timer's scheduled fire —
+    # diffs /etc/securetty against baseline, emits a verdict on
+    # tty-additions (root-login-vector axis), then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the securetty-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/securetty-watchdog/systemd/selfdef-securetty.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
