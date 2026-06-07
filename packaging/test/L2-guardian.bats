@@ -436,3 +436,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service has StartLimitBurst=10 — restart-storm cap)" {
     grep -qE '^StartLimitBurst=10' "${UNIT}"
 }
+@test "INVARIANT (guardian.service file is at canonical packaging/systemd/ path — packaging tree-layout)" {
+    [ -f "${UNIT}" ]
+    case "$(readlink -f "${UNIT}")" in */packaging/systemd/*) ;; *) false ;; esac
+}

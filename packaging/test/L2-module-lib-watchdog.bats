@@ -680,3 +680,6 @@ setup() {
 @test "INVARIANT (lib defines log helper — basic-diagnostic-channel contract)" {
     declare -F log >/dev/null
 }
+@test "INVARIANT (lib file is at canonical packaging/lib/ path — packaging tree-layout 71-cycle)" {
+    [ -f "${LIB}" ]
+}

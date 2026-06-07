@@ -868,3 +868,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict)
 "
 }
+
+@test "INVARIANT (tensor-parallel-inference module.toml exists at canonical path modules/tensor-parallel-inference/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/module.toml"
+    [ -f "${mtoml}" ]
+}

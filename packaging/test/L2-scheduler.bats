@@ -615,3 +615,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service has StartLimitBurst=10 — restart-storm cap)" {
     grep -qE '^StartLimitBurst=10' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service file is at canonical packaging/systemd/ path — packaging tree-layout 71-cycle)" {
+    [ -f "${UNIT}" ]
+    case "$(readlink -f "${UNIT}")" in */packaging/systemd/*) ;; *) false ;; esac
+}

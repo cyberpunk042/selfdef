@@ -853,3 +853,7 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict)
 "
 }
+@test "INVARIANT (slm-cpu-loop module dir is at canonical modules/slm-cpu-loop — canonical-module-dir 71-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop"
+    [ -d "${mod_dir}" ]
+}

@@ -701,3 +701,8 @@ ch = (data.get('install') or {}).get('check', '')
 assert ch == 'install/check.sh'
 "
 }
+
+@test "INVARIANT (polarproxy module.toml exists at canonical path modules/polarproxy/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
+    [ -f "${mtoml}" ]
+}

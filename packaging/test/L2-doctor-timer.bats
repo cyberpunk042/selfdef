@@ -600,3 +600,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer file has Documentation= directive — operator-doc-link contract)" {
     grep -qE '^Documentation=' "${TIMER}"
 }
+@test "INVARIANT (.timer + .service exist together — paired-units-lifecycle)" {
+    [ -f "${TIMER}" ]
+    [ -f "${SERVICE}" ]
+}

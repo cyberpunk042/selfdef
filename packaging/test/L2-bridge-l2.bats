@@ -778,3 +778,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict)
 "
 }
+
+@test "INVARIANT (bridge-l2 module.toml exists at canonical path modules/bridge-l2/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/module.toml"
+    [ -f "${mtoml}" ]
+}

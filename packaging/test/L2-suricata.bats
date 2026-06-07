@@ -748,3 +748,8 @@ ch = (data.get('install') or {}).get('check', '')
 assert ch == 'install/check.sh'
 "
 }
+
+@test "INVARIANT (suricata module.toml exists at canonical path modules/suricata/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/suricata/module.toml"
+    [ -f "${mtoml}" ]
+}

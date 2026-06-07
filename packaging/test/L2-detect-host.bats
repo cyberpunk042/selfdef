@@ -767,3 +767,7 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict)
 "
 }
+@test "INVARIANT (detect-host module dir is at canonical modules/detect-host — canonical-module-dir 71-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/detect-host"
+    [ -d "${mod_dir}" ]
+}

@@ -832,3 +832,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict)
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml exists at canonical path modules/hardware-tune-cache/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    [ -f "${mtoml}" ]
+}

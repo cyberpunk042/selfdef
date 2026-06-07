@@ -816,3 +816,8 @@ with open('${mtoml}', 'rb') as fp:
 assert isinstance(data, dict)
 "
 }
+
+@test "INVARIANT (bitnet-gpu-inference module.toml exists at canonical path modules/bitnet-gpu-inference/module.toml — canonical-module-dir layout)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
+    [ -f "${mtoml}" ]
+}

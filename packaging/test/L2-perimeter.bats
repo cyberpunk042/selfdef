@@ -704,3 +704,6 @@ assert c == 'sys_execve', f'call must be sys_execve, got {c!r}'
 @test "INVARIANT (postrm rm -f the YAML file on purge — full-cleanup contract)" {
     grep -qE 'rm -f.*sovereign-perimeter\.yaml' "${POSTRM}"
 }
+@test "INVARIANT (YAML file is at canonical packaging/tetragon-policies/ path — packaging tree-layout 71-cycle)" {
+    [ -f "${YAML}" ]
+}
