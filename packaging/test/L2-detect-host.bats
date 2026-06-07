@@ -220,3 +220,20 @@ MODULE_DIR="${BATS_TEST_DIRNAME}/../../modules/detect-host"
         || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
         || skip "no tomllib/tomli available; parser-contract check skipped"
 }
+
+@test "INVARIANT (consumes field present and empty: detect-host is the foundational substrate, has no upstream-producer dependency)" {
+    # Sister to brain-wide module.toml manifest-completeness
+    # contract family (paired with conflicts-empty / depends_on-
+    # empty assertions above). detect-host produces event-bus +
+    # finding-store + sigma-correlator — three substrate
+    # contracts every downstream watchdog and detect module
+    # consumes. As the foundational module, detect-host MUST
+    # declare consumes = [] explicitly (not omit it): the
+    # dependency-resolver reads the consumes field as part of
+    # the install-order topo-sort, an absent field would surface
+    # as an undefined-key error rather than a "this module sits
+    # at the root of the consume-graph" signal. Locks foundational-
+    # substrate consumes-empty discipline on the detect-host
+    # manifest substrate.
+    grep -qE '^consumes[[:space:]]*=[[:space:]]*\[\]' "${MODULE_DIR}/module.toml"
+}
