@@ -295,3 +295,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (StrictHostKeyChecking=no directive — defeats MITM defense → alert)" {
+    # Sister to ProxyCommand + LocalCommand directive INVARIANTs
+    # already locked. StrictHostKeyChecking=no disables ssh's
+    # primary MITM defense (host-key TOFU verification). An
+    # operator-edited ssh_config with =no for *: globally
+    # accepts any host key — an attacker on the network path
+    # can MITM every ssh connection that uses that config.
+    # The watchdog MUST surface this as alert because it
+    # defeats the foundational TLS-like assurance of ssh.
+    # T1556 — Modify Authentication Process via host-key
+    # verification downgrade.
+    printf 'Host *\n    User alice\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'Host *\n    StrictHostKeyChecking no\n    UserKnownHostsFile /dev/null\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
