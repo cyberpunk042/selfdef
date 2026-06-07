@@ -1035,3 +1035,9 @@ assert isinstance(data, dict), 'TOML root must be table'
     size=$(stat -c '%s' "${apply}")
     [ "${size}" -gt 100 ]
 }
+
+@test "INVARIANT (tmpfs-baseline install/check.sh size > 50 bytes — substantial-check-script 76-cycle)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/tmpfs-baseline/install/check.sh"
+    size=$(stat -c '%s' "${chk}")
+    [ "${size}" -gt 50 ]
+}

@@ -974,3 +974,12 @@ assert 'install' in data, 'install missing'
         [ "${size}" -gt 100 ]
     done
 }
+
+@test "INVARIANT (rhosts-watchdog .timer file size > 50 bytes — substantial-timer-unit 76-cycle)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/rhosts-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        size=$(stat -c '%s' "${t}")
+        [ "${size}" -gt 50 ]
+    done
+}

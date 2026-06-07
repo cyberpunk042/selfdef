@@ -894,3 +894,9 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     size=$(stat -c '%s' "${apply}")
     [ "${size}" -gt 100 ]
 }
+
+@test "INVARIANT (rkhunter-cron install/check.sh size > 50 bytes — substantial-check-script 76-cycle)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/rkhunter-cron/install/check.sh"
+    size=$(stat -c '%s' "${chk}")
+    [ "${size}" -gt 50 ]
+}

@@ -980,3 +980,12 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         [ "${size}" -gt 100 ]
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .timer file size > 50 bytes — substantial-timer-unit 76-cycle)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        size=$(stat -c '%s' "${t}")
+        [ "${size}" -gt 50 ]
+    done
+}
