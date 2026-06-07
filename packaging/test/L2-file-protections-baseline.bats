@@ -353,3 +353,23 @@ TOMLEOF
     [ -f "${DROPIN}" ]
     grep -qE '^#.*(selfdef|file-protections-baseline|managed)' "${DROPIN}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. file-protections-baseline manifest declares install +
+    # profile gating (baseline / strict) the resolver enforces;
+    # malformed manifest wedges the fs.protected_* sysctl
+    # hardening. Python's tomllib is the canonical parser. Locks
+    # anti-malformed-manifest on the file-protections-baseline
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/file-protections-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'file-protections-baseline', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
