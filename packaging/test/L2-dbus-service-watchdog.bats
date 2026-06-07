@@ -312,3 +312,25 @@ EOF
     # alert if the watchdog tracks SystemdService= specifically.
     cap | grep -qE '"severity":"(warn|alert)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named D-Bus service file surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # D-Bus .service file (T1543 — Create or Modify System
+    # Process via D-Bus activation; dbus-daemon fires the Exec=
+    # AS the configured User= on every matching D-Bus method
+    # call), the file name MUST surface in the JSON sample so
+    # operator dashboard routes triage to the right path.
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    DSVC2="${DBUSD}/distinctive-attacker-dbus.service"
+    cat > "${DSVC2}" <<EOF
+[D-BUS Service]
+Name=com.evil.A
+Exec=/tmp/.evil
+User=root
+EOF
+    run_wd
+    cap | grep -q 'distinctive-attacker-dbus'
+}
