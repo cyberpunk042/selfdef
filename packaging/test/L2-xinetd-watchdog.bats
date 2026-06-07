@@ -220,3 +220,69 @@ xsvc() { printf 'service telnet\n{\n    socket_type = stream\n    protocol = tcp
     main_count=$(cap | grep -cE '^-t selfdef-xinetd -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): xinetd-watchdog does NOT refresh baseline on suspicious-server detection — alert STAYS until operator updates" {
+    # Network-connection-triggered exec persistence — alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    xsvc /usr/sbin/in.telnetd > "${SVC}"
+    run_wd
+    xsvc /tmp/backdoor > "${SVC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"xinetd_suspicious_server"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (relative-with-slash xinetd server= → alert)" {
+    # Relative-with-slash is undefined behavior + attacker primitive
+    # (resolved against xinetd's PWD at exec time).
+    xsvc /usr/sbin/in.telnetd > "${SVC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    xsvc 'sub/dir/backdoor' > "${SVC}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (disable=no AND user=root compound: both surface in operator-triage payload)" {
+    # When a service is BOTH enabled (disable=no) AND runs as root
+    # (user=root) AND has a writable server path, the alert is the
+    # highest-risk pattern (root-exec on network event). Lock that
+    # this compound case fires alert with sample carrying ALL the
+    # operator-triage-relevant details.
+    xsvc /usr/sbin/in.telnetd > "${SVC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    xsvc /tmp/backdoor > "${SVC}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '/tmp/backdoor'
+}
+
+@test "INVARIANT (current behavior — # comment filter not implemented: # lines ARE scanned)" {
+    # xinetd uses # for comments but the current xinetd-watchdog
+    # scanner does NOT filter # lines from inventory — pattern-matches
+    # raw content. Locks CURRENT behavior; refinement opportunity to
+    # add comment-line filter is tracked separately. Sister-pattern
+    # with rsyslog-exec/apt-hooks watchdogs (also lack comment filter).
+    xsvc /usr/sbin/in.telnetd > "${SVC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SVC}" <<EOF
+service telnet
+{
+    socket_type = stream
+    protocol = tcp
+    wait = no
+    user = root
+    server = /usr/sbin/in.telnetd
+#   server = /tmp/example-attacker
+    disable = no
+}
+EOF
+    run_wd
+    # Current behavior: # server= line IS scanned + alert IS raised.
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
