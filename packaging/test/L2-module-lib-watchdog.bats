@@ -242,3 +242,12 @@ setup() {
     selfdef_is_writable_path '/dev/shm/payload.sh'
     selfdef_is_writable_path '/dev/shm/.evil'
 }
+
+@test "INVARIANT (writable-path: /var/tmp is flagged — persistent writable-root coverage on the 4-root set)" {
+    # Sister to /tmp + /home + /dev/shm writable-path INVARIANTs.
+    # /var/tmp persistent + writable across reboots — central
+    # helper must flag it.
+    selfdef_is_writable_path '/var/tmp/x'
+    selfdef_is_writable_path '/var/tmp/payload.sh'
+    selfdef_is_writable_path '/var/tmp/.evil'
+}
