@@ -303,3 +303,14 @@ teardown_real_run() {
         || grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"hardware-tune-cache"' "${MODULE_DIR}/module.toml" \
         || true
 }
+
+@test "INVARIANT (apply.sh uses set -euo pipefail — fail-loud invariant)" {
+    # Sister to brain-wide fail-loud set-euo-pipefail INVARIANTs.
+    # tensor-parallel-inference is the runtime contract for
+    # multi-GPU tensor-parallel inference; silent failure in
+    # apply.sh would leave slice-plan.json + runtime.env in a
+    # partially-rendered state that downstream consumers
+    # (sovereign-os MS028 + slm-cpu-loop) would consume as
+    # broken. Lock fail-loud discipline on apply.sh.
+    grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/apply.sh"
+}
