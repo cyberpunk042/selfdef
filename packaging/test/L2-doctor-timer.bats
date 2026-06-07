@@ -215,3 +215,16 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     [ -f "${SERVICE}" ]
     grep -qE '^Type=oneshot' "${SERVICE}"
 }
+
+@test "INVARIANT (.service hardening — SystemCallArchitectures=native — anti-32bit-syscall-bypass Ring-0 hardening axis)" {
+    # Sister to brain-wide Ring-0 hardening INVARIANT family
+    # (LockPersonality + MemoryDenyWriteExecute + ProtectKernelTunables
+    # + ProtectKernelLogs + ProtectControlGroups + NoNewPrivileges
+    # all already covered above). SystemCallArchitectures=native
+    # restricts the doctor to the host's native syscall ABI —
+    # blocks the 32-bit-syscall-on-64-bit-kernel bypass class
+    # historically used to evade seccomp filters that only
+    # covered the native syscall numbers. Locks native-ABI
+    # discipline on the doctor service substrate.
+    grep -q "^SystemCallArchitectures=native$" "${SERVICE}"
+}
