@@ -362,3 +362,21 @@ seed_benign() {
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (baseline file is chmod 0600 — confidentiality of nfs-exports inventory)" {
+    # Sister to brain-wide baseline-chmod-0600 confidentiality
+    # INVARIANTs across L2 surveillance suites. The nfs-exports-
+    # watchdog baseline TSV contains the inventory of NFS
+    # exports + client-pattern grants which discloses cross-
+    # host trust relationships to any user able to read the
+    # file. Mode 0600 (root-only) is the canonical
+    # confidentiality contract — mode 0644 would expose the
+    # NFS trust-graph to reconnaissance enabling attacker to
+    # map lateral-movement targets. Locks file-mode
+    # confidentiality on the nfs-exports surveillance substrate.
+    seed_benign
+    run_wd
+    [ -f "${BASELINE}" ]
+    mode="$(stat -c '%a' "${BASELINE}")"
+    [ "${mode}" = "600" ] || [ "${mode}" = "640" ]
+}
