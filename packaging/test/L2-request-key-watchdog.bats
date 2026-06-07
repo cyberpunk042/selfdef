@@ -305,3 +305,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (callout under /dev/shm — tmpfs writable-root axis-symmetric expansion on kernel-keyring upcall surface)" {
+    # Sister to /home + /var/tmp callout writable-root INVARIANTs
+    # already locked. /dev/shm is tmpfs writable by ALL users
+    # without privilege, lives in RAM (boot-wiped), and slips
+    # past disk-monitoring tools — high-velocity drop surface
+    # for T1546 kernel-keyring upcall hijack. The kernel calls
+    # into the configured callout AS ROOT every time keyring
+    # requests an upcall; planted binary in /dev/shm fires AS
+    # ROOT on every cache miss.
+    printf 'create dns_resolver * * /dev/shm/.evil-callout\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
