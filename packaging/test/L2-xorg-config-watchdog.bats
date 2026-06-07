@@ -308,3 +308,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (ModulePath under /dev/shm — tmpfs in-RAM writable-root axis-symmetric expansion on X-server module-load surface)" {
+    # Sister to /home + /var/tmp ModulePath writable-root
+    # INVARIANTs already locked. /dev/shm is tmpfs in-RAM
+    # writable-root that survives no on-disk forensic trace.
+    # X-server loads modules from ModulePath AS ROOT (Xorg
+    # historically runs setuid root for input access).
+    # Planted .so in /dev/shm gets graphical-display access
+    # — keylogging + screen-content capture. T1574 Hijack
+    # Execution Flow via X-server module-load.
+    printf 'Section "Files"\n    ModulePath "/dev/shm/.evil-xorg-modules"\nEndSection\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
