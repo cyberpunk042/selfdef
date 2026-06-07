@@ -275,3 +275,23 @@ run_wd() {
     # Either explicit acted=1 OR the mask action fired (signaled by log).
     [[ "${output}" == *'acted=1'* ]] || grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # at-disable TOML; parser must tolerate without altering the
+    # profile-gated behavior. mask-with-noise still fires systemctl
+    # mask atd.service (the at-job scheduler vector neutralization —
+    # at is an interactive-scheduler alternative to cron used by
+    # legitimate operators rarely but routinely by attackers for
+    # one-shot scheduled-callback persistence T1053.001).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "at = one-shot scheduler used by attackers T1053.001"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
+}
