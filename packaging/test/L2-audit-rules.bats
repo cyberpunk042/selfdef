@@ -267,3 +267,52 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=paranoid'* ]]
 }
+
+@test "INVARIANT (paranoid profile content is asymmetric tightening: strictly MORE watch directives than base)" {
+    # Lock that paranoid covers strictly more than base — a
+    # regression that makes paranoid equal to base or smaller
+    # would silently weaken the profile-rank invariant. Sister
+    # to rare-filesystems-disable asymmetric-module-count
+    # INVARIANT pattern.
+    write_config "base"
+    run_wd
+    base_watch_count="$(grep -cE '^-w' "${RULES_DIR}/50-selfdef-base.rules")"
+    write_config "paranoid"
+    run_wd
+    paranoid_watch_count="$(grep -cE '^-w' "${RULES_DIR}/50-selfdef-paranoid.rules")"
+    # Paranoid total = base + paranoid file (concatenated by augenrules).
+    total="$((base_watch_count + paranoid_watch_count))"
+    [ "${total}" -gt "${base_watch_count}" ]
+    [ "${paranoid_watch_count}" -ge 2 ]
+}
+
+@test "INVARIANT (operator stale-prefix removal: 50-selfdef-* files matching prefix but NOT belonging to active profile are pruned)" {
+    # If the rules dir contains a leftover 50-selfdef-*.rules from
+    # a prior profile (e.g. paranoid file from earlier paranoid
+    # install, now downgraded to base), the downgrade MUST remove
+    # it. Sister to existing 'downgrade paranoid → base REMOVES
+    # paranoid' INVARIANT, with explicit prefix-scoping note.
+    # First seed a leftover by installing paranoid.
+    write_config "paranoid"
+    run_wd
+    [ -f "${RULES_DIR}/50-selfdef-paranoid.rules" ]
+    # Now downgrade and verify stale prefix file removed.
+    write_config "base"
+    run_wd
+    ! [ -f "${RULES_DIR}/50-selfdef-paranoid.rules" ]
+}
+
+@test "INVARIANT (rules-dir scan only touches 50-selfdef-* — operator-authored files in same dir survive across profile change)" {
+    # Sister to existing 'operator-authored rules preserved'
+    # INVARIANT but explicit across a profile change (downgrade)
+    # which is when the cleanup logic runs most aggressively.
+    write_config "paranoid"
+    printf '%s\n' '-w /opt/operator-only -p wa -k operator' > "${RULES_DIR}/30-operator-custom.rules"
+    run_wd
+    [ -f "${RULES_DIR}/30-operator-custom.rules" ]
+    write_config "base"
+    run_wd
+    # Operator file survives the profile downgrade.
+    [ -f "${RULES_DIR}/30-operator-custom.rules" ]
+    grep -q 'operator-only' "${RULES_DIR}/30-operator-custom.rules"
+}
