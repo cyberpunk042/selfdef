@@ -394,3 +394,20 @@ TOMLEOF
     mode="$(stat -c '%a' "${DST}")"
     [ "${mode}" = "644" ]
 }
+
+@test "INVARIANT (no auto-uninstall: ssh-hardening NEVER emits package-remove commands on openssh-server)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The ssh-hardening installer writes an sshd_
+    # config.d drop-in tightening PermitRootLogin / Password
+    # Authentication / etc. but MUST NEVER emit shell commands
+    # that uninstall the openssh-server package itself (apt/
+    # dpkg/dnf/rpm/yum remove|purge|uninstall openssh-server|
+    # openssh|ssh). Silent auto-removal would lock the operator
+    # out of the host entirely — sister to refuse-to-brick
+    # discipline. Locks anti-package-removal contract on the
+    # SSH hardening substrate.
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(openssh|ssh)'
+    [ ! -f "${DST}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${DST}"
+}
