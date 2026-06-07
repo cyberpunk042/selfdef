@@ -219,3 +219,17 @@ Warning: Suspicious file /dev/.hidden"
     run_wd
     cap | grep -q '"warning_count":3'
 }
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_RKHUNTER_PROFILE — operator-dashboard distinguishes report from enforce)" {
+    # Sister to L2-aide-bridge / L2-clamav-cron / L2-lynis-cron
+    # profile-echo INVARIANTs across the brain. Downstream operator
+    # dashboard / triage pipeline must see the profile value the
+    # wrapper ran under (report vs enforce) so it can distinguish
+    # advisory findings from gate-failing findings. The latter
+    # would have aborted the cron unit on warning; the former just
+    # logged. Closes the profile-surfacing axis on the rkhunter
+    # rootkit-detection wrapper.
+    mk_rk 0 "System checks summary: no warnings"
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
