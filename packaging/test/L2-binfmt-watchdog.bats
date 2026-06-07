@@ -339,3 +339,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: binfmt-watchdog NEVER deletes binfmt.d entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # binfmt-watchdog DETECTS T1574 binfmt_misc Hijack Execution
+    # Flow but MUST NEVER emit sed/awk/rm commands to auto-
+    # clean the interpreter registration. The detected entry
+    # may be operator-legitimate (custom QEMU multi-arch
+    # interpreter, wine binary handler, multi-platform CI).
+    # Silent auto-delete would destroy operator baseline state
+    # AND could break cross-architecture binary execution.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the binfmt surveillance substrate.
+    printf ':evil:M:0:magic:mask:/tmp/.evil:OC\n' > "${CONF}"
+    run_wd
+    [ -f "${CONF}" ]
+    grep -q 'evil' "${CONF}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*binfmt'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+}
