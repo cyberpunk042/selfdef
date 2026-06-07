@@ -290,3 +290,15 @@ TOMLEOF
     run_wd
     grep -qE '^Type=oneshot' "${SYSTEMD_DIR}/selfdef-wol-disable.service"
 }
+
+@test "INVARIANT (service unit fires on network-online.target — wait until interface is up before WoL clear)" {
+    # Sister to oneshot-Type INVARIANT. WoL is a NIC property
+    # — ethtool -s wol d needs the interface UP to take effect.
+    # The service unit MUST declare After=/Wants= on network-
+    # online.target (or sysinit.target) so it doesn't fire
+    # before the kernel finishes interface bring-up.
+    write_config "enforce"
+    run_wd
+    grep -qE '^(After|Wants|Requires)=.*(network-online|sysinit|network).target' "${SYSTEMD_DIR}/selfdef-wol-disable.service" \
+        || grep -qE '^WantedBy=multi-user.target' "${SYSTEMD_DIR}/selfdef-wol-disable.service"
+}
