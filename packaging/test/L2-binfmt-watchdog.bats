@@ -298,3 +298,11 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs.
+    printf ':e1:M:0:magic:mask:/tmp/.e1:OC\n:e2:M:0:magic:mask:/var/tmp/.e2:OC\n:e3:M:0:magic:mask:/dev/shm/.e3:OC\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-binfmt -- ')
+    [ "${main_count}" = "1" ]
+}
