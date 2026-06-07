@@ -297,3 +297,32 @@ EOF
     # root (uid=0, in reserved list) MUST NOT.
     ! grep -q 'chsh.*root' "${CHSH_LOG}"
 }
+
+@test "INVARIANT (emit_status JSON: module surfaced for operator dashboard)" {
+    write_synth_passwd
+    write_config "enforce"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"service-account-lock"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+}
+
+@test "INVARIANT (default reserved_uids 0,1,2,3 covers root + daemon + bin + sys — anti-deletion-by-empty-config)" {
+    # An empty/missing reserved_uids value MUST default to 0,1,2,3.
+    # Otherwise an empty reserved list would lock root → catastrophic.
+    write_synth_passwd
+    printf 'profile = "enforce"\n' > "${CONF}"      # NO reserved_uids
+    run_wd
+    # root (uid=0) MUST NOT be locked — default reserved list protects it.
+    ! grep -q 'chsh.*root' "${CHSH_LOG}"
+}
+
+@test "INVARIANT (audit profile produces stable findings on identical input — deterministic enumeration)" {
+    # Audit must produce same output across runs given same passwd.
+    # Locks against non-deterministic ordering that would break
+    # operator-dashboard diff-tracking.
+    write_synth_passwd
+    write_config "audit"
+    output_first="$(run_wd 2>&1 | grep 'FOUND:')"
+    output_second="$(run_wd 2>&1 | grep 'FOUND:')"
+    [ "${output_first}" = "${output_second}" ]
+}
