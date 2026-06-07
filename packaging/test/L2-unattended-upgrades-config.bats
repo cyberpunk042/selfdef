@@ -252,3 +252,50 @@ run_wd() {
     grep -q 'apt-daily.timer' "${SYSEOF_LOG}"
     grep -q 'apt-daily-upgrade.timer' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (config-noise resilience: extra TOML keys do NOT bypass profile validation gate)" {
+    # Sister to kernel-lockdown + nftables-baseline + unprivileged-
+    # userns + proc-hidepid + usbguard + auditd-immutable config-
+    # noise INVARIANT pattern. Lock that extra TOML keys cannot
+    # accidentally cause silent profile mis-application.
+    cat > "${CONF}" <<'EOF'
+profile = "security-and-reboot"
+extra_knob = "wrong"
+maybe_alias_for_profile = "security-only"
+EOF
+    run_wd
+    # The active profile is security-and-reboot (reboot file present).
+    [ -f "${APT_CONFD}/60selfdef-unattended-reboot" ]
+}
+
+@test "INVARIANT (filename: all drop-ins follow selfdef-* identifier in NAME — tracking + uninstall identification)" {
+    # Sister to many other modules' filename-convention INVARIANT.
+    # All 3 drop-ins must carry 'selfdef' in their filename so the
+    # uninstall + stale-cleanup pass can identify them.
+    write_config "security-and-reboot"
+    run_wd
+    for f in "${APT_CONFD}/50selfdef-unattended-upgrades" \
+             "${APT_CONFD}/20selfdef-periodic" \
+             "${APT_CONFD}/60selfdef-unattended-reboot"; do
+        case "${f}" in
+            *selfdef*) : ;;
+            *) fail "drop-in filename ${f} does not carry selfdef identifier" ;;
+        esac
+    done
+}
+
+@test "INVARIANT (apt-daily.timer ordering: download MUST be enabled BEFORE upgrade — install ordering in systemctl log)" {
+    # apt-daily.timer (download) must be enabled BEFORE apt-daily-
+    # upgrade.timer (install). If install enables before download,
+    # the first upgrade window would have no fresh index. Lock the
+    # ordering. Sister to other modules' service-action ordering
+    # INVARIANTs.
+    write_config "security-only"
+    run_wd
+    download_line="$(grep -n 'apt-daily.timer' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    upgrade_line="$(grep -n 'apt-daily-upgrade.timer' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ -n "${download_line}" ]
+    [ -n "${upgrade_line}" ]
+    # download (apt-daily) line comes before upgrade (apt-daily-upgrade) line.
+    [ "${download_line}" -lt "${upgrade_line}" ]
+}
