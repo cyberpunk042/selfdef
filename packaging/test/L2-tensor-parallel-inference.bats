@@ -347,3 +347,15 @@ teardown_real_run() {
         || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
         || skip "no tomllib/tomli available; parser-contract check skipped"
 }
+
+@test "INVARIANT (no auto-uninstall: tensor-parallel-inference installer NEVER emits package-remove commands on vllm/cuda/python-runtime)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANT family.
+    # tensor-parallel-inference wires the vllm + CUDA + python
+    # runtime config; package-removal of those runtimes is
+    # operator-domain (not installed by THIS module). Locks
+    # no-auto-uninstall on the tensor-parallel-inference
+    # substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum|pip|pip3)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(vllm|cuda|python3?)' "${f}"
+    done
+}
