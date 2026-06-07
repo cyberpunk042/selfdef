@@ -295,3 +295,20 @@ seed_benign() {
     cap | grep -q '"event":"nfs_exports_dangerous"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named export path surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker adds a new
+    # NFS export with no_root_squash, the export path MUST
+    # surface in the JSON sample so operator dashboard routes
+    # triage to the right path. Locks the operator-visibility
+    # contract on the NFS-export-grant surveillance surface
+    # (T1199 — Trusted Relationship via no-root-squash NFS
+    # export lets remote root from client land as host root).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/srv/distinctive-attacker-export *(rw,no_root_squash)\n' > "${EXPORTS}"
+    run_wd
+    cap | grep -q 'distinctive-attacker-export'
+}
