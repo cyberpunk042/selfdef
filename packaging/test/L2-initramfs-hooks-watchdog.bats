@@ -288,3 +288,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named initramfs hook surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When attacker drops a new
+    # initramfs hook (T1542 — Pre-OS Boot persistence via
+    # initramfs injection; the planted hook runs AS ROOT in
+    # very early boot before the operator can intervene), the
+    # hook NAME MUST surface in the JSON sample so operator
+    # dashboard routes triage to the right hook.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\necho "loaded"\n' > "${HOOKD}/distinctive-attacker-initramfs-hook"
+    chmod 0755 "${HOOKD}/distinctive-attacker-initramfs-hook"
+    run_wd
+    cap | grep -q 'distinctive-attacker-initramfs-hook'
+}
