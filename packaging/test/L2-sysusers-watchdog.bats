@@ -257,3 +257,19 @@ EOF
     run_wd
     cap | grep -q 'very-distinctive-attacker'
 }
+
+@test "INVARIANT (membership-into-docker: 'm myapp docker' → alert — docker group escape-to-root vector)" {
+    # Sister to the disk + shadow + sudo + wheel privileged-group
+    # membership axes already locked. The docker group is a
+    # well-known privesc primitive: any docker-group member can run
+    # `docker run -v /:/host alpine chroot /host` to gain effective
+    # root via volume-mount escape. Lock the docker-group axis on
+    # the sysusers declarative membership family alongside the
+    # other root-equivalent groups already covered.
+    seed_benign
+    run_wd
+    printf 'u myapp 999 "My App Daemon"\nm myapp docker\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
