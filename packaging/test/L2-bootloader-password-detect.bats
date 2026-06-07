@@ -302,3 +302,23 @@ TOMLEOF
     run_wd
     grep -qE '"event":"no_grub"|exit 0' "${LIBEXEC_DIR}/bootloader-password-detect.sh"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO service/timer/libexec/profile-drop-in files written when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without installing the 4 files (service + timer +
+    # libexec + profile drop-in) AND without firing daemon-reload.
+    # A silent dry-run that committed would land a recurring boot-
+    # time scanner against grub.cfg on a host where operator was
+    # investigating. Locks the dry-run-preserves-state contract on
+    # the bootloader-password detection substrate.
+    rm -rf "${SYSTEMD_DIR}" "${LIBEXEC_DIR}"
+    mkdir -p "${SYSTEMD_DIR}" "${LIBEXEC_DIR}"
+    write_config "report"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${SYSTEMD_DIR}/selfdef-bootloader-password.service" ]
+    [ ! -f "${SYSTEMD_DIR}/selfdef-bootloader-password.timer" ]
+    [ ! -f "${LIBEXEC_DIR}/bootloader-password-detect.sh" ]
+    ! grep -q 'daemon-reload' "${SYSEOF_LOG}"
+}
