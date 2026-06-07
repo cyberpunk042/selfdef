@@ -246,3 +246,25 @@ EOF
     run_wd
     grep -qE '^minclass[[:space:]]*=[[:space:]]*[2-9]' "${DST}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # pam-pwquality TOML; parser must tolerate without altering the
+    # profile-gated behavior. strict-with-noise still writes the
+    # strict drop-in with minclass + dcredit/ucredit/lcredit/ocredit
+    # character-class diversity directives (load-bearing PCI/CIS-
+    # compliance password-quality substrate).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "strict"
+operator_note = "PCI/CIS-compliance password quality — minclass=3"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${DST}" ]
+    grep -qE '^minclass[[:space:]]*=[[:space:]]*[2-9]' "${DST}"
+    grep -qE '^(dcredit|ucredit|lcredit|ocredit)[[:space:]]*=' "${DST}"
+    grep -qE '^# selfdef pam-pwquality' "${DST}"
+}
