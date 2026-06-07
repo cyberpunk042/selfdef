@@ -274,3 +274,36 @@ EOF
     # Lock current behavior: 0600 OR 0644 — sister to other baseline confidentiality.
     [ "${baseline_mode}" = "600" ] || [ "${baseline_mode}" = "644" ]
 }
+
+@test "INVARIANT (no auto-trust: integrity-sentinel does NOT silently re-baseline when monitored file content changes — alert STAYS until operator updates)" {
+    # Sister to many other watchdog no-auto-trust INVARIANTs
+    # across the brain (sudoers-integrity, polkit-rules,
+    # sshrc, etc.). When a monitored file's sha256 mismatches
+    # the baseline, the integrity sentinel MUST NOT silently
+    # update the baseline — that would defeat the entire
+    # tamper-detection purpose. The alert / check failure
+    # MUST persist across runs until operator explicitly
+    # re-baselines via the documented procedure. Locks the
+    # no-auto-trust contract on the file-integrity sentinel
+    # surface (T1565.001 — Stored Data Manipulation).
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_INTEGRITY_SENTINEL_CONFIG="${TEST_DIR}/integrity.toml"
+    echo "${TEST_DIR}/target.txt" > "${TEST_DIR}/paths.txt"
+    echo "original" > "${TEST_DIR}/target.txt"
+    cat > "${SELFDEF_INTEGRITY_SENTINEL_CONFIG}" <<EOF
+profile = "strict"
+paths_file = "${TEST_DIR}/paths.txt"
+baseline_path = "${TEST_DIR}/baseline.sha256"
+on_missing = "create"
+EOF
+    bash "${INSTALL_DIR}/apply.sh" >/dev/null 2>&1
+    pre_sha="$(sha256sum "${TEST_DIR}/baseline.sha256" | awk '{print $1}')"
+    # Tamper target
+    echo "tampered" > "${TEST_DIR}/target.txt"
+    bash "${INSTALL_DIR}/apply.sh" >/dev/null 2>&1 || true
+    post_sha="$(sha256sum "${TEST_DIR}/baseline.sha256" | awk '{print $1}')"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_INTEGRITY_SENTINEL_CONFIG
+    # baseline must NOT be auto-refreshed.
+    [ "${pre_sha}" = "${post_sha}" ]
+}
