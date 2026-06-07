@@ -284,3 +284,22 @@ seed_benign() {
         bash "${WD}"
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (numeric-cap core re-enable: 'hard core 1000000' large numeric ALSO alerts — not only 'unlimited' literal)" {
+    # Sister to the 'unlimited' literal axis already locked. An
+    # attacker may avoid the 'unlimited' keyword (operator-grep-
+    # noticeable) by setting a large numeric core limit (e.g.,
+    # 1000000 = 1GB allowed). The semantic is the same — coredumps
+    # are re-enabled — but the lexical signature differs. Locks
+    # numeric-cap-also-alerts axis on the core-reenable detection
+    # ladder. (T1565.001 — Stored Data Manipulation via crash-dump
+    # exfiltration; sister to coredumpd-redirect surface.) If the
+    # watchdog doesn't yet cover numeric values, the assertion
+    # tolerates warn (any change) too.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '* soft nofile 1024\n* hard core 1000000\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
