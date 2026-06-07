@@ -244,3 +244,19 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^Wants=tetragon\.service' "${UNIT}"
     ! grep -qE '^Requires=tetragon\.service' "${UNIT}"
 }
+
+@test "INVARIANT (guardian.service RestartSec=2s — bounded supervisorless window contract)" {
+    # Sister to brain-wide systemd RestartSec= INVARIANT family.
+    # The guardian unit is Restart=always; without RestartSec=
+    # systemd defaults to 100ms, which combined with a fast-
+    # failing exec would create a hot-loop. The operator-
+    # extension declares RestartSec=2s to bound the
+    # supervisorless window — a 2-second gap between guardian
+    # crash + restart attempt — short enough that the perimeter
+    # watchdog has minimal coverage gap, long enough that
+    # systemd's StartLimitBurst dampener actually kicks in
+    # before a 10-burst restart-storm completes. Locks the
+    # 2s bounded-supervisorless-window discipline on the
+    # guardian unit substrate.
+    grep -qE '^RestartSec=2s$' "${UNIT}"
+}

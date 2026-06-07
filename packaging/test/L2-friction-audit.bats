@@ -524,3 +524,18 @@ EOF
     # ts_ms substrate (shared by emit_ocsf + emit_ring).
     grep -qE 'ts_ms=\$\(\(\$\(date \+%s%N\) / 1000000\)\)' "${SCRIPT}"
 }
+
+@test "INVARIANT (script declares set -euo pipefail — Bash strict-mode contract)" {
+    # Sister to brain-wide Bash strict-mode INVARIANT family.
+    # The friction-audit script MUST declare `set -euo pipefail`
+    # near the top so: -e (exit on any unchecked error),
+    # -u (exit on undefined variable), -o pipefail (capture
+    # exit code from any failed pipeline stage). A regression
+    # dropping any of the 3 would let silent errors propagate:
+    # -e dropped → emit_ocsf failures silently skipped; -u
+    # dropped → typos in env-var names emit empty strings; -o
+    # pipefail dropped → `grep ... | head` masks grep's rc.
+    # Locks the canonical Bash-strict-mode discipline on the
+    # friction-audit script substrate.
+    grep -qE '^set -euo pipefail' "${SCRIPT}"
+}

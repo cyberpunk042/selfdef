@@ -457,3 +457,18 @@ setup() {
     ! toml_get absent "${tmp}" >/dev/null
     rm -f "${tmp}"
 }
+
+@test "INVARIANT (log() helper writes to stderr — operator-diagnostic-channel discipline)" {
+    # Sister to brain-wide stderr-vs-stdout INVARIANT family.
+    # The module-lib's log() helper MUST write to stderr (>&2)
+    # so that apply.sh / check.sh / uninstall.sh diagnostic
+    # output doesn't pollute the stdout channel reserved for
+    # the emit_status() JSON record. Watchdog scripts piped
+    # into a JSON consumer rely on stdout being JSON-only;
+    # any leaked log line on stdout would parse-fail the
+    # consumer. The lib's log() body is `echo "[${MODULE}] $*"
+    # >&2`. A regression that dropped >&2 would let log()
+    # corrupt stdout. Locks stderr-diagnostic-channel
+    # discipline on the module-lib log() substrate.
+    awk '/^log\(\)/,/^}/' "${LIB}" | grep -qE '>&2'
+}

@@ -516,3 +516,24 @@ v = data.get('version', '')
 assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml [install] kind = \"script\" — script install-flow contract)" {
+    # Sister to brain-wide module.toml [install].kind INVARIANT
+    # family. The slm-cpu-loop module ships an install/apply.sh
+    # — its install flow runs apply/check/uninstall scripts via
+    # the selfdefctl script-runner. The [install].kind field
+    # MUST be exactly "script" so the installer dispatches to
+    # the script-apply branch. A regression to "debian-package"
+    # would route through dpkg-install, which would fail since
+    # the module does NOT ship a .deb. Locks the script
+    # install-flow discipline on the slm-cpu-loop substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+kind = (data.get('install') or {}).get('kind', '')
+assert kind == 'script', f'install.kind must be script, got {kind!r}'
+"
+}

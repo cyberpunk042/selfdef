@@ -389,3 +389,26 @@ v = data.get('version', '')
 assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml [install] kind = \"debian-package\" — non-script install-flow contract)" {
+    # Sister to brain-wide module.toml [install].kind INVARIANT
+    # family. The detect-host module IS the selfdef-daemon
+    # Debian package itself — the install is via apt/dpkg, NOT
+    # a shell script. The [install].kind field MUST be exactly
+    # "debian-package" so the selfdefctl installer dispatches
+    # to the dpkg branch (no apply.sh execution). A regression
+    # to "script" would route installation through the script
+    # apply-runner which would then fail to find install/
+    # apply.sh (the module does not ship one). Locks the
+    # debian-package install-flow discipline on the detect-host
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+kind = (data.get('install') or {}).get('kind', '')
+assert kind == 'debian-package', f'install.kind must be debian-package, got {kind!r}'
+"
+}

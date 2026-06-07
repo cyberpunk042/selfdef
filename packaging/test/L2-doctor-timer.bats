@@ -370,3 +370,18 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     # on the doctor service substrate.
     ! grep -qE '^Restart=' "${SERVICE}"
 }
+
+@test "INVARIANT (.timer Description= references the hourly-health-check purpose — operator-list-timers visibility contract)" {
+    # Sister to brain-wide systemd timer Description= INVARIANT
+    # family. The doctor.timer's Description= surfaces in
+    # `systemctl list-timers --all` output; operators rely on
+    # the description text to identify which selfdef-managed
+    # timer they're looking at. A regression that swapped the
+    # description for a generic "Selfdef doctor" without the
+    # "hourly" / "health" qualifier would leave operators
+    # parsing the Unit= field instead of the human-readable
+    # Description=. Locks the timer-Description-purpose
+    # discipline on the doctor.timer substrate.
+    grep -qE '^Description=' "${TIMER}"
+    grep -qiE 'Description=.*(hourly|periodic|health)' "${TIMER}"
+}

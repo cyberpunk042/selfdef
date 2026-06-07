@@ -421,3 +421,19 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     ! grep -qE '^OnUnitActiveSec=' "${UNIT}"
     ! grep -qE '^OnCalendar=' "${UNIT}"
 }
+
+@test "INVARIANT (.service Restart=always pairs with RestartSec — no-default-100ms hot-loop contract)" {
+    # Sister to brain-wide Restart=always+RestartSec pair
+    # INVARIANT family. Without RestartSec=<value>, systemd's
+    # default 100ms restart delay combined with Restart=always
+    # produces a hot-loop on a fast-failing exec. The scheduler
+    # unit MUST declare BOTH Restart=always AND RestartSec=
+    # (any non-default value) so the restart cadence is
+    # explicit. A regression dropping RestartSec= would silently
+    # revert to the 100ms default + potentially produce a
+    # 10-fire-per-second hot-loop until StartLimitBurst kicks
+    # in. Locks the explicit-RestartSec pair discipline on the
+    # scheduler unit substrate.
+    grep -qE '^Restart=always' "${UNIT}"
+    grep -qE '^RestartSec=' "${UNIT}"
+}

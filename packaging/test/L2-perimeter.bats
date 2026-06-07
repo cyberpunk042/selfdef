@@ -434,3 +434,23 @@ op = data['spec']['kprobes'][0]['selectors'][0]['matchArgs'][0]['operator']
 assert op == 'NotIn', f'matchArgs operator must be NotIn (allowlist), got {op}'
 "
 }
+
+@test "INVARIANT (YAML apiVersion=cilium.io/v1alpha1 + kind=TracingPolicy — Tetragon CRD apiVersion contract)" {
+    # Sister to brain-wide Kubernetes/CRD apiVersion INVARIANT
+    # family. The MS047 perimeter is loaded by Tetragon as a
+    # TracingPolicy CRD; the apiVersion + kind pair MUST be
+    # exactly cilium.io/v1alpha1 + TracingPolicy. A regression
+    # that bumped to v1beta1 or v1 before Tetragon adds
+    # support would silently fail to load (Tetragon's CRD
+    # registration rejects unknown versions). A regression
+    # that swapped kind=TracingPolicy for ClusterTracingPolicy
+    # would change the scope semantics. Locks the canonical
+    # CRD apiVersion+kind discipline on the perimeter YAML
+    # substrate.
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert data.get('apiVersion') == 'cilium.io/v1alpha1', f'apiVersion must be cilium.io/v1alpha1, got {data.get(\"apiVersion\")!r}'
+assert data.get('kind') == 'TracingPolicy', f'kind must be TracingPolicy, got {data.get(\"kind\")!r}'
+"
+}
