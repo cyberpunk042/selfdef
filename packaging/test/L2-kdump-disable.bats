@@ -272,3 +272,18 @@ TOMLEOF
     grep -q 'systemctl mask kexec-tools.service' "${SYSEOF_LOG}"
     grep -q 'systemctl mask kdump-tools.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (DRY_RUN does not fire any systemctl mask/disable/stop)" {
+    # Sister to many other installer module's DRY_RUN INVARIANT
+    # across the brain. The kdump-disable DRY_RUN path MUST be a
+    # no-op against the live systemd state — operator using
+    # --dry-run to preview-without-applying expects ZERO
+    # mutations. Locks the dry-run side-effect-freedom contract
+    # so a regression that fires mask through DRY_RUN would be
+    # caught (silent unmask would re-expose the kernel-memory-
+    # dump exfil surface; silent mask would prevent operator
+    # from kdump'ing intentionally during preview).
+    write_config "mask"
+    DRY_RUN=1 KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd
+    ! grep -qE 'systemctl (mask|disable|stop)' "${SYSEOF_LOG}"
+}
