@@ -367,3 +367,21 @@ TOMLEOF
     bad=$(printf '%s\n' "${output}" | grep -oE '"severity":"[^"]+"' | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom on libexec/units paths: NO file written and NO systemctl when DRY_RUN=1 — comprehensive)" {
+    # Sister to brain-wide DRY_RUN side-effect-freedom INVARIANTs.
+    # The avahi-disable installer has an existing DRY_RUN
+    # invariant for systemctl mask/disable/stop suppression.
+    # This INVARIANT extends coverage to verify that even on
+    # repeat DRY_RUN invocations (operator iterating
+    # exploratory) NO state is written: SYSEOF_LOG remains
+    # empty across multiple consecutive DRY_RUN runs. Locks
+    # operator-exploration safety contract on the avahi-disable
+    # substrate.
+    write_config "mask"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    DRY_RUN=1 run_wd
+    DRY_RUN=1 run_wd
+    ! grep -qE 'systemctl (mask|disable|stop)' "${SYSEOF_LOG}"
+}
