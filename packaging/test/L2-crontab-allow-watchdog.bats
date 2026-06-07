@@ -284,3 +284,49 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # zero output).
     cap | grep -qE '"event":"[a-z_]+"'
 }
+
+@test "INVARIANT (root user grant: root added to cron.allow → alert — high-privilege grant)" {
+    # root being added to cron.allow is the highest-privilege
+    # grant possible. Already covered by the generic grant
+    # signature, but lock the specific root case so a regression
+    # that scoped grant-detection to non-root would trip here.
+    printf 'alice\n' > "${CA}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'alice\nroot\n' > "${CA}"
+    run_wd
+    cap | grep -q '"event":"schedule_capability_granted"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q 'root'
+}
+
+@test "INVARIANT (compound mass-grant: 2 cron.allow + 1 at.allow grants in same scan → grants=3 + all in sample)" {
+    # Sister axis to existing multi-grant + compound-delta tests.
+    # Locks that grant counter spans BOTH cron.allow + at.allow
+    # axes simultaneously.
+    printf 'alice\n' > "${CA}"
+    printf 'alice\n' > "${AA}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'alice\nevil-cron-1\nevil-cron-2\n' > "${CA}"
+    printf 'alice\nevil-at-1\n' > "${AA}"
+    run_wd
+    cap | grep -q '"event":"schedule_capability_granted"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"grants":3'
+}
+
+@test "INVARIANT (deny→deny migration: removing from cron.deny AND adding to at.deny in same scan → alert wins)" {
+    # cron.deny removal IS a grant. at.deny addition is a roster
+    # widening (not a grant). When both happen in the same scan,
+    # alert (grant) wins over warn (roster-only change).
+    printf 'eve\n' > "${CD}"
+    printf 'alice\n' > "${AD}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    : > "${CD}"                                          # eve grant
+    printf 'alice\nbob\n' > "${AD}"                      # roster-only widen
+    run_wd
+    cap | grep -q '"event":"schedule_capability_granted"'
+    cap | grep -q '"severity":"alert"'
+}
