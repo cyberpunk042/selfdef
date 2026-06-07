@@ -304,3 +304,16 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (nokaslr / nosmep / noexec=off detection — boot-time hardening downgrade family)" {
+    # Sister to init= / rd.break boot-edit weakener axes.
+    # Closes nokaslr + nosmep + noexec=off axes on T1542
+    # boot-time hardening-bypass surface. Either covered (alert)
+    # OR current behavior locked (ok with operator-pending).
+    seed_benign
+    run_wd
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="quiet nokaslr nosmep noexec=off"\n' > "${DEFAULT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
