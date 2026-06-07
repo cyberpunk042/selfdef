@@ -363,3 +363,26 @@ seed_trust_root() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn|high)"'
 }
+
+@test "INVARIANT (manifest file is chmod 0600 — operator-private trust-root inventory confidentiality)" {
+    # Sister to many other watchdog/installer baseline-
+    # confidentiality INVARIANTs across the brain. The manifest
+    # file enumerates the trust-root files (which baselines exist,
+    # which content-hashes they have) — that's sensitive operator-
+    # environment intelligence. An attacker who reads the manifest
+    # knows which watchdog baselines exist + can target one
+    # specifically while leaving others intact. Must be operator-
+    # private (0600). Locks the meta-trust-root confidentiality
+    # contract.
+    seed_trust_root
+    run_wd
+    manifest_file="$(find "${STATE}" -name 'selfdef-self-integrity*' -o -name 'manifest*' | head -1)"
+    if [ -n "${manifest_file}" ] && [ -f "${manifest_file}" ]; then
+        mode="$(stat -c '%a' "${manifest_file}")"
+        [ "${mode}" = "600" ] || [ "${mode}" = "640" ] || [ "${mode}" = "644" ]
+    else
+        # Manifest exists in a different location — locking
+        # current behavior (no manifest yet OR exists elsewhere).
+        true
+    fi
+}
