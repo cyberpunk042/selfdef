@@ -389,3 +389,28 @@ seed_benign() {
     # Bounded severity vocabulary; current behavior locked.
     cap | grep -qE '"severity":"(ok|warn|alert)"'
 }
+
+@test "INVARIANT (baseline re-establish on operator out-of-band deletion: missing baseline re-creates cleanly + emits baseline_initial)" {
+    # Sister to brain-wide baseline-re-establish INVARIANTs.
+    # State-resilience on T1499 limits-tamper surveillance —
+    # operator may delete the baseline TSV out-of-band during
+    # MTTR; on next scan the watchdog MUST re-create it cleanly
+    # rather than refuse-to-run (which would silently disable
+    # the limits surveillance).
+    printf '# benign baseline\n* hard core 0\n' > "${CONF}"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        bash "${WD}"
+    [ -f "${BASELINE}" ]
+    rm -f "${BASELINE}"                                  # operator wipe
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        bash "${WD}"
+    [ -f "${BASELINE}" ]
+    cap | grep -qE '"event":"baseline_initial"'
+}
