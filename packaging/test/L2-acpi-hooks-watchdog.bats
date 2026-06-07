@@ -280,3 +280,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named ACPI event binding surfaces in sample for operator-triage routing)" {
+    # Sister to brain-wide DELTA-detect sample-naming INVARIANTs.
+    # When an attacker drops a new acpid event-binding file in
+    # the events.d dir (T1546 — ACPI-event-trigger root-exec
+    # persistence), the binding NAME MUST surface in the JSON
+    # sample so operator dashboard routes triage to the right
+    # event-binding.
+    printf 'event=button/power\naction=/etc/acpi/actions/power.sh\n' > "${BIND}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'event=button/power\naction=/etc/acpi/actions/power.sh\n' > "${EVENTS}/distinctive-attacker-acpi-binding"
+    run_wd
+    cap | grep -q 'distinctive-attacker-acpi-binding'
+}
