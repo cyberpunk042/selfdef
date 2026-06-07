@@ -361,3 +361,22 @@ TOMLEOF
     drop_in="${DROPIN_DIR}/50-selfdef.conf"
     [ ! -f "${drop_in}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${drop_in}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. journal-tune manifest declares install + profile
+    # gating (default / paranoid) the resolver enforces;
+    # malformed manifest wedges the journald retention baseline.
+    # Python's tomllib is the canonical parser. Locks anti-
+    # malformed-manifest on the journal-tune substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/journal-tune/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'journal-tune', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
