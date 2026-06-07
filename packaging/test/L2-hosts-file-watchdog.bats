@@ -293,3 +293,23 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (sensitive-domain: github.com / api.github.com — code-supply-chain MITM → alert)" {
+    # Sister to the AI-service / package-registry / CA / NTP /
+    # supply-chain pin axes already locked. Pinning github.com
+    # to a non-cdn-cgi IP lets an attacker MITM git clone and
+    # raw.githubusercontent.com requests — every CI pipeline,
+    # every operator-executed `curl | sh` bootstrap, every
+    # GitHub release-asset download routes to attacker servers.
+    # T1195.001 — Supply Chain Compromise via developer-platform
+    # MITM. The watchdog MUST surface github-domain pin just
+    # as firmly as the other supply-chain registry pins
+    # (PyPI/npmjs). Locks the github code-supply-chain axis on
+    # the /etc/hosts pin surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '127.0.0.1 localhost\n0.0.0.0 api.github.com\n' > "${HOSTS}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
