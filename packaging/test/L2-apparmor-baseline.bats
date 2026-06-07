@@ -393,3 +393,25 @@ TOMLEOF
     [ -f "${AA_LIST}" ]
     [ "$(stat -c '%a' "${AA_LIST}")" = "644" ]
 }
+
+@test "INVARIANT (shipped curated-profiles.list carries selfdef self-identifying header — head -1 stale-cleanup discipline)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain (ssh-hardening / journal-tune /
+    # slm-cpu-loop / tensor-parallel-inference / hardware-tune-
+    # cache / acct-baseline logrotate). The curated-profiles
+    # list shipped at modules/apparmor-baseline/configs/selfdef-
+    # curated-profiles.list lands as /etc/selfdef/apparmor/
+    # selfdef-curated-profiles.list alongside operator-hand-
+    # authored or distro-package-shipped AppArmor profile-list
+    # files. A stale-cleanup pass (operator housekeeping,
+    # AppArmor inventory audit, uninstall path) inspects the
+    # first non-blank line to identify selfdef-rendered config
+    # from operator config. Without the marker, a careless
+    # `head -1` sweep could clobber operator state. Locks the
+    # provenance contract on the AppArmor MAC layer curated-
+    # profiles substrate at the shipped-source layer.
+    src="${BATS_TEST_DIRNAME}/../../modules/apparmor-baseline/configs/selfdef-curated-profiles.list"
+    [ -r "${src}" ]
+    first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${src}")"
+    [[ "${first_nonblank}" == *"selfdef"* ]]
+}
