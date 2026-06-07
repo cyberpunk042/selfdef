@@ -213,3 +213,38 @@ run_wd() {
     [ "${stop_line}" -lt "${disable_line}" ]
     [ "${disable_line}" -lt "${mask_line}" ]
 }
+
+@test "INVARIANT (.socket also follows stop→disable→mask order — symmetric ordering across all units)" {
+    # Same order MUST hold for nscd.socket as for .service. Sister-pattern
+    # with avahi-disable .socket symmetric ordering.
+    write_config "mask"
+    run_wd
+    stop_socket="$(grep -n 'systemctl stop nscd.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_socket="$(grep -n 'systemctl disable nscd.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_socket="$(grep -n 'systemctl mask nscd.socket' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_socket}" -lt "${disable_socket}" ]
+    [ "${disable_socket}" -lt "${mask_socket}" ]
+}
+
+@test "INVARIANT (downgrade mask → stop does NOT auto-unmask — operator-explicit unmask required)" {
+    # Mask is sticky like avahi-disable's mask + ctrlaltdel-disable's mask.
+    write_config "mask"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop nscd.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl unmask nscd.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (acted=2 + present-unit detail surfaces in JSON for operator dashboard)" {
+    # acted=2 (both .service + .socket touched) AND skipped=0 (nothing
+    # skipped) AND no error markers — full operator-dashboard observability.
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'acted=2'* ]]
+    [[ "${output}" == *'skipped=0'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    # No error/warning markers in success path.
+    [[ "${output}" != *'"status":"error"'* ]]
+}
