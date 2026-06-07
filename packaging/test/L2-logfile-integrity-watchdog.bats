@@ -473,3 +473,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # logfile-integrity-watchdog runs ON the timer's scheduled
+    # fire — checks inode/size monotonic-increase against state,
+    # emits a verdict on suspicious shrink/rotate/missing events,
+    # then exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the logfile-
+    # integrity-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/logfile-integrity-watchdog/systemd/selfdef-logfile-integrity.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
