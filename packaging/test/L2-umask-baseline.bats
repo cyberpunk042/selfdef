@@ -325,3 +325,23 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"umask-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (drop-in chmod 0644 — profile.d / login.defs.d conventions for shell sourcing + sshd login.defs read)" {
+    # Sister to brain-wide drop-in chmod 0644 INVARIANTs
+    # (shell-timeout, sysctl, sshd_config.d). The umask-baseline
+    # ships dual drop-ins (/etc/profile.d/50-selfdef-umask.sh +
+    # /etc/login.defs.d/50-selfdef-umask.conf) that MUST be
+    # world-readable mode 0644 because shells (bash/dash/sh)
+    # source /etc/profile.d/ AS the login user (often-non-root
+    # uid) AND login.defs is consulted by useradd, sshd, and
+    # PAM modules also running not-as-root in some flows. Mode
+    # 0600 would defeat the canonical drop-in sourcing
+    # semantics. Locks file-mode contract on the umask-baseline
+    # dual-drop-in substrate.
+    write_config "strict"
+    run_wd
+    mode_sh="$(stat -c '%a' "${PROFILE_D}/50-selfdef-umask.sh")"
+    mode_conf="$(stat -c '%a' "${LOGIN_DEFS_D}/50-selfdef-umask.conf")"
+    [ "${mode_sh}" = "644" ]
+    [ "${mode_conf}" = "644" ]
+}
