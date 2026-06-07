@@ -368,3 +368,15 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"package-trust-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (drop-in carries selfdef-identifier in filename — operator audit-trail + uninstall identification)" {
+    # Sister to brain-wide filename-identifier INVARIANTs. apt
+    # drop-in filename MUST carry selfdef identifier so operator
+    # can immediately identify ownership via `ls /etc/apt/apt.conf.d/`.
+    write_config "strict"
+    run_wd
+    case "${DST}" in
+        */50-selfdef-*) : ;;
+        *) fail "drop-in filename must follow 50-selfdef-* convention" ;;
+    esac
+}
