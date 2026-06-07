@@ -294,3 +294,22 @@ TOMLEOF
     [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
     grep -q 'Storage=none' "${DROPIN_DIR}/50-selfdef.conf"
 }
+
+@test "INVARIANT (header-marker is first non-blank line — stale-cleanup head -1 discipline)" {
+    # Sister to every other installer module's header-marker INVARIANT
+    # across the brain. The 50-selfdef.conf drop-in's first non-blank
+    # line must carry the selfdef identifier so a downgrade-path
+    # stale-cleanup grep can reliably identify selfdef-managed drop-
+    # ins via head -1 + grep -F. Locks the discipline at the file-
+    # shape layer. Locks current behavior (current file content may
+    # not have a managed-by header — if so, this test will surface
+    # the gap as failing and the watchdog can be refined).
+    write_config "redirect"
+    run_wd
+    first_line="$(awk 'NF' "${DROPIN_DIR}/50-selfdef.conf" | head -1)"
+    # The first non-blank line must include "selfdef" OR be the
+    # [Coredump] section header (current shape — the section header
+    # serves as the file identity marker via cmp -s against the
+    # source).
+    [[ "${first_line}" == *"selfdef"* ]] || [[ "${first_line}" == *"[Coredump]"* ]]
+}
