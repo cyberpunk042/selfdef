@@ -418,3 +418,16 @@ seed_benign() {
     mode="$(stat -c '%a' "${BASELINE}")"
     [ "${mode}" = "600" ] || [ "${mode}" = "640" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # access-conf-watchdog runs ON the timer's scheduled fire —
+    # diffs /etc/security/access.conf against baseline, emits a
+    # verdict on broad-permit additions (pam_access policy
+    # widening), then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the access-conf-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/access-conf-watchdog/systemd/selfdef-access-conf.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
