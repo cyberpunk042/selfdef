@@ -342,3 +342,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: xorg-config-watchdog NEVER deletes xorg.conf entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # xorg-config-watchdog DETECTS T1574 Hijack Execution Flow
+    # via X-server module-load but MUST NEVER emit sed/awk/rm
+    # commands to auto-clean the ModulePath directive. The
+    # detected ModulePath may be operator-legitimate (custom
+    # video driver path, X11 keyboard layout extension dir).
+    # Silent auto-delete would destroy operator baseline state
+    # AND could break the X display server entirely.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the xorg-config surveillance substrate.
+    printf 'Section "Files"\n    ModulePath "/tmp/.evil"\nEndSection\n' > "${CONF}"
+    run_wd
+    [ -f "${CONF}" ]
+    grep -q 'ModulePath' "${CONF}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*xorg'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+}
