@@ -458,3 +458,22 @@ mk_cap() { printf '#!/bin/sh\n' > "${ROOT}/$1"; chmod 0755 "${ROOT}/$1"; setcap 
     [ -f "${svc}" ]
     grep -qE '^Type=oneshot' "${svc}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. file-capabilities-watchdog manifest declares install + profile gating
+    # the resolver enforces; malformed manifest wedges the
+    # file-capabilities-watchdog scanner baseline. Python's tomllib is the
+    # canonical parser. Locks anti-malformed-manifest on the
+    # file-capabilities-watchdog substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/file-capabilities-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert data['name'] == 'file-capabilities-watchdog', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
