@@ -343,3 +343,22 @@ CCEOF
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert,high}" ;;
     esac
 }
+
+@test "INVARIANT (no auto-uninstall: time-skew-watchdog NEVER emits package-remove commands on chrony/ntpd)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The time-skew-watchdog queries chronyc/ntpq to
+    # detect time drift but MUST NEVER emit shell commands that
+    # uninstall the upstream NTP daemon (apt/dpkg/dnf/rpm/yum
+    # remove|purge|uninstall chrony|ntpd|ntpsec). Silent auto-
+    # removal of the NTP daemon during skew detection would
+    # leave the host with no synced clock — degrading every
+    # downstream defense that depends on accurate timestamps
+    # (audit trails, certificate validation, Kerberos, JWT
+    # expiration, time-window-based detection rules). Locks
+    # anti-package-removal contract on the time-skew
+    # surveillance substrate.
+    mk_chronyc 0 "$(tracking_block "0.001" "0.001" "0.001")"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(chrony|ntpd|ntpsec|ntp)'
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(chrony|ntpd|ntpsec|ntp)' "${WD}"
+}
