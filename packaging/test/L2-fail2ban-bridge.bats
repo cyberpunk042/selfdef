@@ -333,3 +333,22 @@ TOMLEOF
     [ -f "${JAIL_D}/50-selfdef.conf" ]
     ! [ -f "${JAIL_D}/60-selfdef-recidive.conf" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO jail.d drop-ins written AND NO fail2ban restart fired)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/fail2ban/jail.d/50-selfdef.conf
+    # OR 60-selfdef-recidive.conf AND without restarting fail2ban.
+    # A silent dry-run that committed would enable IP-banning at
+    # preview time on a host where operator was investigating
+    # fail2ban's ruleset — could lock out the operator's own
+    # admin source IP on first failure. Locks dry-run-preserves-
+    # state on the brute-force defense substrate.
+    rm -f "${JAIL_D}/50-selfdef.conf" "${JAIL_D}/60-selfdef-recidive.conf"
+    write_config "standard"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${JAIL_D}/50-selfdef.conf" ]
+    [ ! -f "${JAIL_D}/60-selfdef-recidive.conf" ]
+    ! grep -qE 'systemctl (restart|reload) fail2ban' "${SYSEOF_LOG}"
+}
