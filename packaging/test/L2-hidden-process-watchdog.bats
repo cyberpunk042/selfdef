@@ -303,3 +303,12 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run -0 env PROFILE=enforce bash "${WD}"
     [ "${status}" -eq 0 ]
 }
+
+@test "INVARIANT (probe_max field surfaces — operator sees scan-window coverage)" {
+    # Sister to brain-wide JSON-field surfacing INVARIANTs.
+    # probe_max declares how far the PID scan covered. Without
+    # it operator cannot tell if a true-rootkit hiding above
+    # the probe ceiling would have been missed.
+    run_wd
+    cap | grep -qE '"probe_max":[0-9]+'
+}
