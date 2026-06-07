@@ -416,3 +416,26 @@ EOF
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (added_sample in emit JSON: operator-triage routing surfaces changed unit names)" {
+    # Sister to every other watchdog sample-names-file INVARIANT
+    # across the brain. When the unit-delta has added entries, the
+    # JSON record must expose them via added_sample (or equivalent
+    # operator-triage field) so the downstream dashboard / alerting
+    # pipeline can route on WHICH unit changed (not just a count).
+    # The watchdog already emits added/removed counts; closing the
+    # axis to also surface the unit-name list for operator-triage
+    # observability on the T1543.002 systemd-service persistence
+    # surface.
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    export SYSTEMD_UNITS="sshd.service nginx.service docker.socket distinctive-attacker.service"
+    cat > "${SYSTEMD_UNIT_DIR}/distinctive-attacker.service" <<'EOF'
+ExecStart=/tmp/.x
+EOF
+    run_wd
+    # Either sample-name field surfaces the unit name OR the detail
+    # logger line carries the unit name (per SDD-062 detail tag).
+    cap | grep -q 'distinctive-attacker'
+}
