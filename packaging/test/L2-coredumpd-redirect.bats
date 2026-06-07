@@ -276,3 +276,21 @@ run_wd() {
     grep -qE 'Storage=none' "${DROPIN_DIR}/50-selfdef.conf"
     ! grep -qE 'Storage=external' "${DROPIN_DIR}/50-selfdef.conf"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # coredumpd-redirect TOML; parser must tolerate without altering
+    # the profile-gated behavior. disabled-with-noise still installs
+    # the Storage=none drop-in.
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "disabled"
+operator_note = "kernel-memory dump containing keys = pure exfil material"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    grep -q 'Storage=none' "${DROPIN_DIR}/50-selfdef.conf"
+}
