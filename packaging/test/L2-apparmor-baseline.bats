@@ -355,3 +355,23 @@ avahi-daemon' run_wd
     [ -f "${AA_LIST}" ]
     grep -q '^firefox$' "${AA_LIST}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # apparmor-baseline TOML; parser must tolerate without altering
+    # the profile-gated behavior. enforce-with-noise still fires
+    # aa-enforce on loaded curated profiles (the MAC-mode lever
+    # operator selected — sister substrate to selinux-baseline on
+    # distros where AppArmor is the LSM).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "enforce"
+operator_note = "AppArmor MAC layer for AI safety substrate"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    AA_LOADED='firefox' run_wd
+    grep -q 'aa-enforce firefox' "${AAFLIP_LOG}"
+    ! grep -q 'aa-complain' "${AAFLIP_LOG}"
+}
