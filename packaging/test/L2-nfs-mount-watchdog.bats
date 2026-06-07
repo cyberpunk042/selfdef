@@ -305,3 +305,26 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=report run_wd
     cap | grep -q '"profile":"report"'
 }
+
+@test "INVARIANT (mass-mount stress: 10 network mounts all-hardened → ok scales beyond 5+ check)" {
+    # Sister to the 5+ mounts all-hardened INVARIANT already locked.
+    # Real-world hosts (especially CI/build hosts + storage clusters)
+    # may mount dozens of network FSes. Lock that the watchdog
+    # handles the higher-count case without breaking the count
+    # accuracy or the severity ladder.
+    mk_findmnt
+    write_mounts \
+        $'nfs4\t/mnt/s1\tnosuid,nodev,relatime' \
+        $'nfs4\t/mnt/s2\tnosuid,nodev,relatime' \
+        $'nfs4\t/mnt/s3\tnosuid,nodev,relatime' \
+        $'nfs4\t/mnt/s4\tnosuid,nodev,relatime' \
+        $'nfs4\t/mnt/s5\tnosuid,nodev,relatime' \
+        $'cifs\t/mnt/w1\tnosuid,nodev,relatime' \
+        $'cifs\t/mnt/w2\tnosuid,nodev,relatime' \
+        $'fuse.sshfs\t/mnt/r1\tnosuid,nodev,relatime' \
+        $'fuse.sshfs\t/mnt/r2\tnosuid,nodev,relatime' \
+        $'fuse.sshfs\t/mnt/r3\tnosuid,nodev,relatime'
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    cap | grep -qE '"network_mounts":1[0-9]'
+}
