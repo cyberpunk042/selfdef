@@ -305,3 +305,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (path entry under /dev/shm — tmpfs in-RAM writable-root axis-symmetric expansion)" {
+    # Sister to /tmp + /var/tmp + /home musl-ld path-entry
+    # writable-root INVARIANTs. /dev/shm tmpfs in-RAM: no on-
+    # disk forensic trace. T1574 dynamic-linker hijack via
+    # musl ld.so library-search-path.
+    printf '/lib\n/usr/lib\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/lib\n/usr/lib\n/dev/shm/.evil-libs\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
