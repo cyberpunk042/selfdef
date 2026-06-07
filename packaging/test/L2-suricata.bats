@@ -121,3 +121,27 @@ INSTALL_DIR="${MODULE_DIR}/install"
     # any embedded date would force cmp -s rewrite on every apply.
     ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${MODULE_DIR}/templates/nfqueue.rule.tmpl"
 }
+
+@test "INVARIANT (apply.sh fails fast if suricata binary missing — refuse-to-install without dependency)" {
+    # If the suricata daemon binary isn't on PATH, the install
+    # has no daemon to integrate against. Fail loud during apply.
+    # Sister to bridge-l2 fail-loud invariant. Locks the install
+    # contract: required-binary check OR systemd unit dependency.
+    grep -qE 'command -v suricata|suricata.service|suricata-update' "${INSTALL_DIR}/apply.sh"
+}
+
+@test "INVARIANT (check.sh checks BOTH nftables rule AND suricata service — symmetric verification)" {
+    # check.sh must verify the data-plane (nft rule present) AND
+    # the control-plane (suricata service alive). Either half
+    # missing leaves the IDS only half-wired. Locks symmetric
+    # verification.
+    grep -qE 'nft.*list|list[[:space:]]+rule|forward_hook' "${INSTALL_DIR}/check.sh"
+    grep -qE 'is-active|is-enabled|systemctl' "${INSTALL_DIR}/check.sh"
+}
+
+@test "INVARIANT (uninstall.sh is idempotent — safe to re-run when rule already absent)" {
+    # Re-running uninstall on a partially-removed system must NOT
+    # crash. Locks the safe-re-run contract: ignore missing-rule
+    # errors via || true OR explicit existence check.
+    grep -qE '\|\|[[:space:]]*true|if[[:space:]]+nft[[:space:]]+list|2>/dev/null' "${INSTALL_DIR}/uninstall.sh"
+}
