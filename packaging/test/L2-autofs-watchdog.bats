@@ -350,3 +350,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -f "${svc}" ]
     grep -qE '^Type=oneshot' "${svc}"
 }
+
+@test "INVARIANT (no auto-fix: autofs-watchdog libexec NEVER writes back to its scanned target — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-{fix,delete,restore,uninstall}
+    # family. autofs-watchdog is a DETECT-only watchdog: it surveils
+    # its target surface + emits verdicts, NEVER writes back to
+    # the source files it scans. The libexec script must NOT
+    # contain sed -i / tee / printf-redirect mutations of its
+    # scanned paths. Locks no-auto-fix on the autofs-watchdog
+    # libexec substrate (sister to existing surveillance-not-
+    # remediation lines for the watchdog runtime).
+    wd_libexec="${BATS_TEST_DIRNAME}/../../modules/autofs-watchdog/systemd"
+    for sh in "${wd_libexec}"/*.sh; do
+        [ -f "${sh}" ] || continue
+        ! grep -vE '^[[:space:]]*#' "${sh}" | grep -qE 'sed[[:space:]]+-i.*\$\{?[A-Z_]*FILE'
+        ! grep -vE '^[[:space:]]*#' "${sh}" | grep -qE 'tee[[:space:]].*\$\{?[A-Z_]*FILE'
+    done
+}

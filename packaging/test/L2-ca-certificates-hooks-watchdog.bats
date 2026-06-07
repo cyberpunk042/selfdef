@@ -384,3 +384,20 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-fix: ca-certificates-hooks-watchdog libexec NEVER writes back to its scanned target — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-{fix,delete,restore,uninstall}
+    # family. ca-certificates-hooks-watchdog is a DETECT-only watchdog: it surveils
+    # its target surface + emits verdicts, NEVER writes back to
+    # the source files it scans. The libexec script must NOT
+    # contain sed -i / tee / printf-redirect mutations of its
+    # scanned paths. Locks no-auto-fix on the ca-certificates-hooks-watchdog
+    # libexec substrate (sister to existing surveillance-not-
+    # remediation lines for the watchdog runtime).
+    wd_libexec="${BATS_TEST_DIRNAME}/../../modules/ca-certificates-hooks-watchdog/systemd"
+    for sh in "${wd_libexec}"/*.sh; do
+        [ -f "${sh}" ] || continue
+        ! grep -vE '^[[:space:]]*#' "${sh}" | grep -qE 'sed[[:space:]]+-i.*\$\{?[A-Z_]*FILE'
+        ! grep -vE '^[[:space:]]*#' "${sh}" | grep -qE 'tee[[:space:]].*\$\{?[A-Z_]*FILE'
+    done
+}
