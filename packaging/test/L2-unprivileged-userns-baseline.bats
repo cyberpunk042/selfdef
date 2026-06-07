@@ -330,3 +330,14 @@ EOF
     [ ! -f "${DROPIN}" ]
     ! grep -qE 'sysctl -w kernel.unprivileged_userns_clone' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on unprivileged-userns-baseline
+    # installer surface across drop-in + sysctl-w phases.
+    write_config "allow" "false"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"unprivileged-userns-baseline"')
+    [ "${count}" = "1" ]
+}
