@@ -523,3 +523,18 @@ s = data.get('summary', '')
 assert isinstance(s, str) and len(s) > 0, f'summary must be non-empty string, got {repr(s)}'
 "
 }
+
+@test "INVARIANT (module.toml category field present + non-empty — dashboard-grouping contract)" {
+    # Sister to brain-wide module.toml manifest-completeness
+    # family. Locks category-present discipline on the
+    # pam-history substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-history/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+c = data.get('category', '')
+assert isinstance(c, str) and len(c) > 0, f'category must be non-empty string, got {repr(c)}'
+"
+}
