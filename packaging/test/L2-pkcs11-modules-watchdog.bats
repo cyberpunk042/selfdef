@@ -300,3 +300,12 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs. Multi-
+    # module scenario locks consolidation discipline.
+    printf 'module: /tmp/.evil1.so\nmodule: /var/tmp/.evil2.so\nmodule: /dev/shm/.evil3.so\n' > "${MOD}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-pkcs11-modules -- ')
+    [ "${main_count}" = "1" ]
+}
