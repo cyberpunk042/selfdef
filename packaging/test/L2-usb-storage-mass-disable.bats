@@ -229,3 +229,49 @@ uas                    24576  0' run_wd 2>&1)"
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=blocked'* ]]
 }
+
+@test "INVARIANT (profile downgrade blocked → audited: rewrites drop-in + does NOT fire rmmod — bidirectional contract)" {
+    # Sister to the audited → blocked transition test (which fires
+    # rmmod). The reverse direction is operator-loosening; must
+    # rewrite content but MUST NOT fire rmmod (audited is
+    # visibility-only). Locks the bidirectional contract.
+    write_config "blocked"
+    LSMOD_OUTPUT='Module                  Size  Used by' run_wd
+    : > "${RMMOD_LOG}"
+    write_config "audited"
+    LSMOD_OUTPUT='Module                  Size  Used by
+usb_storage            73728  0' run_wd
+    grep -qE '^# selfdef usb-storage-mass-disable' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+    # audited NEVER fires rmmod regardless of transition direction.
+    ! grep -q 'rmmod' "${RMMOD_LOG}"
+}
+
+@test "INVARIANT (audited drop-in mentions logging mechanism — install hook or audit token)" {
+    # The audited drop-in's content must materially differ from
+    # blocked — it must wire the modprobe install hook so kernel
+    # logs every load attempt. Lock that the audited content
+    # contains a recognizable audit/log token, not just a blank
+    # placeholder.
+    write_config "audited"
+    run_wd
+    grep -qE 'install|logger|audit|log' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+}
+
+@test "INVARIANT (rmmod failures non-fatal: blocked profile completes apply even if rmmod returns error)" {
+    # On real hosts, a loaded module may have in-use references
+    # (rmmod -f required). Failure of rmmod MUST NOT bubble up as
+    # apply failure — the modprobe.d blacklist is the load-bearing
+    # next-boot enforcement; rmmod is best-effort immediate.
+    cat > "${BIN}/rmmod" <<'RMEOF'
+#!/usr/bin/env bash
+printf 'rmmod %s\n' "$*" >> "${RMMOD_LOG}"
+exit 1
+RMEOF
+    chmod +x "${BIN}/rmmod"
+    write_config "blocked"
+    LSMOD_OUTPUT='Module                  Size  Used by
+usb_storage            73728  0' run_wd
+    # Drop-in still landed even though rmmod failed.
+    [ -f "${MODPROBE_D}/50-selfdef-usb-storage.conf" ]
+    grep -qE '(blacklist|install) usb_storage' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+}
