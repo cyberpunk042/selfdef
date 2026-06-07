@@ -245,3 +245,54 @@ run_wd() {
     [ -f "${RULES_D}/99-selfdef-immutable.rules" ]
     ! grep -qE '^-e[[:space:]]+2' "${RULES_D}/99-selfdef-immutable.rules"
 }
+
+@test "INVARIANT (refuse-to-brick precedence over profile-key: enforce+ack=false dies even after prior audit install — no silent escalation to enforce-empty)" {
+    # Sister to kernel-lockdown + nftables-baseline + tmpfs-baseline
+    # + unprivileged-userns + proc-hidepid + usbguard refuse-to-brick
+    # precedence pattern.
+    write_config "audit"
+    run_wd
+    cmp -s modules/auditd-immutable/configs/audit.rules "${RULES_D}/99-selfdef-immutable.rules"
+    # Operator flips to enforce but forgets to set ack.
+    write_config "enforce" "false"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_AUDITD_IMMUTABLE_CONFIG="${CONF}" \
+        SELFDEF_AUDIT_RULES_D="${RULES_D}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    # Prior audit rules preserved — no silent escalation to enforce.
+    cmp -s modules/auditd-immutable/configs/audit.rules "${RULES_D}/99-selfdef-immutable.rules"
+}
+
+@test "INVARIANT (config-layer-noise resilience: enforce + extra TOML keys does NOT bypass acknowledge_immutable gate)" {
+    # Sister to kernel-lockdown + nftables-baseline + unprivileged-
+    # userns + usbguard config-noise precedence INVARIANT. Lock
+    # that extra TOML keys cannot accidentally bypass the gate.
+    cat > "${CONF}" <<'EOF'
+profile = "enforce"
+acknowledge_immutable = false
+extra_knob_that_should_not_help = "wrong"
+maybe_an_alias_for_ack = true
+EOF
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_AUDITD_IMMUTABLE_CONFIG="${CONF}" \
+        SELFDEF_AUDIT_RULES_D="${RULES_D}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    ! [ -f "${RULES_D}/99-selfdef-immutable.rules" ]
+}
+
+@test "INVARIANT (downgrade enforce → audit removes the -e 2 LOCK directive — no remnant immutability after operator-loosening)" {
+    # Sister to host-sentinel downgrade enforce→audit Sigkill-remnant
+    # INVARIANT. When operator downgrades, the -e 2 immutability
+    # directive MUST be removed from the live rule file. A stale
+    # -e 2 remnant after downgrade would keep the audit subsystem
+    # locked silently.
+    write_config "enforce" "true"
+    run_wd
+    grep -qE '^-e[[:space:]]+2' "${RULES_D}/99-selfdef-immutable.rules"
+    write_config "audit"
+    run_wd
+    # NO -e 2 remnant in downgraded audit-profile file.
+    ! grep -qE '^-e[[:space:]]+2' "${RULES_D}/99-selfdef-immutable.rules"
+}
