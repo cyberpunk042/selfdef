@@ -501,3 +501,18 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (sshd-config-watchdog timer Unit= field references its companion .service — timer-to-service binding contract)" {
+    # Sister to brain-wide systemd timer-Unit INVARIANT family.
+    # Locks timer-to-service binding discipline on the
+    # sshd-config-watchdog substrate.
+    timer="${BATS_TEST_DIRNAME}/../../modules/sshd-config-watchdog/systemd"
+    found=0
+    for t in "${timer}"/*.timer; do
+        [ -f "${t}" ] || continue
+        if grep -qE '^Unit=.*\.service' "${t}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
