@@ -282,3 +282,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (keyfile under /var/tmp → alert: writable-root variant on the keyfile axis)" {
+    # Sister to keyfile-under-/tmp + /home axes already locked
+    # and the keyscript-under-/var/tmp axis already locked. /var/
+    # tmp is the writable-spool surface shared with the keyscript
+    # writable-root family. A keyfile placed under /var/tmp lets
+    # an attacker with /var/tmp write access replace the LUKS
+    # unlock-key at any time, then unlock the encrypted volume on
+    # next boot — anti-encryption-at-rest defense. Locks the
+    # keyfile axis symmetric with the keyscript /var/tmp axis on
+    # the disk-encryption substrate.
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'data /dev/sda2 /var/tmp/.lukskey luks\n' > "${CRYPTTAB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
