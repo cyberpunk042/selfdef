@@ -974,3 +974,14 @@ seed_benign() {
         grep -qE '/var/lib/selfdef/|BASELINE' "${s}"
     done
 }
+
+@test "INVARIANT (boot-script-watchdog .sh script declares MODULE-suffixed tag in logger -t — module-name-tag-consistency contract)" {
+    # Sister to SDD-062 tag-canonical INVARIANT family. The tag passed to
+    # logger -t MUST include the module slug so journalctl filtering by
+    # tag surfaces only this watchdog's events.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/boot-script-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'logger -t selfdef-' "${s}"
+    done
+}

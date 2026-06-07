@@ -1114,3 +1114,14 @@ assert 'install' in data, 'install missing'
         grep -qE '/var/lib/selfdef/|BASELINE' "${s}"
     done
 }
+
+@test "INVARIANT (systemd-unit-watchdog .sh script declares MODULE-suffixed tag in logger -t — module-name-tag-consistency contract)" {
+    # Sister to SDD-062 tag-canonical INVARIANT family. The tag passed to
+    # logger -t MUST include the module slug so journalctl filtering by
+    # tag surfaces only this watchdog's events.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/systemd-unit-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'logger -t selfdef-' "${s}"
+    done
+}

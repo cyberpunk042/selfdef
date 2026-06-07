@@ -921,3 +921,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/wwan-disable/install/check.sh"
     head -1 "${chk}" | grep -qE '#!/.*bash'
 }
+
+@test "INVARIANT (wwan-disable install/uninstall.sh declares bash shebang — bash-interpreter contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/wwan-disable/install/uninstall.sh"
+    head -1 "${uni}" | grep -qE '#!/.*bash'
+}

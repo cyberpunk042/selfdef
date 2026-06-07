@@ -966,3 +966,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/audit-rules/install/check.sh"
     head -1 "${chk}" | grep -qE '#!/.*bash'
 }
+
+@test "INVARIANT (audit-rules install/uninstall.sh declares bash shebang — bash-interpreter contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/audit-rules/install/uninstall.sh"
+    head -1 "${uni}" | grep -qE '#!/.*bash'
+}
