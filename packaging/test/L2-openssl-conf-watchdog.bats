@@ -365,3 +365,17 @@ assert 'install' in data, 'install missing'
         ! grep -vE '^[[:space:]]*#' "${sh}" | grep -qE 'tee[[:space:]].*\$\{?[A-Z_]*FILE'
     done
 }
+
+@test "INVARIANT (openssl-conf-watchdog libexec uses set -u — anti-unbound-variable contract on the watchdog probe)" {
+    # Sister to brain-wide shell-discipline INVARIANT family.
+    # Locks set -u discipline on the openssl-conf-watchdog libexec substrate.
+    wd_libexec="${BATS_TEST_DIRNAME}/../../modules/openssl-conf-watchdog/systemd"
+    found=0
+    for sh in "${wd_libexec}"/*.sh; do
+        [ -f "${sh}" ] || continue
+        if grep -qE '^set[[:space:]]+-u' "${sh}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
