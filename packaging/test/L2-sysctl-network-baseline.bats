@@ -363,3 +363,23 @@ run_wd() {
     grep -qE 'net\.ipv4\.icmp_echo_ignore_broadcasts\s*=\s*1' "${DROPIN}" \
         || grep -qE 'icmp_echo_ignore_broadcasts\s*=\s*1' "${DROPIN}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. sysctl-network-baseline manifest declares install +
+    # profile gating (default / strict) the resolver enforces;
+    # malformed manifest wedges the net.ipv4 hardening drop-in.
+    # Python's tomllib is the canonical parser. Locks anti-
+    # malformed-manifest on the sysctl-network-baseline
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/sysctl-network-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'sysctl-network-baseline', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
