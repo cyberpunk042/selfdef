@@ -1020,3 +1020,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/pam-history/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (pam-history install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/pam-history/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

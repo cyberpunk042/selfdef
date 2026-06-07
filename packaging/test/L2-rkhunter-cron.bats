@@ -931,3 +931,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/rkhunter-cron/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (rkhunter-cron install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/rkhunter-cron/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

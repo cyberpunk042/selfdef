@@ -1008,3 +1008,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (mta-loopback-detect install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

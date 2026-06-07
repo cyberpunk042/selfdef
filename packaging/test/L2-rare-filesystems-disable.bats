@@ -1007,3 +1007,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/rare-filesystems-disable/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (rare-filesystems-disable install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/rare-filesystems-disable/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

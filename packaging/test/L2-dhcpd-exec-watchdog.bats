@@ -1007,3 +1007,11 @@ assert 'install' in data, 'install missing'
         [ -s "${s}" ]
     done
 }
+
+@test "INVARIANT (dhcpd-exec-watchdog .timer file is non-empty — non-trivial-timer-file 83)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/dhcpd-exec-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        [ -s "${t}" ]
+    done
+}

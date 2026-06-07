@@ -1014,3 +1014,11 @@ assert 'install' in data, 'install missing'
         [ -s "${s}" ]
     done
 }
+
+@test "INVARIANT (unowned-files-watchdog .timer file is non-empty — non-trivial-timer-file 83)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/unowned-files-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        [ -s "${t}" ]
+    done
+}

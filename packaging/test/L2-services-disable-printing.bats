@@ -1008,3 +1008,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (services-disable-printing install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

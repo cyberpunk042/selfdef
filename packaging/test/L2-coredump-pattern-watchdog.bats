@@ -1033,3 +1033,11 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         [ -s "${s}" ]
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .timer file is non-empty — non-trivial-timer-file 83)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        [ -s "${t}" ]
+    done
+}

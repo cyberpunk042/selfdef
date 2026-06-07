@@ -1090,3 +1090,11 @@ assert 'install' in data, 'install missing'
         [ -s "${s}" ]
     done
 }
+
+@test "INVARIANT (polkit-rules-watchdog .timer file is non-empty — non-trivial-timer-file 83)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/polkit-rules-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        [ -s "${t}" ]
+    done
+}

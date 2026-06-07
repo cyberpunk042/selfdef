@@ -1040,3 +1040,11 @@ assert 'install' in data, 'install missing'
         [ -s "${s}" ]
     done
 }
+
+@test "INVARIANT (securetty-watchdog .timer file is non-empty — non-trivial-timer-file 83)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/securetty-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        [ -s "${t}" ]
+    done
+}

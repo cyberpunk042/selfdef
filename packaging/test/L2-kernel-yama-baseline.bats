@@ -1017,3 +1017,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/kernel-yama-baseline/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (kernel-yama-baseline install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/kernel-yama-baseline/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

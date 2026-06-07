@@ -1065,3 +1065,11 @@ seed_benign() {
         [ -s "${s}" ]
     done
 }
+
+@test "INVARIANT (bash-completion-watchdog .timer file is non-empty — non-trivial-timer-file 83)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/bash-completion-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        [ -s "${t}" ]
+    done
+}

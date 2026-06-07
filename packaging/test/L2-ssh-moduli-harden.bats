@@ -1157,3 +1157,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (ssh-moduli-harden install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

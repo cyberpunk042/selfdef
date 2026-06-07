@@ -1044,3 +1044,11 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         [ -s "${s}" ]
     done
 }
+
+@test "INVARIANT (time-skew-watchdog .timer file is non-empty — non-trivial-timer-file 83)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        [ -s "${t}" ]
+    done
+}

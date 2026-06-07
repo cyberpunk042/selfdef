@@ -1050,3 +1050,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (coredumpd-redirect install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

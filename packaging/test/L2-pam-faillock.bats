@@ -991,3 +991,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/pam-faillock/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (pam-faillock install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/pam-faillock/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

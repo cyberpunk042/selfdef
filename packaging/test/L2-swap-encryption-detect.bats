@@ -998,3 +998,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/swap-encryption-detect/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (swap-encryption-detect install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/swap-encryption-detect/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

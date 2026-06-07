@@ -1061,3 +1061,11 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         [ -s "${s}" ]
     done
 }
+
+@test "INVARIANT (binfmt-watchdog .timer file is non-empty — non-trivial-timer-file 83)" {
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/binfmt-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        [ -s "${t}" ]
+    done
+}

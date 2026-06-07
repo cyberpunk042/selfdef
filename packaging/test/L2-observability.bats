@@ -861,3 +861,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/observability/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (observability install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/observability/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

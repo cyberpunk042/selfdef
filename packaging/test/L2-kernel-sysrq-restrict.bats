@@ -987,3 +987,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/kernel-sysrq-restrict/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (kernel-sysrq-restrict install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/kernel-sysrq-restrict/install/uninstall.sh"
+    [ -s "${uni}" ]
+}
