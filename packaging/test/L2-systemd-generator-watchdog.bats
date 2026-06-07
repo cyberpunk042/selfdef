@@ -302,3 +302,19 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: systemd generator invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1037
+    # systemd-generator-trigger root-exec persistence — generators
+    # run AS ROOT in initramfs / very early boot. Beyond inline
+    # rev-shell payloads, attackers stage benign-looking
+    # generators that invoke a binary in /tmp. Locks writable-
+    # root-exec axis on systemd generator surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/tmp/staged_payload\n' > "${GEND}/my-generator"
+    chmod 0755 "${GEND}/my-generator"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
