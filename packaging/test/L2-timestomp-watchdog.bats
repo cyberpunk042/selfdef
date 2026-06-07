@@ -208,3 +208,42 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # Alert (4+ ceiling).
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (recursive scan: anomaly in nested subdirectory surfaces — not just top-level)" {
+    # Attacker may hide stomped binary in deep path to evade
+    # top-level-only scan. Watchdog walks recursively. Sister to
+    # suid-sgid recursive-scan INVARIANT.
+    mkdir -p "${ROOT}/sub/nested/deep"
+    printf 'x' > "${ROOT}/sub/nested/deep/stomped"
+    touch -d "2099-01-01" "${ROOT}/sub/nested/deep/stomped"
+    run_wd
+    cap | grep -qE '"severity":"(warn|alert)"'
+    cap | grep -q 'stomped'
+}
+
+@test "INVARIANT (negative-skew tolerance: mtime slightly in the PAST is NOT flagged when within recent window)" {
+    # Operator-edited file with mtime a few hours ago is normal
+    # operation. Only PRE-2001 mtime classifies as EPOCH anomaly.
+    # Locks that recent-past edits don't false-positive — lock the
+    # cutoff boundary.
+    printf 'x' > "${ROOT}/recent-edit"
+    touch -d "$(date -d '-2 hour' '+%Y-%m-%d %H:%M:%S')" "${ROOT}/recent-edit"
+    run_wd
+    cap | grep -q '"event":"no_timestamp_anomaly"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (4-anomaly boundary lock: exactly 4 → alert, 3 → warn — same boundary as suid-sgid bulk_delta)" {
+    # Sister to suid-sgid 4-add boundary lock. The mass-anomaly
+    # threshold is 4 (inclusive). A regression that bumps the
+    # threshold to 5+ would trip here.
+    # Exactly 4 anomalies → alert boundary.
+    for i in $(seq 1 4); do
+        printf 'x' > "${ROOT}/anomaly-${i}"
+        touch -d "2099-01-0${i}" "${ROOT}/anomaly-${i}"
+    done
+    run_wd
+    cap | grep -q '"event":"timestomp_anomaly"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"anomalies":4'
+}
