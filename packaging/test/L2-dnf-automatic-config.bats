@@ -352,3 +352,18 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: dnf-automatic-config installer NEVER deletes operator-pre-existing automatic.conf — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # dnf-automatic-config writes its own /etc/dnf/automatic.conf;
+    # it MUST NEVER rm/find-delete an operator's pre-existing
+    # automatic.conf or dnf.conf entries not owned by THIS
+    # module. Locks no-auto-delete on the dnf-automatic-config
+    # installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/dnf-automatic-config/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/dnf/(dnf\.conf|automatic\.conf)' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/dnf.*-delete' "${f}"
+    done
+}
