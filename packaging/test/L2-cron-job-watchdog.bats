@@ -484,3 +484,16 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family
+    # for timer-driven scheduled probes. cron-job-watchdog runs
+    # ON the timer's scheduled fire — enumerates cron.d /
+    # crontab entries, computes delta against baseline, emits a
+    # verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the cron-job-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/cron-job-watchdog/systemd/selfdef-cron-jobs.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
