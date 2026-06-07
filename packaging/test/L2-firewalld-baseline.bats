@@ -312,3 +312,25 @@ remove_firewall_cmd() {
     default_line="$(grep -nF -e '--set-default-zone=selfdef' "${FW_LOG}" | head -1 | cut -d: -f1)"
     [ "${ssh_line}" -lt "${default_line}" ]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # firewalld-baseline TOML; parser must tolerate without altering
+    # the profile-gated behavior. web-with-noise still honors
+    # allow_services + allow_ports AND ssh-anti-lockout still fires.
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "web"
+allow_services = "http,https"
+allow_ports = "8080/tcp"
+operator_note = "ingress-edge — http + https + admin alt-port"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q -- '--permanent --zone=selfdef --add-service=ssh' "${FW_LOG}"
+    grep -q -- '--permanent --zone=selfdef --add-service=http' "${FW_LOG}"
+    grep -q -- '--permanent --zone=selfdef --add-service=https' "${FW_LOG}"
+    grep -q -- '--permanent --zone=selfdef --add-port=8080/tcp' "${FW_LOG}"
+}
