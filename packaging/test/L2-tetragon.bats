@@ -220,3 +220,19 @@ EOF
     grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"tetragon-tracing"' "${MODULE_DIR}/module.toml"
     grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"tetragon-policies"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (apply.sh + check.sh + uninstall.sh all present — full install lifecycle implemented)" {
+    # Sister to brain-wide module-lifecycle-fidelity INVARIANTs.
+    # tetragon is the kernel-attestation substrate for MS017
+    # agent-guard + MS047 perimeter + MS044 guardian. A
+    # missing uninstall.sh would leave operator unable to
+    # cleanly remove tetragon during MTTR / triage — orphan
+    # eBPF programs would remain attached to kernel hooks.
+    # Lock the full install-lifecycle script trio.
+    [ -f "${INSTALL_DIR}/apply.sh" ]
+    [ -f "${INSTALL_DIR}/check.sh" ]
+    [ -f "${INSTALL_DIR}/uninstall.sh" ]
+    [ -x "${INSTALL_DIR}/apply.sh" ]
+    [ -x "${INSTALL_DIR}/check.sh" ]
+    [ -x "${INSTALL_DIR}/uninstall.sh" ]
+}
