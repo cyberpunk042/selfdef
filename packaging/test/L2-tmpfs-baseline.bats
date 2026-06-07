@@ -402,3 +402,26 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"tmpfs-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (header-marker discipline: drop-in carries 'selfdef' self-identifying header — head-grep stale-cleanup discipline)" {
+    # Sister to brain-wide header-marker discipline INVARIANTs
+    # across L2 drop-in suites. The tmpfs-baseline drop-in
+    # under /etc/systemd/system/tmp.mount.d/50-selfdef.conf MUST
+    # carry a comment marker identifying it as selfdef-managed
+    # (managed-by / source / generator pointer) so a stale-
+    # cleanup head -2 grep at uninstall time can identify which
+    # files selfdef owns vs which is operator-original. Without
+    # a marker, a subsequent uninstaller could not tell apart
+    # operator baseline mount options from selfdef-injected
+    # noexec/nosuid/nodev — risking accidental rollback of
+    # operator changes. Locks marker-discipline on the tmpfs-
+    # baseline mount-options substrate.
+    write_config "noexec"
+    run_wd
+    drop_in="${SYSTEMD_DIR}/tmp.mount.d/50-selfdef.conf"
+    [ -f "${drop_in}" ] || drop_in="${SYSTEMD_DIR}/var-tmp.mount.d/50-selfdef.conf"
+    [ -f "${drop_in}" ]
+    # First non-blank line should carry a header marker identifying
+    # selfdef OR tmpfs-baseline OR managed-by.
+    grep -qE '^#.*(selfdef|tmpfs-baseline|managed)' "${drop_in}"
+}
