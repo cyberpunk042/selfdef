@@ -857,3 +857,12 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         grep -qE '^set -u' "${s}"
     done
 }
+
+@test "INVARIANT (time-skew-watchdog .sh script declares shebang #!/bin/bash or env bash — bash-interpreter contract)" {
+    # Sister to brain-wide bash-shebang INVARIANT family.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        head -1 "${s}" | grep -qE '#!/.*bash|#!/usr/bin/env bash'
+    done
+}

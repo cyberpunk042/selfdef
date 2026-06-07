@@ -858,3 +858,12 @@ assert 'install' in data, 'install missing'
         grep -qE '^set -u' "${s}"
     done
 }
+
+@test "INVARIANT (acpi-hooks-watchdog .sh script declares shebang #!/bin/bash or env bash — bash-interpreter contract)" {
+    # Sister to brain-wide bash-shebang INVARIANT family.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/acpi-hooks-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        head -1 "${s}" | grep -qE '#!/.*bash|#!/usr/bin/env bash'
+    done
+}

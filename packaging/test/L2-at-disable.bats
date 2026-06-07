@@ -907,3 +907,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     [ -f "${chk}" ]
     grep -qE '^set -euo pipefail' "${chk}"
 }
+
+@test "INVARIANT (at-disable install/check.sh is executable (mode includes +x) — script-runnable contract)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/at-disable/install/check.sh"
+    [ -x "${chk}" ]
+}
