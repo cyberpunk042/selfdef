@@ -437,3 +437,18 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-fix: nfs-mount-watchdog libexec NEVER writes back to its scanned target — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-{fix,delete,restore,uninstall}
+    # family. nfs-mount-watchdog is a DETECT-only watchdog: surveils its
+    # target + emits verdicts, NEVER writes back. The libexec
+    # script must NOT contain sed -i / tee mutations of its
+    # scanned paths. Locks no-auto-fix on the nfs-mount-watchdog
+    # libexec substrate.
+    wd_libexec="${BATS_TEST_DIRNAME}/../../modules/nfs-mount-watchdog/systemd"
+    for sh in "${wd_libexec}"/*.sh; do
+        [ -f "${sh}" ] || continue
+        ! grep -vE '^[[:space:]]*#' "${sh}" | grep -qE 'sed[[:space:]]+-i.*\$\{?[A-Z_]*FILE'
+        ! grep -vE '^[[:space:]]*#' "${sh}" | grep -qE 'tee[[:space:]].*\$\{?[A-Z_]*FILE'
+    done
+}
