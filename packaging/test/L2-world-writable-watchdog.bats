@@ -282,3 +282,24 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-world-writable -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (severity field is bounded vocabulary {ok,warn,alert} — operator dashboard severity axis lock)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The world-writable-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1222 file-permission-modification surveil-
+    # lance alert. Locks parser contract on the world-writable
+    # detection surface.
+    printf 'benign\n' > "${ROOT}/benign-file"
+    run_wd                                              # ok path
+    chmod 0666 "${ROOT}/benign-file"
+    run_wd                                              # alert path
+    sev=$(cap | grep -oE '"severity":"[^"]+"' | head -1)
+    case "${sev}" in
+        '"severity":"ok"'|'"severity":"warn"'|'"severity":"alert"') : ;;
+        *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
+    esac
+}
