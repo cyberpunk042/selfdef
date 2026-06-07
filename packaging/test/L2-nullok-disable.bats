@@ -426,3 +426,15 @@ EOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"nullok-disable"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no backup of files that don't carry nullok — single-shot backup discipline)" {
+    # Sister to brain-wide backup-on-mutate-only INVARIANTs.
+    # If a PAM file doesn't contain nullok, there's nothing to
+    # strip; backup file MUST NOT be written for that file.
+    cat > "${PAM_D}/clean-pam" <<'EOF'
+auth required pam_unix.so
+EOF
+    write_config "enforce"
+    run_wd
+    ! [ -f "${PAM_D}/clean-pam.selfdef-nullok-backup" ]
+}
