@@ -441,3 +441,18 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: dns-shield installer NEVER deletes /etc/hosts entries outside its self-identifying section — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # dns-shield writes its own self-identifying section in
+    # /etc/hosts (sinkhole entries); it MUST NEVER rm/sed-i
+    # delete entries outside the selfdef-managed section. The
+    # operator's pre-existing /etc/hosts entries are sacrosanct.
+    # Locks no-auto-delete on the dns-shield installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/dns-shield/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/hosts([^.]|$)' "${f}"
+        ! grep -qE 'sed[[:space:]]+-i.*\bd\b.*\b/etc/hosts\b' "${f}"
+    done
+}
