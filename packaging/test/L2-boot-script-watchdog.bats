@@ -336,3 +336,17 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named init.d script surfaces in sample for operator-triage routing)" {
+    # Sister to brain-wide DELTA-detect sample-naming INVARIANTs.
+    # When attacker drops a new /etc/init.d script (T1037 boot-
+    # time persistence), the file NAME MUST surface in JSON
+    # sample so operator routes triage.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\necho new\n' > "${INITD3}/distinctive-attacker-initd-script"
+    chmod 0755 "${INITD3}/distinctive-attacker-initd-script"
+    run_wd
+    cap | grep -q 'distinctive-attacker-initd-script\|"severity":"(alert|warn)"'
+}
