@@ -292,3 +292,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (mechanism .so under /tmp — writable-root axis-symmetric expansion on GSSAPI auth code-load surface)" {
+    # Sister to /var/tmp + /home + /dev/shm GSSAPI mechanism
+    # writable-root INVARIANTs. /tmp is canonical user-writable
+    # tmpfs/disk. GSSAPI mechanism .so is dlopen-loaded AS the
+    # consuming process (SSH/NFS/Kerberos clients); planted .so
+    # gets credential-handler-level access. T1574 Hijack
+    # Execution Flow.
+    printf 'gssapi_evil 1.2.3.4 /tmp/.evil-gss.so\n' > "${MECH}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
