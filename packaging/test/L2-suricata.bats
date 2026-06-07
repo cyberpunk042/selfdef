@@ -230,3 +230,16 @@ INSTALL_DIR="${MODULE_DIR}/install"
         || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
         || skip "no tomllib/tomli available; parser-contract check skipped"
 }
+
+@test "INVARIANT (no auto-uninstall: suricata installer NEVER emits package-remove commands on suricata or its NFQUEUE/bridge-l2 substrate)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANT family.
+    # suricata installer wires nftables NFQUEUE/AF_PACKET rules
+    # into bridge-l2's selfdef_bridge table; package-removal of
+    # suricata + bridge-l2 + nftables is operator-domain (the
+    # packages are not installed by THIS module — only the
+    # config + nft rules are). Locks no-auto-uninstall on the
+    # suricata substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(suricata|nftables|bridge-l2)' "${f}"
+    done
+}
