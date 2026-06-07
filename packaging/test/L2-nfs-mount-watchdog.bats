@@ -378,3 +378,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs. Multi-
+    # mount scenario locks consolidation discipline.
+    mk_findmnt
+    write_mounts \
+        $'nfs4\t/mnt/data\trw,relatime' \
+        $'cifs\t/mnt/winshare\trw,relatime' \
+        $'fuse.sshfs\t/mnt/sshfs\trw,relatime'
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-nfs-mount -- ')
+    [ "${main_count}" = "1" ]
+}
