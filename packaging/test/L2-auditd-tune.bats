@@ -352,3 +352,20 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"auditd-tune"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: auditd-tune NEVER emits package-remove commands on auditd)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The auditd-tune installer renders auditd.conf
+    # (log_file, max_log_file, num_logs, etc.) but MUST NEVER
+    # emit shell commands that uninstall the auditd package
+    # itself (apt/dpkg/dnf/rpm/yum remove|purge|uninstall
+    # auditd|audit). Silent auto-removal during config tuning
+    # would tear down the audit-trail entirely — catastrophic
+    # at the audit-substrate level. T1562.001 Impair Defenses
+    # self-defeat. Locks anti-package-removal contract on the
+    # auditd config-tune substrate.
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(auditd|audit)'
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${AUDITD_CONF}"
+}
