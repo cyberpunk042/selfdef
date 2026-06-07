@@ -468,3 +468,21 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (aide-bridge timer unit declares RandomizedDelaySec — anti-thundering-herd cadence contract)" {
+    # Sister to brain-wide timer-cadence INVARIANT family.
+    # The aide-bridge timer unit MUST declare RandomizedDelaySec=
+    # so fleet hosts don't all fire at the exact same minute
+    # (thundering-herd that overwhelms downstream
+    # syslog/journald aggregators). Locks anti-thundering-herd
+    # cadence discipline on the aide-bridge timer substrate.
+    timer="${BATS_TEST_DIRNAME}/../../modules/aide-bridge/systemd"
+    found=0
+    for t in "${timer}"/*.timer; do
+        [ -f "${t}" ] || continue
+        if grep -qE '^RandomizedDelaySec=' "${t}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}

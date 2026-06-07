@@ -498,3 +498,21 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (access-conf-watchdog timer unit declares RandomizedDelaySec — anti-thundering-herd cadence contract)" {
+    # Sister to brain-wide timer-cadence INVARIANT family.
+    # The access-conf-watchdog timer unit MUST declare RandomizedDelaySec=
+    # so fleet hosts don't all fire at the exact same minute
+    # (thundering-herd that overwhelms downstream
+    # syslog/journald aggregators). Locks anti-thundering-herd
+    # cadence discipline on the access-conf-watchdog timer substrate.
+    timer="${BATS_TEST_DIRNAME}/../../modules/access-conf-watchdog/systemd"
+    found=0
+    for t in "${timer}"/*.timer; do
+        [ -f "${t}" ] || continue
+        if grep -qE '^RandomizedDelaySec=' "${t}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
