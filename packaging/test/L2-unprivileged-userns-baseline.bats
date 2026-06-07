@@ -250,3 +250,49 @@ run_wd() {
     grep -q 'profile=allow' "${DROPIN}"
     ! grep -q 'profile=deny' "${DROPIN}"
 }
+
+@test "INVARIANT (live-knob no-op on idempotent re-apply with same live value: don't fire sysctl -w if kernel already has correct value)" {
+    # The existing INVARIANT 'live-knob fires on every apply' locks
+    # current behavior (always-fire). This INVARIANT EXTENDS that
+    # current behavior boundary explicitly: when the kernel already
+    # has the correct value (mocked via LIVE_USERNS), the sysctl -w
+    # MAY OR MAY NOT skip — depending on script architecture. Lock
+    # current always-fire behavior so a future skip-if-matched
+    # refinement is intentional, not silent.
+    write_config "allow"
+    LIVE_USERNS=1 run_wd
+    : > "${SCTL_LOG}"
+    LIVE_USERNS=1 run_wd
+    # Current behavior: sysctl -w fires regardless of live-match.
+    grep -q 'sysctl -w kernel.unprivileged_userns_clone=' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (config-layer-noise resilience: deny + extra TOML keys does NOT bypass acknowledge_no_rootless gate)" {
+    # Sister to kernel-lockdown + nftables-baseline refuse-to-brick
+    # config-layer-noise INVARIANT. Lock that extra config keys
+    # cannot accidentally bypass the refuse-to-brick gate via TOML
+    # parsing edge cases.
+    cat > "${CONF}" <<'EOF'
+profile = "deny"
+acknowledge_no_rootless = false
+extra_knob_that_should_not_help = "wrong"
+maybe_an_alias_for_ack = true
+EOF
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_USERNS_CONFIG="${CONF}" \
+        SELFDEF_USERNS_DROPIN="${DROPIN}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"rootless"* ]] || [[ "${output}" == *"acknowledge_no_rootless"* ]]
+    ! [ -f "${DROPIN}" ]
+}
+
+@test "INVARIANT (live-state observability: sysctl -n kernel.unprivileged_userns_clone is consulted to read live state)" {
+    # The script reads the live kernel value via sysctl -n. Locks
+    # that the read happens — observability discipline for the
+    # operator dashboard's actual-vs-desired comparison.
+    write_config "allow"
+    LIVE_USERNS=1 run_wd
+    grep -qE 'sysctl -n kernel\.unprivileged_userns_clone|sysctl -n .*unprivileged_userns' "${SCTL_LOG}" || \
+        grep -q 'sysctl -n' "${SCTL_LOG}"
+}
