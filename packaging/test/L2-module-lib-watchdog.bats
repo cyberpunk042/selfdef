@@ -251,3 +251,16 @@ setup() {
     selfdef_is_writable_path '/var/tmp/payload.sh'
     selfdef_is_writable_path '/var/tmp/.evil'
 }
+
+@test "INVARIANT (writable-path: /home is flagged — user-writable persistence coverage on the 4-root set)" {
+    # Sister to /tmp + /var/tmp + /dev/shm writable-path
+    # INVARIANTs. /home is user-writable (per-user $HOME);
+    # attackers who pivot into a user account stage payloads
+    # under their /home/<user>/ for persistence. Lock the
+    # central writable-path helper flags /home so every
+    # watchdog module composing on selfdef_is_writable_path
+    # inherits the user-writable coverage.
+    selfdef_is_writable_path '/home/alice/x'
+    selfdef_is_writable_path '/home/bob/payload.sh'
+    selfdef_is_writable_path '/home/operator/.evil'
+}
