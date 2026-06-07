@@ -752,3 +752,16 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         grep -qE '^Description=' "${t}"
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog timer unit file mode is 0644 — systemd unit-file mode convention)" {
+    # Sister to brain-wide systemd unit-file mode INVARIANT
+    # family. systemd unit files MUST be chmod 0644 (world-
+    # readable + root-write-only). Locks the timer unit-file
+    # mode discipline.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        m=$(stat -c '%a' "${t}")
+        [ "${m}" = "644" ]
+    done
+}
