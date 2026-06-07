@@ -288,3 +288,16 @@ TOMLEOF
     run_wd
     bash -n "${LIBEXEC_DIR}/entropy-baseline.sh"
 }
+
+@test "INVARIANT (timer unit carries OnUnitActiveSec — recurrent re-armed cadence beyond OnBootSec one-shot)" {
+    # Sister to doctor-timer + many other selfdef timer units'
+    # OnUnitActiveSec INVARIANTs across the brain. A one-shot
+    # timer that fires only on OnBootSec would let a long-uptime
+    # host run for weeks without entropy probe. The selfdef-
+    # entropy.timer MUST carry OnUnitActiveSec=<period> so the
+    # kernel-RNG starvation surveillance runs recurrently across
+    # long uptimes. Locks the recurrent-fire contract.
+    write_config "report"
+    run_wd
+    grep -qE '^OnUnitActiveSec=' "${SYSTEMD_DIR}/selfdef-entropy.timer"
+}
