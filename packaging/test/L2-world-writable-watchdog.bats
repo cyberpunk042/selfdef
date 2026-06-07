@@ -326,3 +326,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${mode}" = "666" ]
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*chmod[[:space:]]+(o-w|go-w|0[0-7][0-7][0-7])'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # world-writable-watchdog runs ON the timer's scheduled fire
+    # — enumerates world-writable files outside excluded paths,
+    # emits a verdict on new world-writable detections, then
+    # exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the world-
+    # writable-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/world-writable-watchdog/systemd/selfdef-world-writable.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
