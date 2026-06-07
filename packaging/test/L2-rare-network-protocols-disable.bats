@@ -327,3 +327,11 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"rare-network-protocols-disable"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: kernel-network-protocol packages NEVER auto-removed)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs.
+    write_config "baseline"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    ! grep -qE 'apt-get|dpkg|dnf|rpm' "${MODPROBE_FILE}"
+}
