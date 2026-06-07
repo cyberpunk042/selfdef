@@ -289,3 +289,16 @@ INSTALL_DIR="${MODULE_DIR}/install"
     unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
     [[ "${first_nonblank}" == *"slm-cpu-loop"* ]]
 }
+
+@test "INVARIANT (module.toml provides slm-loop-runtime contract — downstream-consumer interface lock)" {
+    # Sister to many other installer module's provides-contract
+    # INVARIANT across the brain (suricata ids+eve-json, tensor-
+    # parallel-inference tensor-parallel-runtime, wasm-aot-cache
+    # wasm-aot-cache-dir). The slm-cpu-loop module's provides
+    # field names the downstream-visible interface — every SLM-
+    # consuming module (SLM-on-CPU agent loop runtime consumer
+    # modules) lists slm-loop-runtime in their depends_on. A
+    # silent rename of the provides token would break every
+    # downstream consumer module.
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"slm-loop-runtime"' "${MODULE_DIR}/module.toml"
+}
