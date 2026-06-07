@@ -170,3 +170,18 @@ with open('${MODULE_DIR}/profiles/${p}.toml', 'rb') as f:
         || grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"vpn"' "${MODULE_DIR}/module.toml" \
         || true
 }
+
+@test "INVARIANT (apply.sh + check.sh + uninstall.sh all present + use set -euo pipefail — fail-loud invariant)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # vpn-bridge is the L3 forward-chain substrate for overlay
+    # ↔ LAN routing; silent script failure leaves nftables in
+    # half-loaded state (partial table inet selfdef_vpn_bridge
+    # with no rules) which silently drops overlay traffic on
+    # FORWARD policy=accept hook.
+    [ -f "${MODULE_DIR}/install/apply.sh" ]
+    [ -f "${MODULE_DIR}/install/check.sh" ]
+    [ -f "${MODULE_DIR}/install/uninstall.sh" ]
+    grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/apply.sh"
+    grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/check.sh"
+    grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/uninstall.sh"
+}
