@@ -180,3 +180,42 @@ Warning: 10"
     run_wd
     cap | grep -q '"rkhunter_rc":2'
 }
+
+@test "INVARIANT (rkhunter-bin non-zero exit beyond known codes: rc=99 still emits JSON + still rc=0 in report — advisory contract holds)" {
+    # Sister to lynis-cron 'lynis bin non-zero exit' INVARIANT —
+    # advisory wrapper MUST still emit a JSON record so operator
+    # dashboard sees the run + still exit 0 in report profile (the
+    # wrapper is advisory; operator owns the response, not the
+    # cron unit).
+    mk_rk 99 "rkhunter crashed mid-scan"
+    run_wd                                              # report profile, rc must be 0
+    cap | grep -q '"tag":"selfdef-rkhunter"'
+}
+
+@test "INVARIANT (large-warning stress: 50 warnings → warning_count=50; sample still capped) — observability accuracy" {
+    # Sister to lynis-cron 'large-warning fixture' INVARIANT —
+    # cap is on log volume (sample), NOT on counter. Operator
+    # dashboard should still see the full count so triage knows
+    # haystack size.
+    {
+        printf 'Warning: %s\n' $(seq 1 50)
+    } | {
+        body="$(cat)"
+        mk_rk 1 "${body}"
+    }
+    run_wd
+    cap | grep -q '"warning_count":50'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "INVARIANT (multi-mention same path NOT dedup'd — warning_count reflects raw warning lines)" {
+    # If rkhunter emits 3 separate Warning lines about the SAME path,
+    # warning_count reflects raw line count (3). The wrapper does NOT
+    # dedup — that's operator-decision territory. Locks current
+    # observability shape so a future dedup refinement is intentional.
+    mk_rk 1 "Warning: Suspicious file /dev/.hidden
+Warning: Suspicious file /dev/.hidden
+Warning: Suspicious file /dev/.hidden"
+    run_wd
+    cap | grep -q '"warning_count":3'
+}
