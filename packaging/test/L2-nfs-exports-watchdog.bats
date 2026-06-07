@@ -232,3 +232,47 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-nfs-exports -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (multiple dangerous lines: two separate exports both dangerous → still single alert; consolidation across lines)" {
+    # Attacker may layer multiple dangerous exports as separate
+    # lines (no_root_squash + *-wildcard + insecure on three lines).
+    # Watchdog consolidates: single JSON record, single alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/srv/a 192.168.1.0/24(rw,no_root_squash)\n/srv/b *(rw,root_squash,secure)\n/srv/c 10.0.0.0/8(rw,root_squash,insecure)\n' > "${EXPORTS}"
+    run_wd
+    cap | grep -q '"event":"nfs_exports_dangerous"'
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-nfs-exports -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (benign all_squash is NOT flagged — only the no_root_squash family is dangerous)" {
+    # all_squash is the OPPOSITE direction (squashes all UIDs to
+    # anonymous, restrictive). Operator-intentional + standard
+    # public-share pattern. Must NOT trip the dangerous predicate.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/srv/public 192.168.1.0/24(ro,root_squash,all_squash,secure,anonuid=65534,anongid=65534)\n' > "${EXPORTS}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (current-behavior: nfs-exports-watchdog scope is CONTENT, not file-mode — chmod 0666 on benign exports is NOT alerted by itself)" {
+    # Locks the current architectural boundary: scope is content
+    # (dangerous-flag predicate over export lines), NOT file-mode
+    # of /etc/exports itself. Sister watchdog file-protections /
+    # world-writable covers file-mode hardening broadly. Refinement
+    # opportunity tracked: tighten nfs-exports-watchdog to also
+    # flag chmod 0666 on /etc/exports if/when SDD-061 D-6 expands.
+    # Lock current boundary so an unintentional regression toward
+    # file-mode coverage trips this test.
+    seed_benign
+    run_wd
+    chmod 0666 "${EXPORTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
