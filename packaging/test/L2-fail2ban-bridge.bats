@@ -267,3 +267,25 @@ run_wd() {
     run_wd
     grep -qE '^maxretry[[:space:]]*=[[:space:]]*[1-9]' "${JAIL_D}/50-selfdef.conf"
 }
+
+@test "INVARIANT (asymmetric bantime: recidive bantime > standard sshd bantime — long-term ban discipline)" {
+    # Sister to existing INVARIANT 'recidive drop-in carries bantime'.
+    # Lock that recidive's bantime is STRICTLY GREATER than standard's
+    # sshd bantime. Locks profile-rank asymmetry on the ban-duration
+    # axis — a regression that inverts the relationship would silently
+    # weaken the long-term-ban discipline.
+    write_config "standard"
+    run_wd
+    std_bantime="$(grep -oE 'bantime[[:space:]]*=[[:space:]]*[0-9]+' "${JAIL_D}/50-selfdef.conf" | grep -oE '[0-9]+$' | head -1)"
+    write_config "broad"
+    run_wd
+    recidive_bantime="$(grep -oE 'bantime[[:space:]]*=[[:space:]]*[0-9]+' "${JAIL_D}/60-selfdef-recidive.conf" | grep -oE '[0-9]+$' | head -1)"
+    # If both have bantime values, recidive MUST be strictly greater.
+    if [ -n "${std_bantime}" ] && [ -n "${recidive_bantime}" ]; then
+        [ "${recidive_bantime}" -gt "${std_bantime}" ]
+    else
+        # If standard doesn't set bantime explicitly (uses default),
+        # locks recidive's bantime is at least 86400s (1 day).
+        [ "${recidive_bantime}" -ge 86400 ]
+    fi
+}
