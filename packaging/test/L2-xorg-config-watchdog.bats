@@ -362,3 +362,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*xorg'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # xorg-config-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/X11/xorg.conf + xorg.conf.d for ModulePath +
+    # LoadModule entries in writable roots, emits a verdict,
+    # then exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the xorg-
+    # config-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/xorg-config-watchdog/systemd/selfdef-xorg-config.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
