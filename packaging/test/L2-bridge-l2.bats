@@ -210,3 +210,11 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -qE 'install[[:space:]].*-m[[:space:]]+0?644' "${INSTALL_DIR}/apply.sh" \
         || grep -qE 'chmod[[:space:]]+0?644' "${INSTALL_DIR}/apply.sh"
 }
+
+@test "INVARIANT (apply.sh uses set -euo pipefail — anti-half-installed-state contract)" {
+    # Sister to brain-wide installer-script-hygiene INVARIANTs.
+    # Without set -euo pipefail a mid-install failure leaves the
+    # host in a half-installed state silently.
+    grep -qE 'set[[:space:]]+-euo[[:space:]]+pipefail' "${INSTALL_DIR}/apply.sh" \
+        || (grep -qE 'set[[:space:]]+-eu' "${INSTALL_DIR}/apply.sh" && grep -qE 'set[[:space:]]+-o[[:space:]]+pipefail' "${INSTALL_DIR}/apply.sh")
+}
