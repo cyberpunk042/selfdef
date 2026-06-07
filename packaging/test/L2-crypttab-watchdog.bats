@@ -333,3 +333,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (keyscript under /var/tmp — writable-root axis-symmetric expansion on keyscript axis)" {
+    # Sister to /home + /dev/shm keyscript writable-root
+    # INVARIANTs. /var/tmp writable + persistent. keyscript fires
+    # AS ROOT at boot for LUKS unlock; planted attacker keyscript
+    # in /var/tmp gets boot-time root-exec primitive AND can
+    # exfiltrate the unlock-key. T1611 boot-time-disk-decrypt
+    # axis sister to keyfile-on-writable-root.
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'data /dev/sda2 none luks,keyscript=/var/tmp/.keyscript\n' > "${CRYPTTAB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
