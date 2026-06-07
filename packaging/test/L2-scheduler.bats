@@ -231,3 +231,20 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # vulnerabilities (CVE-2014-9745 family).
     grep -qE '^LockPersonality=true' "${UNIT}"
 }
+
+@test "INVARIANT (unit declares RestartSec=2s — restart-storm dampener pairs with Restart=always + StartLimitBurst)" {
+    # Sister to brain-wide systemd RestartSec INVARIANTs +
+    # restart-storm-cap discipline (already locked above via
+    # StartLimitIntervalSec=60s + StartLimitBurst=10). The
+    # Restart=always directive paired with RestartSec=2s
+    # ensures failed-start cascades pace at human-tractable
+    # rate AND systemd's failure-history tracker doesn't drop
+    # restart-attempt records due to sub-second cycles. Without
+    # RestartSec set explicitly the systemd default 100ms
+    # would let a tight failure loop log-storm the journal AND
+    # exhaust StartLimitBurst within sub-second window leaving
+    # the unit permanently failed before operator triage.
+    # Locks restart-storm-dampener contract on the Goldilocks
+    # scheduler substrate.
+    grep -qE '^RestartSec=' "${UNIT}"
+}
