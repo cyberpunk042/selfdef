@@ -281,3 +281,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (Pre-Install-Pkgs directive surveillance: apt's package-stream hook ALSO scanned — alternative DPkg directive family)" {
+    # Sister to the DPkg::Pre-Invoke + Post-Invoke + APT::Update::
+    # Pre-Invoke axes already locked. The DPkg::Pre-Install-Pkgs
+    # directive is a less-commonly-known apt hook that fires for
+    # each package being unpacked, with the package stream piped
+    # to the hook command — even more privileged than the standard
+    # invokes (full package metadata + path-of-extraction context).
+    # Lock the full DPkg directive family on the apt-hooks surface.
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${HOOK}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'DPkg::Pre-Install-Pkgs {"/tmp/.evil-stream-hook";};\n' > "${HOOK}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
