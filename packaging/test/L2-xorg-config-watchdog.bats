@@ -297,3 +297,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (ModulePath under /var/tmp — writable-root axis-symmetric expansion on X-server module-load surface)" {
+    # Sister to /home + writable-ModulePath INVARIANTs already
+    # locked. /var/tmp writable by ALL users + persists across
+    # reboots. Closes /var/tmp axis on T1574 X-server module-
+    # load Hijack Execution Flow surface — planted .so gets
+    # graphical-display access (keylogging + screen-content).
+    printf 'Section "Files"\n    ModulePath "/var/tmp/.evil-xorg-modules"\nEndSection\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
