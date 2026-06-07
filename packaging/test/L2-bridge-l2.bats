@@ -218,3 +218,15 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -qE 'set[[:space:]]+-euo[[:space:]]+pipefail' "${INSTALL_DIR}/apply.sh" \
         || (grep -qE 'set[[:space:]]+-eu' "${INSTALL_DIR}/apply.sh" && grep -qE 'set[[:space:]]+-o[[:space:]]+pipefail' "${INSTALL_DIR}/apply.sh")
 }
+
+@test "INVARIANT (check.sh + uninstall.sh use set -euo pipefail — full lifecycle fail-loud invariant)" {
+    # Sister to apply.sh fail-loud INVARIANT just locked. The
+    # check.sh + uninstall.sh paths MUST also be fail-loud —
+    # half-cleanup state during operator MTTR (orphan nftables
+    # table inet selfdef_bridge with no rules) silently drops
+    # L2-bridge traffic.
+    grep -qE 'set[[:space:]]+-euo[[:space:]]+pipefail' "${INSTALL_DIR}/check.sh" \
+        || (grep -qE 'set[[:space:]]+-eu' "${INSTALL_DIR}/check.sh" && grep -qE 'set[[:space:]]+-o[[:space:]]+pipefail' "${INSTALL_DIR}/check.sh")
+    grep -qE 'set[[:space:]]+-euo[[:space:]]+pipefail' "${INSTALL_DIR}/uninstall.sh" \
+        || (grep -qE 'set[[:space:]]+-eu' "${INSTALL_DIR}/uninstall.sh" && grep -qE 'set[[:space:]]+-o[[:space:]]+pipefail' "${INSTALL_DIR}/uninstall.sh")
+}
