@@ -283,3 +283,25 @@ run_wd() {
     [ "${baseline_count}" -gt 0 ]
     [ "${strict_count}" -gt "${baseline_count}" ]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # rare-filesystems-disable TOML; parser must tolerate without
+    # altering the profile-gated behavior. strict-with-noise still
+    # blacklists ALL strict modules (squashfs/nfsd/gfs2) — the
+    # full rare-filesystem-driver neutralization (defense against
+    # USB-attached attack-filesystem mounting + kernel module
+    # exploits in obscure file systems).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "strict"
+operator_note = "rare-FS drivers = obscure-kernel-CVE surface"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    for m in squashfs nfsd gfs2; do
+        grep -q "blacklist ${m}" "${MODPROBE_FILE}"
+    done
+}
