@@ -393,3 +393,17 @@ EOF
     grep -qE '"time":' "${SCRIPT}"
     grep -qE '"device":\{"hostname"' "${SCRIPT}"
 }
+
+@test "INVARIANT (OCSF jsonl carries activity_id field — OCSF schema-fidelity contract)" {
+    # Sister to brain-wide OCSF schema-fidelity INVARIANT family.
+    # Beyond class_uid + severity_id + time + device.hostname,
+    # the activity_id is a load-bearing OCSF discriminator —
+    # downstream SIEM consumers (Sentinel/Splunk/Wazuh) routinely
+    # filter on activity_id to distinguish create/modify/delete
+    # vs scan/audit/probe events. The friction-audit emit_ocsf()
+    # helper unconditionally appends "activity_id":2 (Create/Add)
+    # since the gate-decision event IS a create-event in OCSF
+    # semantics. Locks the activity_id discriminator on the
+    # friction-audit OCSF substrate.
+    grep -qE '"activity_id":' "${SCRIPT}"
+}
