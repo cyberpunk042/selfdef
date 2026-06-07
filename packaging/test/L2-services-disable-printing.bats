@@ -312,3 +312,22 @@ TOMLEOF
     # Both .service AND .socket are masked → the UDP/631
     # listener cannot be socket-activated either.
 }
+
+@test "INVARIANT (downgrade mask → stop does NOT auto-unmask — mask is sticky)" {
+    # Sister to brain-wide mask-is-sticky-downgrade INVARIANTs
+    # (nscd-disable / rpcbind-disable / apport-disable / at-
+    # disable / avahi-disable). mask is operator-explicit hard-
+    # disable; downgrading the profile to stop does NOT silently
+    # undo the mask (operator must explicitly unmask via
+    # systemctl unmask). Locks the mask-stickiness contract on
+    # the printing-service-neutralization substrate — prevents
+    # accidental re-exposure of CUPS/IPP-RCE attack surface via
+    # profile downgrade.
+    write_config "mask"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    # No unmask command fires on downgrade.
+    ! grep -qE 'systemctl unmask cups' "${SYSEOF_LOG}"
+}
