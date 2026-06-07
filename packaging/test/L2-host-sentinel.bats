@@ -365,3 +365,11 @@ run_wd() {
     first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml")"
     [[ "${first_nonblank}" == *"selfdef"* ]] || [[ "${first_nonblank}" == *"apiVersion"* ]]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO policy YAML written when DRY_RUN=1)" {
+    # Sister to brain-wide installer DRY_RUN INVARIANTs.
+    rm -f "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+    write_config "audit"
+    DRY_RUN=1 run_wd
+    [ ! -f "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml" ]
+}
