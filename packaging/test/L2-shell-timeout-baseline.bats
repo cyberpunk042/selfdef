@@ -326,3 +326,21 @@ run_wd() {
     [ -f "${PROFILE_D}/99-operator.sh" ]
     grep -q 'OPERATOR_VAR=alive' "${PROFILE_D}/99-operator.sh"
 }
+
+@test "INVARIANT (drop-in chmod 0644 — /etc/profile.d sourcing convention)" {
+    # Sister to brain-wide drop-in chmod 0644 INVARIANTs across
+    # L2 suites. The shell-timeout-baseline drop-in lives in
+    # /etc/profile.d/50-selfdef-shell-timeout.sh and MUST be
+    # world-readable mode 0644 because shells (bash/dash/sh)
+    # source /etc/profile.d/ AS the login user (non-root uid)
+    # at every login. Mode 0600 would defeat the canonical
+    # profile.d sourcing semantics — non-root login shells
+    # would silently fail to source the drop-in and TMOUT
+    # would remain unset. Locks file-mode contract on the
+    # shell-timeout-baseline substrate.
+    write_config "standard"
+    run_wd
+    [ -f "${DROPIN}" ]
+    mode="$(stat -c '%a' "${DROPIN}")"
+    [ "${mode}" = "644" ]
+}
