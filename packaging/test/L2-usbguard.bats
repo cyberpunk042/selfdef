@@ -277,3 +277,48 @@ run_wd() {
     # (no mutation to strict-empty = no locked-out keyboard).
     grep -q 'profile=permissive' "${RULES_DST}"
 }
+
+@test "INVARIANT (daemon drop-in carries AuditBackend=LinuxAudit — kernel-audit observability)" {
+    # Sister axis to existing test that locks AuditBackend in
+    # permissive. Lock that strict ALSO carries it. The audit
+    # backend forwards usbguard events to kernel-audit / journald
+    # for the operator observability pipeline.
+    write_config "strict"
+    printf '%s\n' 'allow id 1d6b:0002' > "${BASELINE_FILE}"
+    run_wd
+    grep -qE 'AuditBackend\s*=\s*LinuxAudit' "${DAEMON_DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (filename: daemon drop-in follows 50-selfdef.conf convention — tracking + uninstall identification)" {
+    # Sister to many other modules' filename-convention INVARIANT.
+    write_config "permissive"
+    run_wd
+    case "${DAEMON_DROPIN_DIR}/50-selfdef.conf" in
+        */50-selfdef.conf) : ;;
+        *) fail "daemon drop-in filename must follow 50-selfdef.conf pattern" ;;
+    esac
+    [ -f "${DAEMON_DROPIN_DIR}/50-selfdef.conf" ]
+}
+
+@test "INVARIANT (config-layer-noise resilience: strict + extra TOML keys does NOT bypass baseline-required gate)" {
+    # Sister to kernel-lockdown + nftables-baseline + unprivileged-
+    # userns + proc-hidepid config-noise INVARIANT. Lock that extra
+    # config keys cannot accidentally bypass the strict-needs-
+    # baseline gate.
+    cat > "${CONF}" <<'EOF'
+profile = "strict"
+extra_knob = "wrong"
+maybe_an_alias_for_baseline = "true"
+EOF
+    # Baseline NOT seeded.
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_USBGUARD_CONFIG="${CONF}" \
+        SELFDEF_USBGUARD_RULES_FILE="${RULES_DST}" \
+        SELFDEF_USBGUARD_DROPIN_DIR="${DAEMON_DROPIN_DIR}" \
+        SELFDEF_USBGUARD_OPERATOR_DIR="${OPERATOR_DIR}" \
+        SELFDEF_USBGUARD_BASELINE="${BASELINE_FILE}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"baseline"* ]]
+    ! [ -f "${RULES_DST}" ]
+}
