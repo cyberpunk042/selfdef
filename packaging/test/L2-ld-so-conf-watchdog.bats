@@ -217,3 +217,45 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-ld-so-conf -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no-auto-trust: ld-so-conf-watchdog does NOT refresh baseline on writable-dir detection — alert STAYS until operator updates)" {
+    # T1574 dynamic-linker search-path hijack primitive — alert
+    # MUST persist across runs until operator explicitly re-baselines.
+    # Sister to gss-mech, ld-preload, nm-vpn-plugin, openvpn-config,
+    # musl-ld-path, sudo-conf, sshd-config, openssl-conf —
+    # active-injection class never auto-trusts.
+    printf '/opt/app/lib\n' > "${CONF}"
+    run_wd
+    printf '/opt/app/lib\n/tmp/evil/lib\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (severity precedence: writable-dir-added + benign-dir-added in same scan → alert wins over warn)" {
+    # When the same scan surfaces both a writable-dir add (alert)
+    # and a benign-dir add (warn), severity must be alert. Locks
+    # the severity ladder discipline. Sister to other watchdog
+    # severity-precedence INVARIANTs across the brain.
+    printf '/opt/app/lib\n' > "${CONF}"
+    run_wd
+    printf '/opt/app/lib\n/opt/benign-extra/lib\n/tmp/evil/lib\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"ld_so_conf_writable_path"'
+}
+
+@test "INVARIANT (multi-drop-in scan: a second .conf in ld.so.conf.d ALSO scanned — not just the first drop-in)" {
+    # Sister to many other multi-dir scan INVARIANTs. ld.so.conf.d
+    # may carry many drop-ins; each must be enumerated independently.
+    printf '/opt/app/lib\n' > "${CONF}"
+    run_wd
+    printf '/opt/benign/lib\n' > "${DROPIN}/01-benign.conf"
+    printf '/tmp/evil/lib\n' > "${DROPIN}/02-evil.conf"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
