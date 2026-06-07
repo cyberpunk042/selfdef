@@ -195,3 +195,14 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
         return 1
     fi
 }
+
+@test "INVARIANT (guardian.service uses set -euo / NoNewPrivileges / ProtectSystem — Ring-0 hardening contract)" {
+    # Sister to brain-wide Ring-0 hardening INVARIANT family.
+    # The guardian service is the kernel-event tap; it MUST
+    # be hardened: NoNewPrivileges to prevent setuid escalation,
+    # ProtectSystem=strict to forbid /etc writes, and a set of
+    # canonical hardening directives. Locks Ring-0 hardening
+    # discipline on the guardian unit substrate.
+    grep -qE '^NoNewPrivileges=true' "${UNIT}"
+    grep -qE '^ProtectSystem=' "${UNIT}"
+}
