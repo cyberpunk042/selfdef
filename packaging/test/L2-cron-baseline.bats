@@ -349,3 +349,22 @@ TOMLEOF
     ! grep -q '^evil-user$' "${CRON_DENY}"
     ! grep -q '^evil-user$' "${AT_DENY}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO .allow/.deny files written when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/cron.allow + /etc/cron.deny +
+    # /etc/at.allow + /etc/at.deny. A silent dry-run that
+    # committed would lock out non-root users from crontab AT
+    # PREVIEW TIME on a host where operator was investigating —
+    # including potentially the operator's own account. Locks
+    # dry-run-preserves-state on the cron-scheduler access
+    # control substrate.
+    rm -f "${CRON_ALLOW}" "${CRON_DENY}" "${AT_ALLOW}" "${AT_DENY}"
+    write_config "root-only"
+    DRY_RUN=1 run_wd
+    [ ! -f "${CRON_ALLOW}" ]
+    [ ! -f "${CRON_DENY}" ]
+    [ ! -f "${AT_ALLOW}" ]
+    [ ! -f "${AT_DENY}" ]
+}
