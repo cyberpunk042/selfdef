@@ -533,3 +533,21 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (crontab-allow-watchdog timer unit declares Persistent=true — catch-up-after-downtime contract)" {
+    # Sister to brain-wide timer Persistent INVARIANT family.
+    # Persistent=true tells systemd to fire the timer ON BOOT
+    # if it was missed during downtime — without it, a host
+    # that boots after the scheduled fire would silently skip
+    # the cycle, leaving a forensics gap. Locks Persistent=
+    # discipline on the crontab-allow-watchdog timer substrate.
+    timer="${BATS_TEST_DIRNAME}/../../modules/crontab-allow-watchdog/systemd"
+    found=0
+    for t in "${timer}"/*.timer; do
+        [ -f "${t}" ] || continue
+        if grep -qE '^Persistent=true' "${t}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
