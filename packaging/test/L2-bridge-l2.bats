@@ -193,3 +193,20 @@ INSTALL_DIR="${MODULE_DIR}/install"
         || grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"bridge-l2"' "${MODULE_DIR}/module.toml" \
         || grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"selfdef_bridge"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (apply.sh renders ruleset with chmod 0644 — system-config convention)" {
+    # Sister to many other installer module's chmod-0644
+    # INVARIANT across the brain (sysctl drop-ins, limits.d,
+    # ssh-hardening drop-in, journal-tune drop-in, AppArmor
+    # AA_LIST). The /etc/nftables.d/selfdef-bridge.conf
+    # ruleset lands at a system-config path consumed by
+    # nftables.service at boot AND by operator audit tooling.
+    # 0644 is the standard read-everyone, write-root
+    # convention. A world-writable regression would let any
+    # user rewrite the L2 bridge ruleset and disable inline
+    # IDS/IPS surveillance silently. Locks the file-perm
+    # contract on the transparent L2 bridge ruleset render
+    # path.
+    grep -qE 'install[[:space:]].*-m[[:space:]]+0?644' "${INSTALL_DIR}/apply.sh" \
+        || grep -qE 'chmod[[:space:]]+0?644' "${INSTALL_DIR}/apply.sh"
+}
