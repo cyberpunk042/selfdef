@@ -467,3 +467,16 @@ EOF
     grep -qE 'emit_ocsf.*"zfs"|emit_ring.*"zfs"' "${SCRIPT}"
     grep -qE 'emit_ocsf.*"memory"|emit_ring.*"memory"' "${SCRIPT}"
 }
+
+@test "INVARIANT (ring-buffer filename embeds ts_ms + gate — chronological-per-gate sort contract)" {
+    # Sister to brain-wide ring-buffer naming INVARIANT family.
+    # emit_ring() writes /var/cache/selfdef/friction-audit/ring/
+    # \${ts_ms}-\${gate}.json — operator forensics rely on the
+    # ts_ms prefix for chronological ls -1 sorting + the gate
+    # suffix for per-gate `ls ring/*-pcie.json` filtering.
+    # A regression that swapped to a flat naming (just gate.json,
+    # no ts_ms) would silently overwrite earlier records of the
+    # same gate. Locks the ts_ms-prefix + gate-suffix naming
+    # contract on the friction-audit ring substrate.
+    grep -qE '\$\{ts_ms\}-\$\{gate\}\.json' "${SCRIPT}"
+}
