@@ -422,3 +422,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=report run_wd
     cap | grep -q '"profile":"report"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED listener on distinctive 4444 port surfaces in JSON sample for operator-triage routing)" {
+    # Sister to the high-port-range 4444+ backdoor signature
+    # INVARIANT and many other watchdog DELTA-detect sample-
+    # naming INVARIANTs across the brain. When a listener appears
+    # on a distinctive port (4444 = canonical metasploit/msfconsole
+    # default), the port number MUST surface in the JSON sample
+    # so operator dashboard routes triage to the right port
+    # (T1571 — Non-Standard Port; T1095 — Non-Application Layer
+    # Protocol; meterpreter default reverse-tcp port).
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:4444')"
+    mk_ss "${tcp}" ""
+    run_wd
+    cap | grep -q '4444'
+}
