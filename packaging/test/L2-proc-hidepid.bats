@@ -352,3 +352,20 @@ run_wd() {
     grep -qE '^Options=.*nodev' "${SYSTEMD_DIR}/proc.mount"
     grep -qE '^Options=.*noexec' "${SYSTEMD_DIR}/proc.mount"
 }
+
+@test "INVARIANT (proc.mount unit chmod 0644 — systemd .mount unit convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs across L2
+    # systemd unit substrates. The proc.mount unit at
+    # /etc/systemd/system/proc.mount MUST be mode 0644 (world-
+    # readable + root-write-only) because systemd reads
+    # .mount units to enumerate mount-namespaces at boot. Mode
+    # 0600 would defeat the unit parsing on hardened systemd
+    # deployments with ProtectSystem=strict on systemd itself.
+    # Locks file-mode contract on the proc-hidepid /proc-remount
+    # systemd-unit substrate.
+    write_config "noaccess" "false"
+    run_wd
+    [ -f "${SYSTEMD_DIR}/proc.mount" ]
+    mode="$(stat -c '%a' "${SYSTEMD_DIR}/proc.mount")"
+    [ "${mode}" = "644" ]
+}
