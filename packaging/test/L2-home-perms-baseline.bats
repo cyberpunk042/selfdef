@@ -527,3 +527,21 @@ s = data.get('summary', '')
 assert isinstance(s, str) and len(s) > 0, f'summary must be non-empty string, got {repr(s)}'
 "
 }
+
+@test "INVARIANT (module.toml category field present + non-empty — dashboard-grouping contract)" {
+    # Sister to brain-wide module.toml manifest-completeness
+    # INVARIANT family. The category field groups modules in
+    # the operator install dashboard (detection / hardening /
+    # disable / etc.). An empty/missing category would surface
+    # as an Uncategorized bucket, harming triage. Locks
+    # category-present discipline on the home-perms-baseline substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/home-perms-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+c = data.get('category', '')
+assert isinstance(c, str) and len(c) > 0, f'category must be non-empty string, got {repr(c)}'
+"
+}
