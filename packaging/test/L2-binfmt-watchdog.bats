@@ -210,3 +210,47 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-binfmt -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): binfmt-watchdog does NOT refresh baseline on suspicious-interpreter detection — alert STAYS until operator updates" {
+    # T1546 kernel-trigger code-exec primitive — alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    printf ':qemu-arm:M:0:magic:mask:/usr/bin/qemu-arm:OCF\n' > "${CONF}"
+    run_wd
+    printf ':evil:M:0:magic:mask:/tmp/evil:OC\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/binfmt.d + /run/binfmt.d + /usr/lib/binfmt.d axes — suspicious in EITHER → alert)" {
+    BINFMTD2="${TMP}/run-binfmt.d"; mkdir -p "${BINFMTD2}"
+    printf ':qemu-arm:M:0:magic:mask:/usr/bin/qemu-arm:OCF\n' > "${CONF}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_BINFMT_PROFILE="report" \
+    SELFDEF_BINFMT_BASELINE="${BASELINE}" \
+    SELFDEF_BINFMT_DIRS="${BINFMTD} ${BINFMTD2}" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf ':evil:M:0:magic:mask:/tmp/evil:OC\n' > "${BINFMTD2}/evil.conf"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_BINFMT_PROFILE="report" \
+    SELFDEF_BINFMT_BASELINE="${BASELINE}" \
+    SELFDEF_BINFMT_DIRS="${BINFMTD} ${BINFMTD2}" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (C flag detected: interpreter run with caller's creds is the privilege-escalation axis)" {
+    # The C flag is the dangerous one — it runs the interpreter with
+    # the CALLER's uid (so attacker-controlled interpreter runs with
+    # whatever creds invoke a matching binary). Lock that interpreter
+    # under writable root with C flag triggers alert (sister to the
+    # OC + OCF flag tests).
+    printf ':evil:M:0:magic:mask:/tmp/evil:C\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
