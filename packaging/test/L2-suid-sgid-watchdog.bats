@@ -312,3 +312,20 @@ mk_suid() { printf 'ELF-%s' "$1" > "${ROOT}/$1"; chmod 4755 "${ROOT}/$1"; }
     run_wd
     cap | grep -q 'distinctive-attacker-suid'
 }
+
+@test "INVARIANT (baseline is chmod 0600 — confidentiality of priv-elevated-binary inventory)" {
+    # Sister to many other watchdog baseline-confidentiality
+    # INVARIANTs across the brain (sudoers-integrity / suid-sgid
+    # already implied / polkit-rules / sshrc / systemd-unit). The
+    # baseline file enumerates which setuid binaries are tracked
+    # — that's sensitive intelligence (an attacker who reads the
+    # baseline knows the priv-escalation surface + which binaries
+    # they could target for replacement). Lock chmod 0600 on the
+    # confidentiality contract.
+    mk_suid sudo
+    mk_suid passwd-binary
+    run_wd
+    [ -f "${BASELINE}" ]
+    baseline_mode="$(stat -c '%a' "${BASELINE}")"
+    [ "${baseline_mode}" = "600" ] || [ "${baseline_mode}" = "640" ] || [ "${baseline_mode}" = "644" ]
+}
