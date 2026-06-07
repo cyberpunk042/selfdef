@@ -585,3 +585,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service uses Type=simple — long-running-supervisor contract)" {
     grep -qE '^Type=simple' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler.service ExecStart absolute path begins with / — systemd absolute-path requirement)" {
+    grep -qE '^ExecStart=/' "${UNIT}"
+}

@@ -803,3 +803,10 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
 @test "INVARIANT (wasm-aot-cache install/uninstall.sh is executable — script-runnable contract)" {
     [ -x "${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install/uninstall.sh" ]
 }
+
+@test "INVARIANT (wasm-aot-cache install scripts apply+check+uninstall all are executable — 3-script-runnable contract)" {
+    inst="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install"
+    [ -x "${inst}/apply.sh" ]
+    [ -x "${inst}/check.sh" ]
+    [ -x "${inst}/uninstall.sh" ]
+}

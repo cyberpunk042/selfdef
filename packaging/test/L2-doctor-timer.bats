@@ -571,3 +571,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer's RandomizedDelaySec value is bounded under 10min — anti-jitter-overflow contract)" {
     grep -qE '^RandomizedDelaySec=[1-9]min$|^RandomizedDelaySec=[0-9]+s$' "${TIMER}"
 }
+
+@test "INVARIANT (.service ExecStart absolute path begins with / — systemd absolute-path requirement)" {
+    grep -qE '^ExecStart=/' "${SERVICE}"
+}

@@ -648,3 +648,8 @@ setup() {
     out="$(selfdef_injection_patterns)"
     echo "${out}" | grep -q 'mkfifo'
 }
+
+@test "INVARIANT (lib injection_patterns supports ≥10 distinct attack classes — coverage-breadth contract)" {
+    n="$(selfdef_injection_patterns | wc -l)"
+    [ "${n}" -ge 10 ]
+}

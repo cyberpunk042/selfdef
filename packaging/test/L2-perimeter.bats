@@ -660,3 +660,12 @@ assert set(vals) == expected, f'allowlist must be sain-01 §6 verbatim set, got 
 @test "INVARIANT (postinst pre-creates /etc/selfdef/perimeter-extensions before tetragon signal — config-staging ordering)" {
     grep -qE '/etc/selfdef/perimeter-extensions' "${POSTINST}"
 }
+
+@test "INVARIANT (YAML uses spec.kprobes[0].args[0] explicit index=0 — kprobe-pointer-attestation contract)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+i = data['spec']['kprobes'][0]['args'][0]['index']
+assert i == 0, f'first arg index must be 0, got {i}'
+"
+}

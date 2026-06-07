@@ -724,3 +724,8 @@ assert 'sigma-correlator' in p, f'must provide sigma-correlator, got {p!r}'
     [ -f "${readme}" ]
     grep -qiE 'debian.package|selfdef.daemon' "${readme}"
 }
+
+@test "INVARIANT (detect-host module dir contains module.toml — module-manifest existence)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+}

@@ -403,3 +403,9 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service uses Type=simple — long-running-supervisor contract)" {
     grep -qE '^Type=simple' "${UNIT}"
 }
+
+@test "INVARIANT (guardian.service uses ProtectHome=read-only OR not set with strict — operator-home-protection contract)" {
+    # If ProtectHome is set, must be read-only or true; if not set, ProtectSystem=strict still provides /home read access bound
+    grep -qE '^ProtectHome=(read-only|true)' "${UNIT}" || \
+    grep -qE '^ProtectSystem=strict' "${UNIT}"
+}

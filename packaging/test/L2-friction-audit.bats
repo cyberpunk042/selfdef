@@ -692,3 +692,7 @@ EOF
 @test "INVARIANT (script Memory gate counts DIMM Size: lines — canonical-DIMM-presence-query path)" {
     grep -qE 'Size:|grep.*Size' "${SCRIPT}"
 }
+
+@test "INVARIANT (script declares INITIATING SOVEREIGN HARDWARE FRICTION AUDIT verbatim — operator-startup-signal contract)" {
+    grep -qE 'INITIATING SOVEREIGN HARDWARE FRICTION AUDIT' "${SCRIPT}"
+}
