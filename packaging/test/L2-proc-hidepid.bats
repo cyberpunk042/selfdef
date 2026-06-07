@@ -304,3 +304,22 @@ run_wd() {
     run_wd
     grep -qE '^Options=.*hidepid=' "${SYSTEMD_DIR}/proc.mount"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO proc.mount unit written AND NO daemon-reload fired when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/systemd/system/proc.mount AND
+    # without firing systemctl daemon-reload. A silent dry-run
+    # that committed would re-mount /proc on next reboot with
+    # hidepid restrictions on a host where operator was
+    # investigating /proc visibility behavior — could break
+    # monitoring agents (Prometheus node_exporter, top, ps)
+    # that depend on /proc visibility for their own UID. Locks
+    # dry-run-preserves-state on the proc-hidepid substrate.
+    write_config "invisible" "true"
+    rm -f "${SYSTEMD_DIR}/proc.mount"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${SYSTEMD_DIR}/proc.mount" ]
+    ! grep -qE 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
