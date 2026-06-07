@@ -365,3 +365,22 @@ TOMLEOF
     mode="$(stat -c '%a' "${SCRIPT_DST}")"
     [ "${mode}" = "755" ] || [ "${mode}" = "750" ] || [ "${mode}" = "700" ]
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. swap-encryption-detect manifest declares install +
+    # profile gating the resolver enforces; malformed manifest
+    # wedges the swap-encryption probe baseline. Python's
+    # tomllib is the canonical parser. Locks anti-malformed-
+    # manifest on the swap-encryption-detect substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/swap-encryption-detect/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'swap-encryption-detect', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
