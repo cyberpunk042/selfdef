@@ -616,3 +616,13 @@ EOF
     # Sister to brain-wide operator-success-signal INVARIANT family.
     grep -qE 'emit_ocsf 1003 1 "overall"' "${SCRIPT}"
 }
+
+@test "INVARIANT (script declares 4 verbatim diagnostic strings — operator-recognizable failure-mode-signal contract)" {
+    # Sister to brain-wide verbatim-string INVARIANT family.
+    # The script emits verbatim diagnostic strings on each
+    # gate failure (operator pattern-recognition relies on
+    # the exact string). Lock all 4 canonical strings.
+    grep -qE 'CRITICAL ARCHITECTURAL FRICTION ERROR' "${SCRIPT}"
+    grep -qE 'INITIATING SOVEREIGN HARDWARE FRICTION AUDIT' "${SCRIPT}"
+    grep -qE 'Hardware Matrix Audited Successfully' "${SCRIPT}"
+}

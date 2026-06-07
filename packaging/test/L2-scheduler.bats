@@ -511,3 +511,13 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     real_unit="$(readlink -f "${UNIT}")"
     case "${real_unit}" in */packaging/systemd/*) ;; *) false ;; esac
 }
+
+@test "INVARIANT (.service hardening set is identical to selfdef-{doctor,guardian} canonical hardening — Ring-0 unit-consistency contract)" {
+    grep -qE '^NoNewPrivileges=true' "${UNIT}"
+    grep -qE '^ProtectSystem=strict' "${UNIT}"
+    grep -qE '^LockPersonality=true' "${UNIT}"
+    grep -qE '^RestrictNamespaces=true' "${UNIT}"
+    grep -qE '^RestrictRealtime=true' "${UNIT}"
+    grep -qE '^RestrictSUIDSGID=true' "${UNIT}"
+    grep -qE '^SystemCallArchitectures=native' "${UNIT}"
+}

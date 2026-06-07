@@ -339,3 +339,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     real_unit="$(readlink -f "${UNIT}")"
     case "${real_unit}" in */packaging/systemd/*) ;; *) false ;; esac
 }
+
+@test "INVARIANT (postrm runs systemctl daemon-reload after unit removal — cleanup-systemd-cache-refresh contract)" {
+    grep -qE 'systemctl daemon-reload' "${POSTRM}"
+}

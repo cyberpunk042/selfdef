@@ -597,3 +597,16 @@ k = (data.get('install') or {}).get('kind', '')
 assert k in {'script', 'debian-package', 'compose', 'ansible'}, f'install.kind must be canonical, got {k!r}'
 "
 }
+
+@test "INVARIANT (bridge-l2 module.toml provides field present as TOML list of strings — capability-export contract)" {
+    # Sister to brain-wide module.toml provides INVARIANT family.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+p = data.get('provides')
+assert isinstance(p, list), f'provides must be TOML list, got {type(p).__name__}'
+"
+}

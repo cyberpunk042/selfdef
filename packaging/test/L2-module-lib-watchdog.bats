@@ -560,3 +560,7 @@ setup() {
     declare -F run >/dev/null
     declare -F toml_get >/dev/null
 }
+
+@test "INVARIANT (lib's version-gate redirects to stderr — fail-loud-message stderr-channel contract)" {
+    awk '/^if.*SELFDEF_MODULE_LIB_VERSION_REQUIRED/,/^fi/' "${LIB}" | grep -qE '>&2'
+}

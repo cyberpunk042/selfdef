@@ -559,3 +559,7 @@ assert 'namespace' not in meta, f'metadata.namespace must be absent (cluster-sco
     # Sister to brain-wide operator-extension staging INVARIANT family.
     grep -qE '/etc/selfdef/perimeter-extensions' "${POSTINST}"
 }
+
+@test "INVARIANT (postinst-installed YAML target dir is /etc/tetragon/tracing-policies — canonical Tetragon CRD location)" {
+    grep -qE '/etc/tetragon/tracing-policies/' "${POSTINST}"
+}

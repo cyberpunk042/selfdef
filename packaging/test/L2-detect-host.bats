@@ -553,3 +553,15 @@ ip = data.get('install_paths')
 assert ip is not None, 'install_paths must be present per SDD-026'
 "
 }
+
+@test "INVARIANT (detect-host module.toml [install_paths].scope = \"system\" — install_paths scope canonical contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+sc = (data.get('install_paths') or {}).get('scope', '')
+assert sc == 'system', f'scope must be system, got {sc!r}'
+"
+}

@@ -486,3 +486,23 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     ! grep -qE '^[[:space:]]+\[(Unit|Service|Install|Timer)\]' "${SERVICE}"
     ! grep -qE '^[[:space:]]+\[(Unit|Service|Install|Timer)\]' "${TIMER}"
 }
+
+@test "INVARIANT (.service hardening set is identical to selfdef-{guardian,scheduler} canonical hardening — Ring-0 unit-consistency contract)" {
+    # Sister to brain-wide cross-unit hardening-consistency
+    # INVARIANT family. The selfdef Ring-0 units (doctor/
+    # guardian/scheduler) share the same canonical hardening
+    # subset: NoNewPrivileges + ProtectSystem=strict +
+    # LockPersonality + RestrictNamespaces + RestrictRealtime
+    # + RestrictSUIDSGID + SystemCallArchitectures. A
+    # regression that diverged any unit's hardening would
+    # surface as security-baseline drift across the Ring-0
+    # surface. Locks the cross-unit canonical hardening
+    # consistency.
+    grep -qE '^NoNewPrivileges=true' "${SERVICE}"
+    grep -qE '^ProtectSystem=strict' "${SERVICE}"
+    grep -qE '^LockPersonality=true' "${SERVICE}"
+    grep -qE '^RestrictNamespaces=true' "${SERVICE}"
+    grep -qE '^RestrictRealtime=true' "${SERVICE}"
+    grep -qE '^RestrictSUIDSGID=true' "${SERVICE}"
+    grep -qE '^SystemCallArchitectures=native' "${SERVICE}"
+}
