@@ -313,3 +313,22 @@ run_wd() {
     backup_mode="$(stat -c '%a' "${BACKUP_DIR}/home-perms.bak")"
     [ "${backup_mode}" = "640" ] || [ "${backup_mode}" = "600" ] || [ "${backup_mode}" = "644" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO chmod fires AND NO backup file written when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without firing chmod on user homes AND without
+    # writing the backup file. A silent dry-run that tightened
+    # would lock users out of their own dotfiles AT PREVIEW
+    # TIME on a host where operator was investigating per-user
+    # access patterns. Locks dry-run-preserves-state on the
+    # home-perm tightening substrate.
+    write_config "group"
+    mk_home alice 1001 0755
+    rm -f "${BACKUP_DIR}/home-perms.bak"
+    alice_mode_before="$(stat -c '%a' "${HOMES}/alice")"
+    DRY_RUN=1 run_wd
+    [ ! -f "${BACKUP_DIR}/home-perms.bak" ]
+    alice_mode_after="$(stat -c '%a' "${HOMES}/alice")"
+    [ "${alice_mode_before}" = "${alice_mode_after}" ]
+}
