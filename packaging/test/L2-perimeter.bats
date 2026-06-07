@@ -226,3 +226,18 @@ teardown() {
     mode="$(stat -c '%a' "${YAML}")"
     [ "${mode}" = "644" ] || [ "${mode}" = "640" ]
 }
+
+@test "INVARIANT (postinst Tetragon hot-reload — daemon-running probe + reload-or-HUP fallback for tracing-policy refresh)" {
+    # Sister to brain-wide tetragon-policy-deploy INVARIANT family.
+    # When the perimeter YAML lands at /etc/tetragon/tracing-
+    # policies/, Tetragon's daemon must pick up the new policy
+    # without a host reboot. The postinst probes for an active
+    # tetragon.service via `systemctl is-active` (best-effort, no
+    # fail-loud on idle host), then issues `systemctl reload` and
+    # falls back to `systemctl kill -s HUP` for older Tetragon
+    # builds that don't honor the reload verb. Locks tetragon
+    # hot-reload discipline on the perimeter postinst substrate.
+    grep -q 'systemctl is-active tetragon.service' "${POSTINST}"
+    grep -q 'systemctl reload tetragon.service' "${POSTINST}"
+    grep -q 'systemctl kill -s HUP tetragon.service' "${POSTINST}"
+}
