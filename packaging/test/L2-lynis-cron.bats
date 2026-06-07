@@ -265,3 +265,24 @@ EOF
     run_wd
     cap | grep -q 'DISTINCTIVE-ATTACKER-FINDING'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. The selfdef-lynis logger tag
+    # must fire EXACTLY ONCE per scan regardless of how many
+    # warnings the lynis report surfaces. Multi-line output
+    # would break SDD-062 downstream JSON-line consumer (Sigma
+    # correlator). Locks consolidation discipline on lynis
+    # hardening-audit surveillance surface.
+    cat > "${REPORT}" <<'EOF'
+warning[]=W1|first|/etc|low
+warning[]=W2|second|/var|low
+warning[]=W3|third|/usr|low
+warning[]=W4|fourth|/boot|low
+warning[]=W5|fifth|/home|low
+hardening_index=50
+EOF
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-lynis -- ')
+    [ "${main_count}" = "1" ]
+}
