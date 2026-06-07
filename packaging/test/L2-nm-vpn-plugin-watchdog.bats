@@ -251,3 +251,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (relative-with-slash plugin path 'sub/dir/p.so' → alert: PWD-at-exec attacker primitive on NM VPN loader)" {
+    # Sister to krb5-plugins-watchdog + musl-ld-path-watchdog +
+    # gss-mech-watchdog relative-with-slash INVARIANTs already
+    # locked. A plugin path with embedded slashes BUT no leading
+    # slash (e.g. 'sub/dir/p.so' instead of '/sub/dir/p.so') is
+    # NOT a fully-qualified absolute path — NetworkManager's
+    # dlopen() will resolve it relative to its CWD at load time.
+    # An attacker who can affect NM's CWD (PWD-at-exec primitive
+    # — via systemd WorkingDirectory= injection) gets to control
+    # where the plugin .so loads from. Locks detection of the
+    # relative-with-slash variant on the NM VPN-plugin surface.
+    printf '[libnm]\nplugin=sub/dir/p.so\n' > "${NAME}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
