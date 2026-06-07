@@ -273,3 +273,18 @@ EOF
     cap | grep -q '"severity":"alert"'
     cap | grep -q '"event":"dbus_service_suspicious"'
 }
+
+@test "INVARIANT (Exec under /var/tmp w/ User=root: writable-root expansion + root-exec compound) " {
+    # Sister to the /tmp+User=root compound case above. /var/tmp is
+    # an equally-writable surface; root-exec triggered by client
+    # over D-Bus must alert regardless of which writable-root the
+    # Exec= path lives under. Locks axis-symmetry on the writable-
+    # root family across the compound surface.
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    svc /var/tmp/.attacker root > "${SVC}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"dbus_service_suspicious"'
+}
