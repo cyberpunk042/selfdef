@@ -284,3 +284,55 @@ EOF
     grep -qE '^Type=tmpfs' "${TMP_MOUNT}"
     grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (refuse-to-brick precedence over profile-key: tmpfs+ack=false ALWAYS dies regardless of other knobs)" {
+    # Sister to kernel-yama paranoid + unprivileged-userns deny
+    # refuse-to-brick architectural pattern. Lock that the
+    # acknowledge_tmpfs gate fires BEFORE any other knob (even if
+    # config carries extra options that COULD bypass other checks,
+    # this gate fires first).
+    cat > "${CONF}" <<'EOF'
+profile = "tmpfs"
+acknowledge_tmpfs = false
+# any number of other knobs here must not change the outcome
+extra_knob = "anything"
+EOF
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_TMPFS_BASELINE_CONFIG="${CONF}" \
+        SELFDEF_SYSTEMD_DIR="${SYSTEMD_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"acknowledge_tmpfs"* ]]
+    ! [ -f "${TMP_MOUNT}" ]
+}
+
+@test "INVARIANT (drop-in noexec+nosuid+nodev triple coverage: every hardening flag explicitly present)" {
+    # Both /tmp and /var/tmp drop-ins must carry ALL THREE
+    # hardening options. Missing any one leaves a residual surface
+    # (e.g. missing nosuid lets setuid binaries in /tmp still
+    # escalate; missing nodev lets device-special files persist
+    # there; missing noexec lets binaries execute).
+    write_config "noexec"
+    run_wd
+    for f in "${TMP_DROPIN}" "${VARTMP_DROPIN}"; do
+        grep -qE 'noexec' "${f}"
+        grep -qE 'nosuid' "${f}"
+        grep -qE 'nodev' "${f}"
+    done
+}
+
+@test "INVARIANT (var-tmp drop-in is mount-options-only — never a Type=tmpfs replacement on /var/tmp)" {
+    # /var/tmp must survive reboot per POSIX (sister to /tmp which
+    # explicitly does NOT). The tmpfs profile must NEVER convert
+    # /var/tmp to tmpfs — only /tmp. Locks the architectural
+    # boundary: var-tmp.mount.d/50-selfdef.conf is options-only,
+    # NEVER a full var-tmp.mount replacement.
+    write_config "tmpfs" "true"
+    run_wd
+    [ -f "${VARTMP_DROPIN}" ]
+    # var-tmp drop-in must NOT declare Type=tmpfs (would break
+    # reboot persistence of /var/tmp).
+    ! grep -qE '^Type=tmpfs' "${VARTMP_DROPIN}"
+    # Locks that no full var-tmp.mount replacement file appears.
+    ! [ -f "${SYSTEMD_DIR}/var-tmp.mount" ]
+}
