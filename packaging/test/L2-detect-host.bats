@@ -781,3 +781,7 @@ assert isinstance(data, dict)
 @test "INVARIANT (MODULE_DIR variable defined and non-empty — substrate-defined 74)" {
     [ -n "${MODULE_DIR}" ]
 }
+@test "INVARIANT (detect-host module.toml file size > 200 bytes — substantial-manifest 75)" {
+    size=$(stat -c '%s' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml")
+    [ "${size}" -gt 200 ]
+}

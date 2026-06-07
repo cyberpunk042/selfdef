@@ -867,3 +867,7 @@ assert isinstance(data, dict)
 @test "INVARIANT (MODULE_DIR variable defined and non-empty — substrate-defined 74)" {
     [ -n "${MODULE_DIR}" ]
 }
+@test "INVARIANT (slm-cpu-loop install/apply.sh size > 100 bytes — substantial-apply-script 75)" {
+    size=$(stat -c '%s' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/apply.sh")
+    [ "${size}" -gt 100 ]
+}

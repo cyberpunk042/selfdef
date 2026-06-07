@@ -734,3 +734,7 @@ EOF
 @test "INVARIANT (SCRIPT variable defined and non-empty — substrate-defined 74)" {
     [ -n "${SCRIPT}" ]
 }
+@test "INVARIANT (script file size > 200 bytes — substantial-script-body 75)" {
+    size=$(stat -c '%s' "${SCRIPT}")
+    [ "${size}" -gt 200 ]
+}

@@ -613,3 +613,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service file path is not empty — defined-substrate 74)" {
     [ -n "${SERVICE}" ]
 }
+@test "INVARIANT (.service file size > 100 bytes — substantial-service-unit 75)" {
+    size=$(stat -c '%s' "${SERVICE}")
+    [ "${size}" -gt 100 ]
+}

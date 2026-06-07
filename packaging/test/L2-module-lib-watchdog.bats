@@ -692,3 +692,7 @@ setup() {
 @test "INVARIANT (LIB variable defined and non-empty — substrate-defined 74)" {
     [ -n "${LIB}" ]
 }
+@test "INVARIANT (lib file size > 500 bytes — substantial-library 75)" {
+    size=$(stat -c '%s' "${LIB}")
+    [ "${size}" -gt 500 ]
+}

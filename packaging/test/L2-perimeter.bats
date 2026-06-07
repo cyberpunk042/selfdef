@@ -716,3 +716,7 @@ assert c == 'sys_execve', f'call must be sys_execve, got {c!r}'
 @test "INVARIANT (YAML variable defined and non-empty — substrate-defined 74)" {
     [ -n "${YAML}" ]
 }
+@test "INVARIANT (YAML file size > 200 bytes — substantial-policy 75)" {
+    size=$(stat -c '%s' "${YAML}")
+    [ "${size}" -gt 200 ]
+}

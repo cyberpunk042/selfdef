@@ -449,3 +449,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (UNIT variable defined and non-empty — substrate-defined 74)" {
     [ -n "${UNIT}" ]
 }
+@test "INVARIANT (guardian.service file size > 200 bytes — substantial-service-unit 75)" {
+    size=$(stat -c '%s' "${UNIT}")
+    [ "${size}" -gt 200 ]
+}
