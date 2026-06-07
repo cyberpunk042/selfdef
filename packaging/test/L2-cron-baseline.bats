@@ -378,3 +378,15 @@ TOMLEOF
     [ -f "${AT_ALLOW}" ]
     [ "$(stat -c '%a' "${AT_ALLOW}")" = "644" ] || [ "$(stat -c '%a' "${AT_ALLOW}")" = "640" ] || [ "$(stat -c '%a' "${AT_ALLOW}")" = "600" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on cron-baseline installer surface
+    # across 4-file install (cron.allow + cron.deny + at.allow +
+    # at.deny) phases.
+    write_config "root-only"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"cron-baseline"')
+    [ "${count}" = "1" ]
+}
