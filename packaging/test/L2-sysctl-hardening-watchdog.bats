@@ -358,3 +358,17 @@ seed_benign() {
     ! grep -qE 'sysctl[[:space:]]+-w' "${WD}"
     ! grep -qE 'echo[[:space:]]+.*>[[:space:]]*/proc/sys/' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # sysctl-hardening-watchdog runs ON the timer's scheduled
+    # fire — scans /etc/sysctl.conf + sysctl.d/* for weakening
+    # of canonical hardening sysctls (kptr_restrict, dmesg_restrict,
+    # rp_filter, etc.), emits a verdict, then exits. Type=
+    # simple would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the sysctl-hardening-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/sysctl-hardening-watchdog/systemd/selfdef-sysctl-hardening.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
