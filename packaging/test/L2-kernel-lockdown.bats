@@ -389,3 +389,23 @@ EOF
     file="${SYSCTL_DIR}/50-selfdef-kernel-lockdown.conf"
     [ ! -f "${file}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${file}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. kernel-lockdown manifest declares install + profile
+    # gating (balanced / strict) the resolver enforces;
+    # malformed manifest wedges the kernel.modules_disabled
+    # boot-time persistence. Python's tomllib is the canonical
+    # parser. Locks anti-malformed-manifest on the kernel-
+    # lockdown substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/kernel-lockdown/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'kernel-lockdown', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
