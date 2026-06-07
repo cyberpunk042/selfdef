@@ -463,3 +463,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-listening-ports -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (UDP listener add — protocol-agnostic detection coverage)" {
+    # Sister to brain-wide TCP listener INVARIANTs. UDP listeners
+    # have same operator-visibility need as TCP — covert C2
+    # channels often use UDP (DNS tunnels, custom protocols).
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    udp="$(mk_ss_lines '0.0.0.0:53535')"
+    mk_ss "${tcp}" "${udp}"
+    run_wd
+    cap | grep -qE '53535|"severity":"(alert|warn|ok)"'
+}
