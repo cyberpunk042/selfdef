@@ -313,3 +313,15 @@ TOMLEOF
     [ ! -f "${PROFILE_D}/50-selfdef-umask.sh" ]
     [ ! -f "${LOGIN_DEFS_D}/50-selfdef-umask.conf" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on umask-baseline installer
+    # surface across dual-drop-in (profile.d + login.defs)
+    # phases.
+    write_config "strict"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"umask-baseline"')
+    [ "${count}" = "1" ]
+}
