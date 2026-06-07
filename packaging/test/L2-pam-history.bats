@@ -331,3 +331,19 @@ TOMLEOF
     [ -n "${strict_n}" ]
     [ "${strict_n}" -ge "${standard_n}" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO pwhistory.conf written AND NO PAM file modified when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/security/pwhistory.conf AND
+    # without modifying PAM files. A silent dry-run that
+    # committed would activate password-history enforcement on
+    # a host where operator was investigating PAM behavior —
+    # could block legitimate password changes that intentionally
+    # reuse a recent password during testing. Locks dry-run-
+    # preserves-state on the PAM password-history substrate.
+    write_config "strict"
+    rm -f "${PWHISTORY_CONF}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${PWHISTORY_CONF}" ]
+}
