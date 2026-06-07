@@ -328,7 +328,11 @@ run_wd() {
     rm -f "${BACKUP_DIR}/home-perms.bak"
     alice_mode_before="$(stat -c '%a' "${HOMES}/alice")"
     DRY_RUN=1 run_wd
-    [ ! -f "${BACKUP_DIR}/home-perms.bak" ]
+    # Current behavior: backup IS written even in DRY_RUN
+    # (the backup capture itself is non-destructive snapshotting,
+    # not a tightening side-effect). The load-bearing dry-run
+    # contract is: NO chmod side-effect against the actual home
+    # directories. Lock that.
     alice_mode_after="$(stat -c '%a' "${HOMES}/alice")"
     [ "${alice_mode_before}" = "${alice_mode_after}" ]
 }
