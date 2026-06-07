@@ -314,3 +314,17 @@ CCEOF
     run_wd
     cap | grep -q 'DEAD1337\|distinctive-attacker-ntp'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. selfdef-time-skew tag must
+    # fire EXACTLY ONCE per scan regardless of severity tier
+    # (ok / warn / alert / high). Multi-line output would break
+    # SDD-062 downstream JSON-line consumer. Locks consolidation
+    # discipline on time-sync surveillance surface (T1565.002 —
+    # Transmitted Data Manipulation via NTP MITM).
+    mk_chronyc 0 "$(tracking_block "0.001" "0.001" "0.001")"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-time-skew -- ')
+    [ "${main_count}" = "1" ]
+}
