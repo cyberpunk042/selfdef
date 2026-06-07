@@ -283,3 +283,18 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: skel dotfile invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546.004
+    # skel per-new-user persistence — when a new user is added,
+    # /etc/skel/* is copied into their home; any payload there
+    # runs AS that user on first login. Beyond inline reverse-
+    # shell payloads, attackers stage benign-looking skel
+    # dotfiles that invoke a binary in writable-root.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# .bashrc\n/tmp/staged_payload\n' > "${SKELD}/.bashrc"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
