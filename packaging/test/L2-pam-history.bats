@@ -362,3 +362,11 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"pam-history"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (pwhistory.conf chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs.
+    write_config "standard"
+    run_wd
+    [ -f "${PWHISTORY_CONF}" ]
+    [ "$(stat -c '%a' "${PWHISTORY_CONF}")" = "644" ]
+}
