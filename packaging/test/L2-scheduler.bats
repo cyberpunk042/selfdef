@@ -262,3 +262,17 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^Wants=selfdef-guardian.service' "${UNIT}"
     ! grep -qE '^Requires=selfdef-guardian.service' "${UNIT}"
 }
+
+@test "INVARIANT (unit Documentation= references the SDD-031 design document — operator-audit-trail to spec rationale)" {
+    # Sister to brain-wide systemd Documentation= INVARIANT
+    # family. The scheduler unit's Documentation= directive
+    # points specifically at docs/sdd/031-goldilocks-scheduler.md
+    # so an operator triaging unit behavior via `systemctl status`
+    # can jump directly to the design rationale for the chosen
+    # User=root + ZFS-audit + PSI-driven routing semantics. A
+    # regression that swaps the URL away from the SDD-031 spec
+    # would break the operator-audit-trail to the source-of-truth.
+    # Locks the SDD-031 Documentation= spec-link discipline on
+    # the scheduler unit substrate.
+    grep -qE '^Documentation=.*sdd/031-goldilocks-scheduler' "${UNIT}"
+}
