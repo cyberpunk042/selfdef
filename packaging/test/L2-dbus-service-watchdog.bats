@@ -419,3 +419,16 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # dbus-service-watchdog runs ON the timer's scheduled fire —
+    # scans /usr/share/dbus-1/{system,session}-services for
+    # suspicious Exec/User/SystemdService directives, emits a
+    # verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the dbus-service-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/dbus-service-watchdog/systemd/selfdef-dbus-service.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
