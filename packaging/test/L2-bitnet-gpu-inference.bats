@@ -262,3 +262,16 @@ teardown_real_run() {
     # broken state.
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/apply.sh"
 }
+
+@test "INVARIANT (check.sh + uninstall.sh use set -euo pipefail — fail-loud invariant across full module surface)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # apply.sh's fail-loud already locked; check.sh + uninstall.sh
+    # are the OTHER two operator-facing scripts in the module
+    # surface. Silent check.sh failure would mask runtime.env +
+    # schedule.json corruption from operator observation; silent
+    # uninstall.sh failure leaves the BitNet GPU runtime layer in
+    # half-removed state during package purge. Locks fail-loud
+    # contract on the full module-script surface, not just apply.sh.
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/check.sh"
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
+}
