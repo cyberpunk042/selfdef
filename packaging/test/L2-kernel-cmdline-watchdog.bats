@@ -294,3 +294,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # gets added to the denylist later.
     cap | grep -q '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (weakener-detect: init=/bin/bash → alert): single-user PID-1 hijack via boot-edit" {
+    # Sister to the grub-config-watchdog init= alert axis already
+    # locked (GRUB_CMDLINE_LINUX init=/tmp/.init scan). This
+    # watchdog observes the LIVE kernel cmdline (/proc/cmdline)
+    # rather than the grub config — same attack but the runtime
+    # detection point is different. If a kernel boots with
+    # init=/bin/bash (or any init=), it's the "single-user shell"
+    # boot-edit attack: dropping to a root shell instead of
+    # /sbin/init. T1542 boot-time PID-1 hijack. Locks init= axis
+    # on the live-cmdline observation surface alongside the
+    # mitigations/selinux/apparmor weakener family.
+    write_cmdline "BOOT_IMAGE=/vmlinuz ro init=/bin/bash"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
