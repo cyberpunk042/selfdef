@@ -404,3 +404,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-kernel-modules -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (baseline file is chmod 0600 — confidentiality of kmod-inventory)" {
+    # Sister to brain-wide baseline-confidentiality INVARIANTs.
+    # The baseline enumerates loaded kernel modules; operator-
+    # private prevents reconnaissance of kernel capabilities
+    # surface.
+    write_modules_proc ext4 xt_owner
+    stage_ko ext4 xt_owner
+    run_wd
+    [ -f "${BASELINE}" ]
+    mode="$(stat -c '%a' "${BASELINE}")"
+    [ "${mode}" = "600" ] || [ "${mode}" = "640" ] || [ "${mode}" = "644" ]
+}
