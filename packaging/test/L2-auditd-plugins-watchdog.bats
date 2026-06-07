@@ -828,3 +828,14 @@ seed_benign() {
     script_dir="${BATS_TEST_DIRNAME}/../../modules/auditd-plugins-watchdog/systemd"
     [ -f "${script_dir}/auditd-plugins-watchdog.sh" ] ||     [ -n "$(ls "${script_dir}"/*.sh 2>/dev/null)" ]
 }
+
+@test "INVARIANT (auditd-plugins-watchdog timer's Unit= field references a .service in the same module dir — co-located unit-pair binding contract)" {
+    # Sister to brain-wide timer Unit= INVARIANT family.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/auditd-plugins-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        unit=$(grep -E '^Unit=' "${t}" | head -1 | cut -d= -f2)
+        [ -n "${unit}" ]
+        [ -f "${timer_dir}/${unit}" ]
+    done
+}

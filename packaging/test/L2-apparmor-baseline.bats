@@ -974,3 +974,15 @@ inst = data.get('install')
 assert isinstance(inst, dict), f'[install] must be TOML table, got {type(inst).__name__}'
 "
 }
+
+@test "INVARIANT (apparmor-baseline module.toml version field present + non-empty — version-required contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/apparmor-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('version', '')
+assert v, f'version must be non-empty, got {v!r}'
+"
+}

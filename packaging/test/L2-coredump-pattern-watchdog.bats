@@ -789,3 +789,14 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
     script_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
     [ -f "${script_dir}/coredump-pattern-watchdog.sh" ] ||     [ -n "$(ls "${script_dir}"/*.sh 2>/dev/null)" ]
 }
+
+@test "INVARIANT (coredump-pattern-watchdog timer's Unit= field references a .service in the same module dir — co-located unit-pair binding contract)" {
+    # Sister to brain-wide timer Unit= INVARIANT family.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        unit=$(grep -E '^Unit=' "${t}" | head -1 | cut -d= -f2)
+        [ -n "${unit}" ]
+        [ -f "${timer_dir}/${unit}" ]
+    done
+}

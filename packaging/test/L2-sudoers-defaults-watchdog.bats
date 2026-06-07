@@ -829,3 +829,14 @@ assert 'install' in data, 'install missing'
     script_dir="${BATS_TEST_DIRNAME}/../../modules/sudoers-defaults-watchdog/systemd"
     [ -f "${script_dir}/sudoers-defaults-watchdog.sh" ] ||     [ -n "$(ls "${script_dir}"/*.sh 2>/dev/null)" ]
 }
+
+@test "INVARIANT (sudoers-defaults-watchdog timer's Unit= field references a .service in the same module dir — co-located unit-pair binding contract)" {
+    # Sister to brain-wide timer Unit= INVARIANT family.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/sudoers-defaults-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        unit=$(grep -E '^Unit=' "${t}" | head -1 | cut -d= -f2)
+        [ -n "${unit}" ]
+        [ -f "${timer_dir}/${unit}" ]
+    done
+}
