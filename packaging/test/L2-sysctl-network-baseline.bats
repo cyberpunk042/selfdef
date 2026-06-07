@@ -291,3 +291,20 @@ run_wd() {
     grep -qE 'net\.ipv4\.conf\.all\.rp_filter\s*=\s*[12]' "${DROPIN}" \
         || grep -qE 'rp_filter\s*=\s*[12]' "${DROPIN}"
 }
+
+@test "INVARIANT (drop-in carries tcp_syncookies=1 — SYN-flood defense)" {
+    # Sister to rp_filter + other sysctl-baseline directive
+    # INVARIANTs. net.ipv4.tcp_syncookies=1 enables SYN cookies
+    # protecting the host's listening TCP sockets against SYN-
+    # flood DoS attacks (T1499.001 — Endpoint Denial of Service:
+    # OS Exhaustion Flood). Without syncookies, a remote
+    # attacker can exhaust the kernel's half-open-connection
+    # table and make the host stop accepting new TCP connections
+    # (including operator's incoming SSH). Lock that all
+    # profiles carry this directive — it has no operator-
+    # legitimate reason to be 0.
+    write_config "baseline"
+    run_wd
+    grep -qE 'net\.ipv4\.tcp_syncookies\s*=\s*1' "${DROPIN}" \
+        || grep -qE 'tcp_syncookies\s*=\s*1' "${DROPIN}"
+}
