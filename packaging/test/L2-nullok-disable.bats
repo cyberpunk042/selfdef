@@ -457,3 +457,22 @@ EOF
     output="$(run_wd 2>&1)"
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(libpam-modules|pam|libpam0g)'
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. nullok-disable manifest declares install + profile
+    # gating the resolver enforces; malformed manifest wedges
+    # the PAM-nullok removal baseline. Python's tomllib is the
+    # canonical parser. Locks anti-malformed-manifest on the
+    # nullok-disable substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/nullok-disable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'nullok-disable', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
