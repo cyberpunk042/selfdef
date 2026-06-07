@@ -281,3 +281,17 @@ TOMLEOF
     ! grep -q 'systemctl kill -s HUP systemd-logind' "${SYSEOF_LOG}"
     ! grep -q 'systemctl reload systemd-logind' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (burst-guard profile does NOT mask ctrl-alt-del.target — mutual-exclusion contract)" {
+    # Sister to the mask-no-logind INVARIANT above (the inverse
+    # half of the mutual-exclusion contract). The burst-guard
+    # profile is the SOFTER neutralization (logind drop-in tunes
+    # the burst rate to 0); it must NOT additionally fire mask on
+    # ctrl-alt-del.target — that would be the mask profile's
+    # mechanism. Locks the asymmetric profile-content boundary so
+    # operator inspection can reliably tell which profile is
+    # live just from the systemctl audit trail.
+    write_config "burst-guard"
+    run_wd
+    ! grep -q 'systemctl mask ctrl-alt-del.target' "${SYSEOF_LOG}"
+}
