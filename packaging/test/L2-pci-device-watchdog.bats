@@ -415,3 +415,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (no auto-eject: pci-device-watchdog NEVER emits echo > /sys/bus/pci/devices/*/remove — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-remediation + surveillance-
+    # not-destruction INVARIANTs. The pci-device-watchdog
+    # DETECTS T1200 Hardware Additions (evil-USB-controller,
+    # Thunderbolt-DMA-card, FireWire-DMA-card) but MUST NEVER
+    # emit shell commands that auto-remove the PCI device via
+    # /sys/bus/pci/devices/<id>/remove or echo 1 > remove.
+    # Auto-removal of a planted DMA device would destroy
+    # forensic evidence (operator can't analyze the device for
+    # threat-intel) AND could disconnect operator-legitimate
+    # devices (operator legitimately installed new GPU but
+    # watchdog flags + auto-removes). Surveillance, never
+    # remediation. Locks anti-evidence-destruction contract on
+    # the pci-device surveillance substrate.
+    ! grep -qE 'echo[[:space:]]+1[[:space:]]*>[[:space:]]*.*/sys/bus/pci/.*/(remove|reset)' "${WD}"
+    ! grep -qE 'echo[[:space:]]+0[[:space:]]*>[[:space:]]*.*/sys/bus/pci/' "${WD}"
+}
