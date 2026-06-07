@@ -355,3 +355,25 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: tmpfiles-watchdog NEVER deletes tmpfiles.d entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # tmpfiles-watchdog DETECTS T1548.001 setuid/setgid + file-
+    # capability privilege-escalation via tmpfiles.d but MUST
+    # NEVER emit sed/awk/rm commands to auto-clean the
+    # tmpfiles.d entry. The detected entry may be operator-
+    # legitimate (custom application creating /var/log dir with
+    # specific perms at boot) — silent auto-delete would
+    # destroy operator baseline state AND could break early-
+    # boot application setup. Surveillance, never remediation.
+    # Locks anti-data-loss contract on the tmpfiles
+    # surveillance substrate.
+    seed_benign
+    printf 'f /tmp/.evil-suid 4755 root root - -\n' > "${CONF}"
+    run_wd
+    [ -f "${CONF}" ]
+    grep -q '.evil-suid' "${CONF}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*tmpfiles'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+}
