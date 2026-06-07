@@ -237,3 +237,43 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (pts/0 with leading whitespace: '  pts/0' still triggers alert — whitespace-tolerant on both sides)" {
+    # Sister to trailing-whitespace tolerance. Attacker may use
+    # leading-space evasion. Parser must normalize.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'tty1\ntty2\nttyS0\n   pts/0\n' > "${SECURETTY}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (network-tty axis: a fresh ttySn (serial) addition is WARN not ALERT — ttyS family is physical-tty grade)" {
+    # Distinguishing physical serial (ttyS0/1/2) from network pty
+    # (pts/N) — only the network class fires alert. A regression
+    # that promoted ttyS additions to alert would mis-grade
+    # operator's legitimate serial-console expansion. Lock
+    # current architectural boundary.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'tty1\ntty2\nttyS0\nttyS1\n' > "${SECURETTY}"  # ttyS1 added
+    run_wd
+    cap | grep -qE '"event":"securetty_changed"'
+    cap | grep -q '"severity":"warn"'
+    ! cap | grep -q '"event":"securetty_widened"'
+}
+
+@test "INVARIANT (sample names the offending pts in JSON — operator triage routing)" {
+    # When a pts/N widening fires, sample MUST surface the pts
+    # name so operator dashboard routes triage to the right TTY.
+    # Sister contract: polkit-rules/nfs-exports/rhosts/tmpfiles
+    # sample-naming pattern.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'tty1\ntty2\nttyS0\npts/77\n' > "${SECURETTY}"
+    run_wd
+    cap | grep -q 'pts/77'
+}
