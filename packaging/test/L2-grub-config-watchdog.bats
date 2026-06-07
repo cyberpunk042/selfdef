@@ -317,3 +317,16 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs. Multi-
+    # finding scenario locks consolidation discipline on T1542
+    # boot-time persistence + hardening-bypass surveillance.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="init=/tmp/.evil-init nokaslr"\n' > "${DEFAULT}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-grub-config -- ')
+    [ "${main_count}" = "1" ]
+}
