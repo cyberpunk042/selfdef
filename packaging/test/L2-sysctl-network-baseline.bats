@@ -327,3 +327,21 @@ run_wd() {
     grep -qE 'net\.ipv4\.conf\..*\.accept_redirects\s*=\s*0' "${DROPIN}" \
         || grep -qE 'accept_redirects\s*=\s*0' "${DROPIN}"
 }
+
+@test "INVARIANT (drop-in carries log_martians=1 — anti-spoof packet logging for forensic observability)" {
+    # Sister to rp_filter + tcp_syncookies + accept_redirects
+    # sysctl-baseline directive INVARIANTs. net.ipv4.conf.*.
+    # log_martians=1 instructs the kernel to log packets with
+    # impossible source addresses (martian packets — typically
+    # spoofed-source-address scans, or misconfigured devices
+    # leaking RFC1918 traffic). Without it, attacker IP-spoofing
+    # probes pass through silently — operator forensic timeline
+    # has no evidence the probes happened. Lock that baseline
+    # carries the log_martians directive — operator post-incident
+    # forensic observability on the anti-spoof family axis sister
+    # to rp_filter detection-vs-blocking complement.
+    write_config "baseline"
+    run_wd
+    grep -qE 'net\.ipv4\.conf\..*\.log_martians\s*=\s*1' "${DROPIN}" \
+        || grep -qE 'log_martians\s*=\s*1' "${DROPIN}"
+}
