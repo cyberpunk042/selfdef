@@ -333,3 +333,14 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"mta-loopback-detect"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (timer unit carries OnUnitActiveSec — recurrent re-armed cadence beyond OnBootSec one-shot)" {
+    # Sister to brain-wide timer OnUnitActiveSec INVARIANTs. The
+    # mta-loopback-detect timer MUST fire AT CADENCE not just on-
+    # boot — operator can configure a new SMTP listener mid-uptime
+    # (apt install postfix), and watchdog must catch it without
+    # waiting for reboot.
+    write_config "report"
+    run_wd
+    grep -qE '^OnUnitActiveSec=' "${TIMER_DST}"
+}
