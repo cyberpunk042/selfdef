@@ -368,3 +368,16 @@ Scanned files: 1"
     # substrate.
     ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+clamav' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family
+    # for timer-driven scheduled probes. The clamav-cron scan
+    # runs ON the timer's scheduled fire — refreshes signatures,
+    # scans, emits a verdict, then exits. Type=simple would leave
+    # systemd thinking the scanner is a long-running daemon,
+    # breaking timer OnUnitActiveSec semantics. Locks oneshot-
+    # probe contract on the clamav-cron substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/clamav-cron/systemd/selfdef-clamav-scan.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
