@@ -386,3 +386,18 @@ setup() {
     # Also verify run() function body actually checks DRY_RUN:
     awk '/^run\(\)/,/^}/' "${LIB}" | grep -qE 'DRY_RUN'
 }
+
+@test "INVARIANT (lib does NOT define logger() — watchdog scripts must use system logger directly per SDD-062)" {
+    # Sister to brain-wide SDD-062 logger-direct INVARIANT
+    # family. The module-lib's log() helper writes to stderr
+    # for human-readable diagnostics — it MUST NOT be conflated
+    # with the JSON-record logger() path. Watchdog scripts call
+    # `logger -t selfdef-<wd>` directly (NOT via a lib wrapper)
+    # so each watchdog can vary its tag without rebuilding the
+    # lib. A regression that added a lib-level logger() wrapper
+    # would centralize tag policy in the lib, defeating SDD-062's
+    # per-watchdog tag flexibility. Locks the no-wrapper-logger
+    # discipline on the module-lib substrate.
+    ! grep -qE '^logger\(\)' "${LIB}"
+    ! type -t logger | grep -q '^function$' || true
+}
