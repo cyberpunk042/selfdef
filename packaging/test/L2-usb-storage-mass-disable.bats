@@ -319,3 +319,14 @@ usb_storage            73728  0' DRY_RUN=1 run_wd
     [ -f "${MODPROBE_D}/50-selfdef-usb-storage.conf" ]
     [ "$(stat -c '%a' "${MODPROBE_D}/50-selfdef-usb-storage.conf")" = "644" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on usb-storage-mass-disable
+    # installer surface across modprobe-drop-in + rmmod phases.
+    write_config "blocked"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"usb-storage-mass-disable"')
+    [ "${count}" = "1" ]
+}
