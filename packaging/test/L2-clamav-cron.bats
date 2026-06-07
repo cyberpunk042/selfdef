@@ -283,3 +283,18 @@ Scanned files: 1"
     printf '%s' "${main_line}" | grep -q 'Only.Trojan'
     ! printf '%s' "${main_line}" | grep -q '||'
 }
+
+@test "INVARIANT (clamscan rc=2 → high severity / clamav_internal_error — sister axis to aide-bridge rc=8+ high)" {
+    # Sister to L2-aide-bridge's rc=8 internal-error → high INVARIANT.
+    # When clamscan exits non-zero for INTERNAL reasons (not finding
+    # malware, which is rc=1) — e.g. signature DB corrupt, scan path
+    # unreadable, config parse error — severity must escalate to
+    # high (not alert which is for found-malware), so operator
+    # dashboard distinguishes scanner-health from scanner-finding.
+    # Locks the severity ladder lower bound for the wrapper-error
+    # axis (sister to clamav-cron's found-malware alert axis).
+    mk_clam 2 "ERROR: Can't open file or directory"
+    run_wd
+    cap | grep -qE '"severity":"(high|alert)"'
+    cap | grep -q '"clamscan_rc":2'
+}
