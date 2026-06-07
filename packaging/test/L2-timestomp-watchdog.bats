@@ -291,3 +291,35 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (no auto-delete: timestomp-watchdog NEVER emits rm/unlink on anomalous files — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-uninstall + no-auto-delete
+    # INVARIANTs. The timestomp-watchdog DETECTS T1070.006
+    # Timestomp anti-forensics (attacker tampering with file
+    # mtime/atime/ctime to evade timeline analysis) but MUST
+    # NEVER emit rm/unlink commands to auto-delete the
+    # tampered files. Forensic evidence value of timestomped
+    # files is HIGHER than benign files (operator triage needs
+    # to inspect them, hash them, copy them off-host for
+    # analysis) — silent auto-delete would destroy the very
+    # forensic trail the watchdog is meant to surface.
+    # Surveillance, never destruction. Locks anti-evidence-
+    # destruction contract on the timestomp surveillance
+    # substrate.
+    for i in 1 2 3 4; do
+        printf 'x' > "${ROOT}/anomaly-${i}"
+        touch -d "2099-01-0${i}" "${ROOT}/anomaly-${i}"
+    done
+    output="$(run_wd 2>&1)"
+    # All 4 anomalous files MUST remain on disk.
+    for i in 1 2 3 4; do
+        [ -f "${ROOT}/anomaly-${i}" ]
+    done
+    # Watchdog source MUST NEVER call find -delete (anti-
+    # forensic auto-purge) AND MUST NEVER rm a scan-target
+    # variable. The trap-cleanup `rm $tmp` is the only allowed
+    # rm — assert no find -delete + no rm/unlink on scan-loop
+    # variables (file, target, path).
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+    ! grep -qE 'rm[[:space:]]+(-[rf]+[[:space:]]+)?"?\$\{?(SCAN_ROOT|FILE|TARGET|PATH|file|target|path)[\}"]' "${WD}"
+}
