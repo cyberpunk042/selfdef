@@ -389,3 +389,22 @@ TOMLEOF
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+fail2ban'
     ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${JAIL_D}/50-selfdef.conf"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. fail2ban-bridge manifest declares install + profile
+    # gating (standard / broad) the resolver enforces; malformed
+    # manifest wedges the fail2ban jail baseline. Python's
+    # tomllib is the canonical parser. Locks anti-malformed-
+    # manifest on the fail2ban-bridge substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'fail2ban-bridge', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
