@@ -323,3 +323,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -qE 'find[[:space:]].*-delete' "${WD}"
     ! grep -qE 'rm[[:space:]]+(-[rf]+[[:space:]]+)?"?\$\{?(SCAN_ROOT|FILE|TARGET|PATH|file|target|path)[\}"]' "${WD}"
 }
+
+@test "INVARIANT (no auto-touch: timestomp-watchdog NEVER emits touch commands to restore mtimes — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-remediation / surveillance-
+    # not-destruction INVARIANTs across L2 watchdog suites. The
+    # timestomp-watchdog DETECTS T1070.006 Timestomp anti-
+    # forensics but MUST NEVER emit touch -d / touch -m / touch
+    # -t commands to auto-restore mtimes. Auto-restore would
+    # destroy forensic evidence of the tamper (operator
+    # cannot analyze which attacker touch command was used if
+    # the watchdog silently re-touches the file). Surveillance,
+    # never remediation. Locks anti-evidence-destruction contract
+    # on the timestomp surveillance substrate (different from
+    # the no-auto-delete INVARIANT above; this adds the mtime-
+    # tamper axis).
+    # Strip comment lines (#-prefixed) before checking — the
+    # script's documentation references touch as the attacker
+    # primitive but doesn't actually use it. Surveillance
+    # discipline: source-level grep excluding comments.
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*touch[[:space:]]+(-[dmrtaA])'
+}
