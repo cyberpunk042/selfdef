@@ -293,3 +293,29 @@ EOF
     # LoginGraceTime tightened to <=60s (sshd default is 120s).
     grep -qE '^LoginGraceTime\s+([0-9]|[1-5][0-9]|60)s?$' "${DST}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass refuse-to-brick gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # ssh-hardening TOML; parser must tolerate without altering the
+    # gated behavior. paranoid-with-noise WITHOUT ack MUST still
+    # refuse-to-brick (HARD LOCKOUT precedence over noise — no silent
+    # escalation to AllowGroups ssh via parser tolerance which would
+    # lock out every user not in the ssh group, including possibly
+    # the operator running this very session).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "paranoid"
+selfdef_acknowledge_allowgroups = false
+operator_note = "AllowGroups ssh = hard lockout — operator MUST be in group"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_SSH_HARDENING_CONFIG="${CONF}" \
+        SELFDEF_SSHD_DROPIN_DIR="${SSHD_DROPIN_DIR}" \
+        bash "${WD}"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"acknowledge_allowgroups"* ]]
+    ! [ -f "${DST}" ]
+}
