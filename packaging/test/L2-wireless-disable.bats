@@ -330,3 +330,14 @@ TOMLEOF
     [ -f "${MODPROBE_FILE}" ]
     [ "$(stat -c '%a' "${MODPROBE_FILE}")" = "644" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on wireless-disable installer
+    # surface across rfkill + modprobe-blacklist phases.
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"wireless-disable"')
+    [ "${count}" = "1" ]
+}
