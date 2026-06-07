@@ -322,3 +322,19 @@ setup() {
     declare -F module_render_files    >/dev/null
     declare -F module_clear_manifest  >/dev/null
 }
+
+@test "INVARIANT (lib version is monotonic + readonly export — anti-downgrade contract)" {
+    # Sister to brain-wide library-versioning INVARIANT family.
+    # The SELFDEF_MODULE_LIB_VERSION variable MUST be set to a
+    # numeric value AND must be exported as an integer (not a
+    # string like "4.0") so the SELFDEF_MODULE_LIB_VERSION_
+    # REQUIRED <-> SELFDEF_MODULE_LIB_VERSION numeric comparison
+    # at lib-source-time can correctly trigger the version-gate
+    # exit-99 path. A regression like SELFDEF_MODULE_LIB_VERSION=
+    # "4.0" would break the integer comparison ("integer expression
+    # expected"). Locks the integer-version discipline on the
+    # module-lib substrate.
+    [ "${SELFDEF_MODULE_LIB_VERSION}" -ge 4 ]
+    # Numeric integer (not "4.0", not "v4"):
+    [[ "${SELFDEF_MODULE_LIB_VERSION}" =~ ^[0-9]+$ ]]
+}
