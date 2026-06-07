@@ -185,3 +185,17 @@ teardown() {
     run python3 -c "import yaml; d=yaml.safe_load(open('${YAML}')); ks=d.get('spec',{}).get('kprobes',[]); tps=d.get('spec',{}).get('tracepoints',[]); ups=d.get('spec',{}).get('uprobes',[]); print(len(ks)+len(tps)+len(ups))"
     [ "${output}" -ge 1 ]
 }
+
+@test "INVARIANT (YAML apiVersion = cilium.io/v1alpha1 — Tetragon CRD apiVersion contract)" {
+    # Sister to YAML kind=TracingPolicy contract INVARIANT
+    # already locked. The Tetragon CRD apiVersion MUST be
+    # 'cilium.io/v1alpha1' for Tetragon to recognize the
+    # manifest. A regression to a wrong apiVersion (e.g.
+    # 'tetragon.io/v1' or an old beta API) would cause
+    # Tetragon to silently reject the policy — sovereign-
+    # perimeter would never load, defeating the entire MS047
+    # SovereignOS perimeter substrate. Locks the apiVersion
+    # contract symmetric to the kind contract.
+    run python3 -c "import yaml; d=yaml.safe_load(open('${YAML}')); print(d['apiVersion'])"
+    [ "${output}" = "cilium.io/v1alpha1" ]
+}
