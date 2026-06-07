@@ -333,3 +333,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -qE 'find[[:space:]].*-delete' "${WD}"
     ! grep -qE 'chown[[:space:]]+root' "${WD}"
 }
+
+@test "INVARIANT (sample names offending orphan path in JSON — operator triage routing)" {
+    # Sister to brain-wide DELTA-detect sample-naming axis
+    # INVARIANTs across L2 surveillance suites. When orphans
+    # are detected, the path of at least one orphan MUST surface
+    # in the JSON sample field so operator dashboard routes
+    # triage to the right file. Without sample naming, operator
+    # only sees a count and must manually walk the filesystem
+    # to find the orphans — degrading MTTR. Locks operator-
+    # observability contract on the unowned-files surveillance
+    # substrate.
+    printf 'x' > "${ROOT}/distinctive-attacker-orphan-name"
+    chown 99999:99999 "${ROOT}/distinctive-attacker-orphan-name"
+    run_wd
+    cap | grep -q 'distinctive-attacker-orphan-name'
+}
