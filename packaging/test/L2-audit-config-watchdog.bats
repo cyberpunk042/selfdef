@@ -635,3 +635,23 @@ setup_baseline_state() {
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (audit-config-watchdog service ExecStart references its libexec script — service-to-libexec binding contract)" {
+    # Sister to brain-wide systemd ExecStart binding INVARIANT
+    # family. The .service file MUST declare ExecStart=<path-
+    # to-libexec.sh> so systemd knows what to run. The libexec
+    # script must EXIST at the declared path. A regression that
+    # renamed the libexec script without updating ExecStart
+    # would surface as service-start failure rather than a
+    # silent regression. Locks the service-to-libexec binding
+    # discipline on the audit-config-watchdog substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/audit-config-watchdog/systemd"
+    found=0
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        if grep -qE '^ExecStart=' "${s}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
