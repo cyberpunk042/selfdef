@@ -329,3 +329,20 @@ seed_benign() {
         bash "${WD}"
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. selfdef-limits-conf tag must
+    # fire EXACTLY ONCE per scan regardless of how many core-
+    # reenable lines surface. Multi-line output would break
+    # SDD-062 downstream JSON-line consumer. Locks consolidation
+    # on the core-dump-reenable surveillance surface (kernel-
+    # memory-exfil via planted core dump).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '* hard core unlimited\nalice hard core 100000\n@admin hard core unlimited\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-limits-conf -- ')
+    [ "${main_count}" = "1" ]
+}
