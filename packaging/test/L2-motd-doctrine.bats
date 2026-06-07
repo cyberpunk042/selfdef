@@ -276,3 +276,17 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: motd-doctrine installer NEVER deletes operator-pre-existing configs in target dir — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # motd-doctrine writes its own drop-in into a system config dir;
+    # it MUST NEVER rm/find-delete an operator's pre-existing
+    # entries not owned by THIS module. Locks no-auto-delete on
+    # the motd-doctrine installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/motd-doctrine/install"
+    for sh in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${sh}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/(login\.defs|systemd|update-motd|motd)([[:space:]]|$)' "${sh}"
+        ! grep -qE 'find[[:space:]]+/etc/(login\.defs|systemd|update-motd|motd).*-delete' "${sh}"
+    done
+}
