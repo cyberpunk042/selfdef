@@ -253,3 +253,27 @@ run_wd() {
     # Prior strict drop-in preserved at profile=strict.
     grep -q 'profile=strict' "${DROPIN}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass refuse-to-brick gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # kernel-yama-baseline TOML; parser must tolerate without
+    # altering the gated behavior. paranoid-with-noise WITHOUT ack
+    # MUST still refuse (refuse-to-brick precedence over noise).
+    # paranoid-with-noise WITH ack MUST still apply ptrace_scope=3.
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "paranoid"
+acknowledge_paranoid = false
+operator_note = "memory-scraper / password-sniffer defense"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_YAMA_CONFIG="${CONF}" \
+        SELFDEF_YAMA_DROPIN="${DROPIN}" \
+        bash "${WD}"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"IRREVERSIBLE until reboot"* ]]
+    ! [ -f "${DROPIN}" ]
+}
