@@ -316,3 +316,10 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"rpcbind-disable"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: rpcbind package NEVER auto-removed)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs.
+    write_config "mask"
+    RPCBIND_PRESENT=1 run_wd
+    ! grep -qE '(apt-get|dpkg|dnf|rpm)[[:space:]]+(remove|purge|uninstall)' "${SYSEOF_LOG}"
+}
