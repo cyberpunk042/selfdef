@@ -228,3 +228,38 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=loopback'* ]]
 }
+
+@test "INVARIANT (drop-in filename follows 50-selfdef-*.conf convention — tracking + uninstall identification)" {
+    # Sister to many other modules' filename-convention INVARIANT.
+    # Lock the 50-selfdef-*.conf prefix so a future filename change
+    # is intentional, not silent regression.
+    write_config "loopback"
+    run_wd
+    case "${DST}" in
+        */50-selfdef-*.conf) : ;;
+        *) fail "drop-in filename must follow 50-selfdef-*.conf pattern" ;;
+    esac
+}
+
+@test "INVARIANT (header-marker first non-blank line — stale-cleanup head -1 grep predictability)" {
+    # Sister to many other modules' header-first-line INVARIANT.
+    # The selfdef-identifier MUST appear on the first non-blank
+    # line so stale-detection head -1 scans reliably identify
+    # selfdef-owned drop-ins.
+    write_config "loopback"
+    run_wd
+    first_nonblank="$(grep -m1 -v '^[[:space:]]*$' "${DST}")"
+    [[ "${first_nonblank}" == *"selfdef"* ]] || [[ "${first_nonblank}" == *"managed-by"* ]]
+}
+
+@test "INVARIANT (no DNSStubListenerExtra= 0.0.0.0 — alternate widen-bind axis must also stay loopback-bound)" {
+    # systemd-resolved supports DNSStubListenerExtra= for additional
+    # bind addresses. An attacker (or operator mistake) setting this
+    # to 0.0.0.0 would expose the stub on the public interface, just
+    # like a direct 0.0.0.0 in the main bind. Lock that the drop-in
+    # NEVER carries that directive at all (we don't widen the bind
+    # via the alternate axis either).
+    write_config "loopback"
+    run_wd
+    ! grep -qE '^DNSStubListenerExtra=' "${DST}"
+}
