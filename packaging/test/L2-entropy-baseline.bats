@@ -372,3 +372,18 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: entropy-baseline installer NEVER deletes operator-pre-existing rng-tools/haveged configs — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # entropy-baseline writes its own probe libexec + systemd
+    # service/timer; it MUST NEVER rm/find-delete an operator's
+    # pre-existing /etc/default/rng-tools or /etc/default/haveged
+    # not owned by THIS module. Locks no-auto-delete on the
+    # entropy-baseline installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/entropy-baseline/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/default/(rng-tools|haveged)' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/default/(rng-tools|haveged).*-delete' "${f}"
+    done
+}
