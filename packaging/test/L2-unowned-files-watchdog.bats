@@ -227,3 +227,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"severity":"alert"'
     cap | grep -qE '"unowned_count":5[1-9]|"unowned_count":[6-9][0-9]|"unowned_count":1[0-9][0-9]'
 }
+
+@test "INVARIANT (unowned-by-gid-only also flagged — sister axis to unowned-by-uid)" {
+    # The "uid resolves, gid does not" case is just as much an
+    # ownership-confusion vector as "uid does not resolve" — the
+    # file's gid being unresolved means group-membership tied to
+    # that gid is undefined; if the gid gets reused for a new
+    # group, the file silently joins that group's ACL surface
+    # (a routine post-incident remediation issue). Locks coverage
+    # of the gid-only-unowned axis alongside the uid-only-unowned
+    # axis already locked.
+    # File with resolvable uid (root=0) but unresolved gid.
+    printf 'x' > "${ROOT}/gid-only-orphan"
+    chown 0:99999 "${ROOT}/gid-only-orphan"
+    run_wd
+    cap | grep -qE '"severity":"(warn|alert)"'
+    cap | grep -qE '"event":"(unowned_found|bulk_unowned)"'
+}
