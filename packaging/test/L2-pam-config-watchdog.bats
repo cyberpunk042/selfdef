@@ -436,3 +436,21 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (relative-with-slash rogue pam_*.so 'sub/dir/p.so' → alert: PWD-at-exec attacker primitive on PAM auth-stack)" {
+    # Sister to /home + /var/tmp + /dev/shm + /tmp rogue PAM
+    # module writable-root INVARIANTs. Relative-with-slash path
+    # is the PWD-at-exec attacker primitive: pam_unix resolves
+    # 'sub/dir/p.so' relative to the PWD of the consuming process
+    # (login/sshd/sudo/su) — attacker who pivots into a writable
+    # CWD can stage their malicious .so for the next login. T1556
+    # Modify Authentication Process.
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${PAM_DIR}/99-evil-relative" <<'EOF'
+auth sufficient sub/dir/evil-pam.so
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
