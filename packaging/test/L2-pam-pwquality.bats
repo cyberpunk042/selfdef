@@ -316,3 +316,11 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"pam-pwquality"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (drop-in chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs.
+    write_config "standard"
+    run_wd
+    [ -f "${DST}" ]
+    [ "$(stat -c '%a' "${DST}")" = "644" ]
+}
