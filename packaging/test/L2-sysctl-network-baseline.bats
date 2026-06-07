@@ -308,3 +308,22 @@ run_wd() {
     grep -qE 'net\.ipv4\.tcp_syncookies\s*=\s*1' "${DROPIN}" \
         || grep -qE 'tcp_syncookies\s*=\s*1' "${DROPIN}"
 }
+
+@test "INVARIANT (drop-in carries accept_redirects=0 — ICMP redirect MITM-pivot defense)" {
+    # Sister to rp_filter + tcp_syncookies sysctl-baseline
+    # directive INVARIANTs. ICMP redirects are a legacy mechanism
+    # for routers to tell hosts "use this alternate gateway for
+    # this destination." Attackers on the local segment send
+    # spoofed ICMP redirects to make the host route specific
+    # traffic through the attacker's IP — a classic MITM-pivot
+    # primitive. net.ipv4.conf.all.accept_redirects=0 (and
+    # send_redirects=0 for the host-as-router axis) defeats
+    # this attack. T1557 Adversary-in-the-Middle via ICMP
+    # redirect. Lock that baseline carries the anti-redirect
+    # directive — no operator-legitimate reason to accept ICMP
+    # redirects on a typical endpoint.
+    write_config "baseline"
+    run_wd
+    grep -qE 'net\.ipv4\.conf\..*\.accept_redirects\s*=\s*0' "${DROPIN}" \
+        || grep -qE 'accept_redirects\s*=\s*0' "${DROPIN}"
+}
