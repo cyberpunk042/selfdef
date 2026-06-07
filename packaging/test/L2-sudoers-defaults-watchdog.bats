@@ -315,3 +315,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     ! cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (env_keep += LD_LIBRARY_PATH → alert: dynamic-loader env-pass-through axis sister to LD_PRELOAD)" {
+    # Sister to LD_PRELOAD env-pass-through INVARIANT already
+    # locked. LD_LIBRARY_PATH is the OTHER canonical dynamic-
+    # loader env-var attackers leverage for hijack (sister axis
+    # to LD_PRELOAD + LD_AUDIT from systemd-environment-watchdog).
+    # If sudo passes LD_LIBRARY_PATH through to the privileged
+    # subprocess, attacker can hijack libc.so.6 resolution to
+    # their own evil libc. T1574.006 — Dynamic Linker Hijacking
+    # via env-pass-through.
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%sDefaults env_keep += "LD_LIBRARY_PATH"\n' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
