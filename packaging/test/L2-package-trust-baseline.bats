@@ -380,3 +380,22 @@ TOMLEOF
         *) fail "drop-in filename must follow 50-selfdef-* convention" ;;
     esac
 }
+
+@test "INVARIANT (no auto-uninstall: package-trust-baseline NEVER emits package-remove commands on apt)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The package-trust-baseline installer writes an
+    # apt.conf.d drop-in pinning APT::Get::AllowUnauthenticated=
+    # false but MUST NEVER emit shell commands that uninstall
+    # the apt package itself (apt/dpkg/dnf/rpm/yum remove|purge|
+    # uninstall apt|apt-utils). Silent auto-removal would tear
+    # down the package-management substrate entirely — every
+    # upgrade path is broken; the host becomes unable to
+    # receive CVE patches. T1195.001 self-defeat by the very
+    # module meant to harden the supply-chain. Locks anti-
+    # package-removal contract on the package-trust-baseline
+    # substrate.
+    write_config "strict"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(apt|apt-utils)'
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${DST}"
+}
