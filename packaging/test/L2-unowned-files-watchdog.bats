@@ -302,3 +302,34 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (no auto-delete: unowned-files-watchdog NEVER chowns/chmods/deletes orphans — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-uninstall + no-auto-delete +
+    # no-auto-trust INVARIANTs across L2 surveillance suites.
+    # The unowned-files-watchdog DETECTS files owned by deleted
+    # UIDs/GIDs (T1070 forensic-anti-trail OR legitimate-orphan
+    # post-deluser) but MUST NEVER emit chown/chmod/rm/unlink
+    # commands to auto-remediate. Auto-chown to root would
+    # destroy the forensic evidence chain (operator can't tell
+    # which UID originally owned the file post-fix); auto-
+    # delete would destroy the forensic file itself. Operator
+    # triage MUST inspect orphans before remediation —
+    # surveillance, never remediation. Locks anti-evidence-
+    # destruction contract on the unowned-files surveillance
+    # substrate.
+    for i in 1 2 3; do
+        printf 'x' > "${ROOT}/orphan-${i}"
+        chown 99999:99999 "${ROOT}/orphan-${i}"
+    done
+    run_wd
+    # All 3 orphans MUST remain on disk with original UID/GID.
+    for i in 1 2 3; do
+        [ -f "${ROOT}/orphan-${i}" ]
+        uid="$(stat -c '%u' "${ROOT}/orphan-${i}")"
+        [ "${uid}" = "99999" ]
+    done
+    # Watchdog source MUST NEVER call chown / find -delete /
+    # rm on scan targets.
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+    ! grep -qE 'chown[[:space:]]+root' "${WD}"
+}
