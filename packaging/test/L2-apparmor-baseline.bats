@@ -450,3 +450,27 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"apparmor-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: apparmor-baseline NEVER emits package-remove commands on apparmor)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The apparmor-baseline installer manages the
+    # curated profile list + enforce/complain transitions but
+    # MUST NEVER emit shell commands that uninstall the
+    # apparmor package itself (apt/dpkg/dnf/rpm/yum remove|
+    # purge|uninstall apparmor|apparmor-profiles|apparmor-
+    # utils). Silent auto-removal would tear down MAC
+    # enforcement entirely — every confined process becomes
+    # unconfined. T1562.001 Impair Defenses: Disable or Modify
+    # Tools — anti-pattern the installer must NOT enable.
+    # Locks anti-package-removal contract on the apparmor MAC
+    # substrate.
+    write_config "enforce"
+    AA_LOADED='firefox' output=$(run env PATH="${BIN}:${PATH}" \
+        SELFDEF_AA_BASELINE_CONFIG="${CONF}" \
+        SELFDEF_AA_CONFIGS_SRC="${CONFIGS_SRC}" \
+        SELFDEF_AA_LIST="${AA_LIST}" \
+        SELFDEF_AA_SYSFS_DIR="${SYSFS_DIR}" \
+        bash "${WD}" 2>&1)
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+apparmor'
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+apparmor' "${WD}"
+}
