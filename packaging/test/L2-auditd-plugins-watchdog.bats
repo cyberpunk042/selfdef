@@ -377,3 +377,16 @@ seed_benign() {
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*audit'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # auditd-plugins-watchdog runs ON the timer's scheduled fire
+    # — scans /etc/audit/plugins.d for path= injection patterns
+    # in writable roots, emits a verdict, then exits. Type=
+    # simple would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the auditd-plugins-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/auditd-plugins-watchdog/systemd/selfdef-audit-plugins.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
