@@ -352,3 +352,20 @@ TOMLEOF
     grep -q -- '--permanent --zone=selfdef --add-service=ssh' "${FW_LOG}"
     grep -q -- '--set-default-zone=selfdef' "${FW_LOG}"
 }
+
+@test "INVARIANT (DRY_RUN does not fire any firewall-cmd permanent rule changes or set-default-zone)" {
+    # Sister to many other installer module's DRY_RUN INVARIANT
+    # across the brain. The firewalld-baseline DRY_RUN path MUST
+    # be a no-op against the live firewalld state — operator
+    # using --dry-run to preview-without-applying expects ZERO
+    # mutations. Locks the dry-run side-effect-freedom contract
+    # so a regression that fires --permanent through DRY_RUN
+    # would be caught (sister to existing dry-run INVARIANT
+    # already locked: this extends to the --set-default-zone
+    # mutation specifically, which would re-route ALL traffic).
+    write_config "baseline"
+    DRY_RUN=1 run_wd
+    ! grep -q -- '--permanent --new-zone' "${FW_LOG}"
+    ! grep -q -- '--permanent --zone=selfdef --add-service' "${FW_LOG}"
+    ! grep -q -- '--set-default-zone=selfdef' "${FW_LOG}"
+}
