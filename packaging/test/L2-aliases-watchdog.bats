@@ -365,3 +365,23 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: aliases-watchdog NEVER deletes /etc/aliases entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # aliases-watchdog DETECTS T1546 MTA mail-delivery-trigger
+    # root-exec persistence via pipe= but MUST NEVER emit sed/
+    # awk/rm commands to auto-clean the alias. The detected
+    # alias may be operator-legitimate (custom mail-processing
+    # pipeline, mailman list handler, ticket-system bridge).
+    # Silent auto-delete would destroy operator baseline state
+    # AND could break operator's intended mail-delivery
+    # routing. Surveillance, never remediation. Locks anti-
+    # data-loss contract on the aliases surveillance substrate.
+    printf 'evil: |/tmp/.evil\n' > "${ALIASES}"
+    run_wd
+    [ -f "${ALIASES}" ]
+    grep -q 'evil:' "${ALIASES}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*aliases'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+}
