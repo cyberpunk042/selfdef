@@ -248,3 +248,45 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=noaccess'* ]]
 }
+
+@test "INVARIANT (refuse-to-brick precedence over profile-key: invisible+ack=false ALWAYS dies regardless of bypass_gid)" {
+    # Sister to kernel-lockdown + nftables-baseline + tmpfs-baseline
+    # + unprivileged-userns refuse-to-brick precedence pattern. Lock
+    # that operator-supplied bypass_gid does NOT bypass the gate.
+    write_config "invisible" "false" "987"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_PROC_HIDEPID_CONFIG="${CONF}" \
+        SELFDEF_SYSTEMD_DIR="${SYSTEMD_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    ! [ -f "${SYSTEMD_DIR}/proc.mount" ]
+}
+
+@test "INVARIANT (mount options preserve nosuid+nodev+noexec on every profile — defense-in-depth)" {
+    # nosuid + nodev + noexec are foundational hardening for /proc
+    # regardless of hidepid value. A regression that drops these
+    # options leaves the remount weaker. Lock that BOTH profiles
+    # carry the full hardening triple.
+    write_config "noaccess"
+    run_wd
+    grep -qE 'Options=.*nosuid.*nodev.*noexec' "${SYSTEMD_DIR}/proc.mount"
+    write_config "invisible" "true"
+    run_wd
+    grep -qE 'Options=.*nosuid.*nodev.*noexec' "${SYSTEMD_DIR}/proc.mount"
+}
+
+@test "INVARIANT (asymmetric hidepid: invisible (hidepid=4) > noaccess (hidepid=2) — profile-rank monotonic on hidepid axis)" {
+    # invisible hides /proc/<pid> entries entirely; noaccess only
+    # hides content. invisible is strictly stricter. Lock the
+    # profile-rank monotonicity: a regression that swaps the values
+    # would let invisible accidentally relax the hide-strength.
+    write_config "noaccess"
+    run_wd
+    noaccess_value="$(grep -oE 'hidepid=[0-9]+' "${SYSTEMD_DIR}/proc.mount" | head -1 | cut -d= -f2)"
+    write_config "invisible" "true"
+    run_wd
+    invisible_value="$(grep -oE 'hidepid=[0-9]+' "${SYSTEMD_DIR}/proc.mount" | head -1 | cut -d= -f2)"
+    [ -n "${noaccess_value}" ]
+    [ -n "${invisible_value}" ]
+    [ "${invisible_value}" -gt "${noaccess_value}" ]
+}
