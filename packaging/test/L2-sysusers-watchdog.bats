@@ -399,3 +399,16 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-fix: sysusers-watchdog libexec NEVER writes back to its scanned target — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-{fix,delete,restore,uninstall}
+    # family. sysusers-watchdog is a DETECT-only watchdog: surveils +
+    # emits verdicts, NEVER writes back. Locks no-auto-fix on
+    # the sysusers-watchdog libexec substrate.
+    wd_libexec="${BATS_TEST_DIRNAME}/../../modules/sysusers-watchdog/systemd"
+    for sh in "${wd_libexec}"/*.sh; do
+        [ -f "${sh}" ] || continue
+        ! grep -vE '^[[:space:]]*#' "${sh}" | grep -qE 'sed[[:space:]]+-i.*\$\{?[A-Z_]*FILE'
+        ! grep -vE '^[[:space:]]*#' "${sh}" | grep -qE 'tee[[:space:]].*\$\{?[A-Z_]*FILE'
+    done
+}
