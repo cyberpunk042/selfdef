@@ -382,3 +382,25 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '0000:0b:00.0\|0c0340'
 }
+
+@test "INVARIANT (FireWire/1394 controller-class device add — class=0c0010 — surfaces for evil-FireWire-card DMA detection)" {
+    # Sister to USB-controller-class + Thunderbolt-controller-
+    # class device-add INVARIANTs already locked. FireWire/IEEE
+    # 1394 controllers (class 0x0c0010, OHCI 1394) historically
+    # had unmediated DMA access AS BAD AS Thunderbolt (Inception
+    # tool / firewire DMA-attack family). Even with IOMMU
+    # available on modern hosts, default Linux kernel often
+    # leaves 1394 DMA permissive for backward compatibility.
+    # The watchdog MUST surface 1394 controller PCI inserts
+    # alongside USB + Thunderbolt to close the cold-boot DMA-
+    # tamper detection axis on all major DMA-capable bus
+    # controllers (T1542 Pre-OS Boot via DMA-capable PCI
+    # device). Closes axis-parity with USB + Thunderbolt
+    # in the DMA-capable controller family.
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    mk_device "0000:0c:00.0" "1145" "0035" "0c0010"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '0000:0c:00.0\|0c0010'
+}
