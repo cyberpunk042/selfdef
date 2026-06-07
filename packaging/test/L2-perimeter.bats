@@ -275,6 +275,6 @@ teardown() {
     # perimeter postrm chattr substrate (per Debian Policy
     # 6.5.5: postrm must idempotently succeed across all
     # interrupted-state recoveries).
-    grep -qE 'chattr -i /etc/tetragon/tracing-policies/sovereign-perimeter.yaml[[:space:]]*[\\]?[[:space:]]*2>' "${POSTRM}"
-    grep -qE '\|\|[[:space:]]*true' "${POSTRM}"
+    # Pattern: chattr -i ... \<newline>... 2>/dev/null || true
+    awk '/chattr -i \/etc\/tetragon\/tracing-policies\/sovereign-perimeter.yaml/{found=1; next} found{ if (/2>\/dev\/null/ && /\|\|[[:space:]]*true/) { ok=1 }; exit } END{ exit ok ? 0 : 1 }' "${POSTRM}"
 }
