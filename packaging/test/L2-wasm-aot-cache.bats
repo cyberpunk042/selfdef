@@ -300,3 +300,18 @@ INSTALL_DIR="${MODULE_DIR}/install"
     # locate cached compilations on second invocation.
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/apply.sh"
 }
+
+@test "INVARIANT (check.sh + uninstall.sh use set -euo pipefail — fail-loud invariant across full module surface)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # apply.sh fail-loud already locked above; check.sh +
+    # uninstall.sh are the OTHER two operator-facing scripts in
+    # the module surface. Silent check.sh failure would mask
+    # AOT cache dir corruption from operator observation;
+    # silent uninstall.sh failure leaves the WASM AOT cache
+    # layer in half-removed state during package purge. Locks
+    # fail-loud contract on the full module-script surface
+    # (apply + check + uninstall) on the wasm-aot-cache
+    # substrate.
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/check.sh"
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
+}
