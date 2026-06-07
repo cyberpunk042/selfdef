@@ -350,3 +350,19 @@ TOMLEOF
     ! grep -q '^0\.0\.0\.0 controversial\.example$' "${HOSTS_FILE}"
     ! grep -q '^0\.0\.0\.0 www\.controversial\.example$' "${HOSTS_FILE}"
 }
+
+@test "INVARIANT (hosts file carries selfdef self-identifying section markers — operator audit trail + uninstall identification)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain. The rendered hosts file
+    # accumulates BOTH selfdef-managed entries AND operator-
+    # hand-authored entries. selfdef MUST bracket its managed
+    # section with BEGIN/END marker comments so a stale-cleanup
+    # pass (operator housekeeping or uninstall path) can
+    # reliably identify which entries to remove without
+    # touching operator state. Locks the section-marker contract
+    # on the DNS-block-list substrate.
+    write_config "base"
+    run_wd
+    [ -f "${HOSTS_FILE}" ]
+    grep -qE '# .*selfdef.*BEGIN|# .*BEGIN.*selfdef|# selfdef.*dns-shield' "${HOSTS_FILE}"
+}
