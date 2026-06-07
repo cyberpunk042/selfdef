@@ -347,3 +347,18 @@ TOMLEOF
     DRY_RUN=1 run_wd
     [ ! -f "${PWHISTORY_CONF}" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # One installer run must emit EXACTLY ONE emit_status JSON
+    # record on stdout — not zero (silent run invisible to
+    # operator dashboard) and not multiple (duplicate records
+    # corrupt the dashboard's apply-count + last-status
+    # invariants). Locks single-record discipline on the PAM
+    # password-history installer surface.
+    write_config "strict"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"pam-history"')
+    [ "${count}" = "1" ]
+}
