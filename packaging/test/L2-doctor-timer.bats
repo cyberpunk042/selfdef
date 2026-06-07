@@ -559,3 +559,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qE 'selfdef-doctor\.timer' "${DAEMON_CARGO}"
     grep -qE 'selfdef-doctor\.service' "${DAEMON_CARGO}"
 }
+
+@test "INVARIANT (.timer's WantedBy=timers.target — timer-enable-graph reachability)" {
+    grep -qE '^WantedBy=timers.target' "${TIMER}"
+}

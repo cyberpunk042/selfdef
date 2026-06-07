@@ -797,3 +797,7 @@ chk_path = os.path.join('${BATS_TEST_DIRNAME}', '..', '..', 'modules', 'slm-cpu-
 @test "INVARIANT (slm-cpu-loop install/check.sh is executable — script-runnable contract)" {
     [ -x "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/check.sh" ]
 }
+
+@test "INVARIANT (slm-cpu-loop install/uninstall.sh is executable — script-runnable contract)" {
+    [ -x "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh" ]
+}

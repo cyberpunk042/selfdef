@@ -637,3 +637,12 @@ assert t == 'string', f'arg type must be string, got {t!r}'
     ! grep -qE '^---$' "${YAML}" || \
         [ "$(grep -c '^---$' "${YAML}")" -le 1 ]
 }
+
+@test "INVARIANT (YAML metadata.name does NOT contain spaces — DNS-label compatibility contract)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+n = data['metadata']['name']
+assert ' ' not in n, f'metadata.name must not contain spaces, got {n!r}'
+"
+}

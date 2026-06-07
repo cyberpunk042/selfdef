@@ -573,3 +573,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service ProtectKernelLogs=true — kernel-log read containment)" {
     grep -qE '^ProtectKernelLogs=true' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler.service ProtectControlGroups=true — cgroup-mutation containment)" {
+    grep -qE '^ProtectControlGroups=true' "${UNIT}"
+}

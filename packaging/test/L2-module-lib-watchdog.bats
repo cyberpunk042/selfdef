@@ -633,3 +633,8 @@ setup() {
     out="$(selfdef_injection_patterns)"
     echo "${out}" | grep -q 'curl'
 }
+
+@test "INVARIANT (lib injection_patterns includes /dev/tcp reverse-shell — known-attack coverage)" {
+    out="$(selfdef_injection_patterns)"
+    echo "${out}" | grep -q 'dev/tcp'
+}

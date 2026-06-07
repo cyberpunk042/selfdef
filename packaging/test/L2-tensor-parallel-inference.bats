@@ -808,3 +808,7 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
 @test "INVARIANT (tensor-parallel-inference install/check.sh exists as file — check-script existence contract)" {
     [ -f "${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/install/check.sh" ]
 }
+
+@test "INVARIANT (tensor-parallel-inference install/check.sh is executable — script-runnable contract)" {
+    [ -x "${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/install/check.sh" ]
+}

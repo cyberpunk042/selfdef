@@ -680,3 +680,7 @@ EOF
 @test "INVARIANT (script's emit_ocsf appends to OCSF jsonl with > redirect — newline-delimited JSONL contract)" {
     grep -qE '>>.*OCSF_PATH|>>.*ocsf' "${SCRIPT}"
 }
+
+@test "INVARIANT (script's PCIe gate expects ≥2 LnkSta Width x8 matches — symmetric-lane attestation contract)" {
+    grep -qE 'LnkSta.*x8|Width x8' "${SCRIPT}"
+}

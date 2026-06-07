@@ -706,3 +706,9 @@ p = data.get('provides', [])
 assert 'sigma-correlator' in p, f'must provide sigma-correlator, got {p!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml install.package field references selfdef-daemon — debian-package linkage contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    grep -qE 'package[[:space:]]*=[[:space:]]*"selfdef-daemon"' "${mtoml}"
+}

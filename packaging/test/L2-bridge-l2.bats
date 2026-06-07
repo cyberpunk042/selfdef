@@ -718,3 +718,7 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
 @test "INVARIANT (bridge-l2 install/check.sh exists as file — check-script existence contract)" {
     [ -f "${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install/check.sh" ]
 }
+
+@test "INVARIANT (bridge-l2 install/check.sh is executable — script-runnable contract)" {
+    [ -x "${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install/check.sh" ]
+}

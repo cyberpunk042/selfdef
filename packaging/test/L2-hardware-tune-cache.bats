@@ -772,3 +772,7 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
 @test "INVARIANT (hardware-tune-cache install/check.sh exists as file — check-script existence contract)" {
     [ -f "${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/install/check.sh" ]
 }
+
+@test "INVARIANT (hardware-tune-cache install/check.sh is executable — script-runnable contract)" {
+    [ -x "${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/install/check.sh" ]
+}

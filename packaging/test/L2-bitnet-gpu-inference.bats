@@ -756,3 +756,7 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
 @test "INVARIANT (bitnet-gpu-inference install/check.sh exists as file — check-script existence contract)" {
     [ -f "${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install/check.sh" ]
 }
+
+@test "INVARIANT (bitnet-gpu-inference install/check.sh is executable — script-runnable contract)" {
+    [ -x "${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install/check.sh" ]
+}
