@@ -384,3 +384,32 @@ EOF
     sha_second="$(sha256sum "${MODULI_FILE}" | awk '{print $1}')"
     [ "${sha_first}" = "${sha_second}" ]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass refuse-to-brick gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # ssh-moduli-harden TOML; parser must tolerate without altering
+    # the gated behavior. strong-with-noise on weak-only moduli MUST
+    # still refuse-to-brick (anti-lockout precedence over noise —
+    # DH-group-exchange would be entirely broken if all moduli got
+    # filtered, locking out remote operators on next sshd reload).
+    cat > "${MODULI_FILE}" <<'EOF'
+20260101000000 2 6 100 1024
+20260101000000 2 6 100 1536
+EOF
+    pre_sha="$(sha256sum "${MODULI_FILE}" | awk '{print $1}')"
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "strong"
+operator_note = "DH-KEX 3072-bit floor — FIPS 140-3 compliance"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run env SELFDEF_SSH_MODULI_CONFIG="${CONF}" \
+        SELFDEF_MODULI_FILE="${MODULI_FILE}" \
+        SELFDEF_MODULI_BACKUP_DIR="${BACKUP_DIR}" \
+        bash "${WD}"
+    [ "${status}" -ne 0 ]
+    post_sha="$(sha256sum "${MODULI_FILE}" | awk '{print $1}')"
+    [ "${pre_sha}" = "${post_sha}" ]
+}
