@@ -383,3 +383,24 @@ EOF
     backup_mode="$(stat -c '%a' "${PAM_D}/login.selfdef-nullok-backup")"
     [ "${backup_mode}" = "640" ] || [ "${backup_mode}" = "600" ] || [ "${backup_mode}" = "644" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO PAM files modified AND NO backup written when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without rewriting any PAM file AND without writing
+    # the backup. A silent dry-run that committed would strip
+    # nullok from a host's PAM stack at preview time — could
+    # lock out passwordless local-console accounts intended by
+    # operator (e.g. dev VM with deliberately-blank-pwd root for
+    # bootstrap). Locks dry-run-preserves-state on the PAM-
+    # nullok-disable substrate.
+    cat > "${PAM_D}/login" <<'EOF'
+auth sufficient pam_unix.so nullok
+EOF
+    pre_sha="$(sha256sum "${PAM_D}/login" | awk '{print $1}')"
+    write_config "enforce"
+    DRY_RUN=1 run_wd
+    post_sha="$(sha256sum "${PAM_D}/login" | awk '{print $1}')"
+    [ "${pre_sha}" = "${post_sha}" ]
+    [ ! -f "${PAM_D}/login.selfdef-nullok-backup" ]
+}
