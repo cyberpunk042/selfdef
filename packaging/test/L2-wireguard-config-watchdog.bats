@@ -308,3 +308,18 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: PostUp invoking binary from /var/tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # VPN-tunnel-state-change root-exec persistence — hooks fire
+    # AS ROOT on every wg-quick up/down. Beyond inline rev-shell
+    # payloads, attackers stage benign-looking PostUp that
+    # invokes binary in writable-root.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPostUp = /var/tmp/staged_payload\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
