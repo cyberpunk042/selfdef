@@ -204,3 +204,43 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-openssl-conf -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no-auto-trust: openssl-conf-watchdog does NOT refresh baseline on suspicious-engine/provider detection — alert STAYS until operator updates)" {
+    # T1574 libcrypto-wide ENGINE/PROVIDER code-load primitive —
+    # alert MUST persist across runs until operator explicitly
+    # re-baselines. Sister to gss-mech, ld-preload, nm-vpn-plugin,
+    # openvpn-config, musl-ld-path, sudo-conf, sshd-config —
+    # active-injection class never auto-trusts.
+    printf 'module = /usr/lib/ossl-modules/legacy.so\n' > "${CONF}"
+    run_wd
+    printf 'module = /tmp/evil.so\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: 'module=/tmp/evil.so' without spaces around equals → still flagged)" {
+    # OpenSSL config grammar tolerates no-space-around-equals. An
+    # attacker may use that form to evade naive 'module = '
+    # whitespace-sensitive grep. Locks whitespace-tolerant parser.
+    printf 'module=/tmp/evil.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file scan: a second openssl.cnf in SELFDEF_OPENSSL_FILES ALSO scanned)" {
+    # Multiple openssl configs may live on the host (per-user vs
+    # system vs per-application). All must be enumerated.
+    CONF2="${TMP}/openssl-extra.cnf"
+    printf 'module = /usr/lib/ossl-modules/legacy.so\n' > "${CONF}"
+    printf 'module = /tmp/extra-evil.so\n' > "${CONF2}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_OPENSSL_PROFILE="report" \
+    SELFDEF_OPENSSL_BASELINE="${BASELINE}" \
+    SELFDEF_OPENSSL_FILES="${CONF} ${CONF2}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
