@@ -442,3 +442,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-ssh-hostkey -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on ssh-hostkey surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The ssh-hostkey-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the host-key-MITM alert. Locks parser contract
+    # on the SSH host-key fingerprint-watch substrate (canonical
+    # MITM signal).
+    mk_key ed25519 "ssh-ed25519 ORIGINAL_ED root@host"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline path
+    mk_key ed25519 "ssh-ed25519 ATTACKER_ED root@host"  # MITM swap
+    run_wd                                              # alert path
+    # Every severity value emitted MUST be one of {ok,warn,alert}.
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
