@@ -128,3 +128,36 @@ scan_apply() { compgen -G "${APPLY_GLOB}"; }
     n_a="$(scan_apply | grep -c .)"
     [ "${n_a}" -ge 180 ]
 }
+
+@test "INVARIANT (variant-C operator-dashboard contract): every module apply.sh carries emit_status (directly or via profile-delegation) so dashboards see every apply outcome" {
+    # The emit_status JSON record is the SDD-062 downstream consumer
+    # contract — the operator dashboard / triage pipeline reads it to
+    # know "did module X apply ok, profile=Y, with N changes" on
+    # every install/apply cycle. A module apply.sh that doesn't emit
+    # invisible-applies the module — dashboards lose visibility.
+    # Locks structural invariant: every module either calls
+    # emit_status directly in apply.sh, OR delegates to a profile
+    # script that does. Both shapes preserve operator observability.
+    missing=()
+    for f in $(scan_apply); do
+        module_dir="$(dirname "$(dirname "$f")")"
+        module_name="$(basename "${module_dir}")"
+        # Direct: apply.sh calls emit_status.
+        if grep -q 'emit_status' "$f"; then
+            continue
+        fi
+        # Delegated: apply.sh sources a lib/profile that calls
+        # emit_status. Scan the WHOLE module tree for the call.
+        if grep -rq 'emit_status' "${module_dir}" 2>/dev/null; then
+            continue
+        fi
+        missing+=("${module_name}")
+    done
+    if [ "${#missing[@]}" -gt 0 ]; then
+        printf 'modules with NO emit_status (operator-dashboard invisible): %s\n' "${missing[*]}" >&2
+        printf 'fix: add emit_status call in apply.sh OR delegated lib.sh / profile script\n' >&2
+        printf 'pattern:\n' >&2
+        printf '    emit_status ok "module-name" "profile=$PROFILE changes=$CHANGES"\n' >&2
+        return 1
+    fi
+}
