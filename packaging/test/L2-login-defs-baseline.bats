@@ -331,3 +331,19 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"login-defs-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: login-defs-baseline NEVER emits package-remove commands)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The login-defs-baseline installer writes a
+    # login.defs.d drop-in pinning ENCRYPT_METHOD + PASS_*
+    # policies but MUST NEVER emit shell commands that uninstall
+    # the libpam-modules / passwd packages (apt/dpkg/dnf/rpm/yum
+    # remove|purge|uninstall passwd|libpam-modules|shadow-utils).
+    # Auto-removal would catastrophically break user-management
+    # + auth substrate. Locks anti-package-removal contract on
+    # the login-defs-baseline substrate.
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(passwd|libpam-modules|shadow-utils|shadow)'
+    [ ! -f "${DROPIN}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${DROPIN}"
+}
