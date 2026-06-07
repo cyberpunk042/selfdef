@@ -276,3 +276,18 @@ run_wd() {
     fi
     grep -q 'profile=baseline' "${DROPIN}"
 }
+
+@test "INVARIANT (drop-in carries rp_filter=1 — reverse-path filtering anti-spoof)" {
+    # Sister to many other sysctl-baseline directive INVARIANTs
+    # already locked. net.ipv4.conf.all.rp_filter=1 enables
+    # strict reverse-path filtering: kernel drops packets whose
+    # source IP would route back via a different interface than
+    # they arrived on. Defends against spoofed-source attacks
+    # (T1566.001 — Phishing via spoofed source; on a network
+    # edge, defeats the entire spoofed-source family). Both
+    # baseline + router profiles MUST carry this directive.
+    write_config "baseline"
+    run_wd
+    grep -qE 'net\.ipv4\.conf\.all\.rp_filter\s*=\s*[12]' "${DROPIN}" \
+        || grep -qE 'rp_filter\s*=\s*[12]' "${DROPIN}"
+}
