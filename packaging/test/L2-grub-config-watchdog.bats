@@ -330,3 +330,22 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-grub-config -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on grub-config surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The grub-config-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1542 Pre-OS Boot / T1547 boot-config
+    # persistence alert. Locks parser contract on the /etc/
+    # default/grub + grub.d detection surface.
+    seed_benign
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="init=/tmp/.evil-init"\n' > "${DEFAULT}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
