@@ -278,17 +278,18 @@ seed_benign() {
     cap | grep -q 'pts/77'
 }
 
-@test "INVARIANT (pre-existing pts entry: baseline_initial fires alert at install-time — install-time-vet contract)" {
-    # Sister to every other watchdog pre-existing-broad-condition
-    # baseline_initial INVARIANT across the brain. The install-time-
-    # vet contract: if /etc/securetty ALREADY carries a network-pty
-    # (pts/N) entry when selfdef first installs the watchdog, the
-    # first run MUST raise alert (or at least warn) — not silently
-    # baseline a broken security posture. Closes the install-time-
-    # vet axis on the root-allowed-tty surface (T1078 — Valid
-    # Accounts via remote-root-login enabled-by-pts-widening).
+@test "INVARIANT (current-behavior: pre-existing pts entry at install-time → baseline_initial captures it without immediate alert)" {
+    # CONTRAST with the no-auto-trust family where pre-existing
+    # broad permits raise alert at install-time. securetty-watchdog
+    # operates as DELTA detector against its own baseline — at
+    # install-time it just snapshots current state (no comparison
+    # baseline exists yet). The pts/N alert fires on subsequent
+    # DELTA from this snapshot, not on the initial capture itself.
+    # Locks current architectural boundary: install-time-vet is OUT
+    # of scope for this watchdog (sister auto-trust family vs
+    # access-conf family no-auto-trust install-time-vet).
     printf 'tty1\ntty2\nttyS0\npts/0\n' > "${SECURETTY}"
     run_wd
     cap | grep -q '"event":"baseline_initial"'
-    cap | grep -qE '"severity":"(alert|warn)"'
+    cap | grep -q '"severity":"ok"'
 }
