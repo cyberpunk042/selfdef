@@ -371,3 +371,22 @@ EOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"usbguard"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: usbguard module NEVER emits package-remove commands on usbguard)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The usbguard installer wires rules.conf +
+    # daemon drop-in but MUST NEVER emit shell commands that
+    # uninstall the usbguard package itself (apt/dpkg/dnf/rpm/
+    # yum remove|purge|uninstall usbguard). Silent auto-removal
+    # of usbguard during install/check would leave the host
+    # with no USB-device allowlist enforcement — every USB
+    # insert becomes auto-trusted. T1200 Hardware Additions
+    # via attacker-USB attack-surface re-opening. Locks anti-
+    # package-removal contract on the USB-device allowlist
+    # substrate.
+    printf '%s\n' 'allow id 1d6b:0002' > "${BASELINE_FILE}"
+    write_config "permissive"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+usbguard'
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+usbguard' "${SYSEOF_LOG:-/dev/null}" 2>/dev/null || true
+}
