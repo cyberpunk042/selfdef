@@ -314,3 +314,19 @@ EOF
     [ -f "${DROPIN}" ]
     grep -qE '^kernel\.unprivileged_userns_clone[[:space:]]*=[[:space:]]*[01]$' "${DROPIN}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in render AND NO sysctl -w fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing the drop-in AND without firing
+    # sysctl -w. Silent dry-run could break container/snap/
+    # flatpak workflows (which use unprivileged userns) at
+    # preview time during operator investigation. Locks dry-
+    # run-preserves-state on the unprivileged-userns substrate.
+    write_config "deny" "true"
+    rm -f "${DROPIN}"
+    : > "${SCTL_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DROPIN}" ]
+    ! grep -qE 'sysctl -w kernel.unprivileged_userns_clone' "${SCTL_LOG}"
+}
