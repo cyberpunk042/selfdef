@@ -402,3 +402,23 @@ run_wd() {
         grep -qE '^apiVersion:[[:space:]]+cilium\.io/v1alpha1' "${f}"
     done
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. host-sentinel manifest declares install + profile
+    # gating (audit / enforce / disabled / per-policy independent)
+    # the resolver enforces; malformed manifest wedges the
+    # Tetragon TracingPolicy baseline. Python's tomllib is the
+    # canonical parser. Locks anti-malformed-manifest on the
+    # host-sentinel substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/host-sentinel/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'host-sentinel', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
