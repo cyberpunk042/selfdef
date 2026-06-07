@@ -347,3 +347,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-hook'
 }
+
+@test "INVARIANT (exec-path under writable-root: apt hook invoking binary from /var/tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # apt-transaction-trigger root-exec — apt hooks fire AS ROOT
+    # on every apt operation (operator-routine package install/
+    # upgrade is the recurring trigger). Beyond inline rev-shell
+    # payloads, attackers stage benign-looking hooks that invoke
+    # binary in writable-root.
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${HOOK}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'DPkg::Pre-Invoke {"/var/tmp/staged_payload";};\n' > "${HOOK}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
