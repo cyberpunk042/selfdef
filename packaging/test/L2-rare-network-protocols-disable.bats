@@ -264,3 +264,25 @@ run_wd() {
     grep -q 'managed-by: selfdef rare-network-protocols-disable' "${MODPROBE_FILE}"
     ! grep -q 'somebody-else' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # rare-network-protocols-disable TOML; parser must tolerate
+    # without altering the profile-gated behavior. baseline-with-
+    # noise still blacklists the canonical CVE-prone protocols
+    # (dccp/sctp/rds/tipc) — the foundational rare-protocol-driver
+    # neutralization (memory-corruption CVE family).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "baseline"
+operator_note = "DCCP/SCTP/RDS/TIPC = memory-corruption CVE surface"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    for m in dccp sctp rds tipc; do
+        grep -q "blacklist ${m}" "${MODPROBE_FILE}"
+    done
+    grep -q 'managed-by: selfdef rare-network-protocols-disable' "${MODPROBE_FILE}"
+}
