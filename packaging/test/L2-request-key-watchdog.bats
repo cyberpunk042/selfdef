@@ -256,3 +256,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (callout under /var/tmp): writable-root expansion on request-key surface" {
+    # Sister to the /tmp + /home + /dev/shm writable-root axes
+    # already locked. /var/tmp is an equally-writable surface;
+    # kernel-triggered root-exec must alert regardless of which
+    # writable-root the callout program lives under. Locks axis-
+    # symmetry across the writable-root family on the kernel
+    # upcall surface (T1574 — request-key.conf maps kernel key-
+    # request upcalls to a callout the kernel runs AS ROOT;
+    # /var/tmp callout = kernel-triggered code-load primitive).
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'create dns_resolver * * /var/tmp/.evil %%k\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
