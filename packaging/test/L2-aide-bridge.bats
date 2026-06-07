@@ -337,3 +337,19 @@ Changed entries: 2"
     cap | grep -q '"severity":"alert"'
 }
 
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs. The
+    # selfdef-aide tag MUST fire EXACTLY ONCE per scan
+    # regardless of how many added/removed/changed entries
+    # surface. Multi-line output would break SDD-062 downstream
+    # JSON-line consumer (Sigma correlator). Locks consolidation
+    # discipline on the AIDE file-integrity surveillance surface
+    # (companion detail tag is a separate axis, locked above).
+    mk_aide 7 "Added entries: 10
+Removed entries: 5
+Changed entries: 3"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-aide -- ')
+    [ "${main_count}" = "1" ]
+}
+
