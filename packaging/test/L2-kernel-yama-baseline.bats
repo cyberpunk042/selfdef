@@ -277,3 +277,21 @@ TOMLEOF
     [[ "${output}" == *"IRREVERSIBLE until reboot"* ]]
     ! [ -f "${DROPIN}" ]
 }
+
+@test "INVARIANT (drop-in is sysctl.d-parseable: kernel.yama.ptrace_scope=<N> format — boot-time persistence contract)" {
+    # Sister to many other installer module's parser-compatible-
+    # format INVARIANT across the brain. The drop-in lives at
+    # /etc/sysctl.d/50-selfdef-kernel-yama.conf and is parsed by
+    # systemd-sysctl.service at boot. The format MUST be
+    # 'kernel.yama.ptrace_scope = <N>' (or '=<N>' without space,
+    # both are sysctl.d-valid). A malformed line would silently
+    # fail at boot — the runtime sysctl -w would set ptrace_scope
+    # for the current boot but the value would NOT persist across
+    # reboot, leaving the host degraded on the next boot. Locks
+    # the boot-time persistence contract on the audit-trail-
+    # integrity ladder.
+    write_config "strict"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE '^kernel\.yama\.ptrace_scope[[:space:]]*=[[:space:]]*[123]$' "${DROPIN}"
+}
