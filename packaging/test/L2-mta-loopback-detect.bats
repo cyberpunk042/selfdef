@@ -289,3 +289,17 @@ TOMLEOF
     grep -q 'SELFDEF_MTA_PROFILE=enforce' "${DROPIN_PROFILE}"
     ! grep -q 'SELFDEF_MTA_PROFILE=report' "${DROPIN_PROFILE}"
 }
+
+@test "INVARIANT (libexec is shell-sourceable: bash -n parses cleanly — service ExecStart contract)" {
+    # Sister to many other installer module's shell-sourceable
+    # INVARIANT across the brain (secure-boot-status / swap-
+    # encryption-detect / entropy-baseline). The libexec script
+    # runs from systemd ExecStart. bash -n must parse cleanly. A
+    # syntax regression would silently break the surveillance
+    # every fire (timer scheduled; service can't ExecStart;
+    # non-loopback-MTA-bind surface — open-relay / spam abuse —
+    # goes unmonitored).
+    write_config "report"
+    run_wd
+    bash -n "${SCRIPT_DST}"
+}
