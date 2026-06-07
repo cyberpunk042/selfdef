@@ -411,3 +411,16 @@ EOF
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*anacrontab'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # anacrontab-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/anacrontab for jobs invoking binaries from
+    # writable roots, emits a verdict, then exits. Type=simple
+    # would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the anacrontab-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/anacrontab-watchdog/systemd/selfdef-anacrontab.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
