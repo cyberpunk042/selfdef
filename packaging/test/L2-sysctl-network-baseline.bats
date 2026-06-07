@@ -237,3 +237,42 @@ run_wd() {
     grep -qE 'icmp_echo_ignore_all\s*=\s*1' "${DROPIN}"
     grep -qE 'disable_ipv6\s*=\s*1' "${DROPIN}"
 }
+
+@test "INVARIANT (router composes baseline + ip_forward — DOES NOT add paranoid axes)" {
+    # router is an intentional widening of the network surface (the
+    # host IS routing traffic). Locks that router does NOT
+    # accidentally include paranoid-specific axes (ICMP-echo-ignore,
+    # IPv6 disable) which would break legitimate routing.
+    write_config "router"
+    run_wd
+    grep -qE 'ip_forward\s*=\s*1' "${DROPIN}"
+    grep -qE 'tcp_syncookies\s*=\s*1' "${DROPIN}"
+    grep -qE 'accept_redirects\s*=\s*0' "${DROPIN}"
+    ! grep -qE 'icmp_echo_ignore_all\s*=\s*1' "${DROPIN}"
+    ! grep -qE 'disable_ipv6\s*=\s*1' "${DROPIN}"
+}
+
+@test "INVARIANT (drop-in is sysctl-parseable: each non-comment line matches key=value shape)" {
+    # The drop-in is sourced by sysctl --load. Every non-comment
+    # non-blank line MUST match the sysctl key=value grammar.
+    # Sister to file-protections-baseline sysctl-parseable INVARIANT.
+    write_config "baseline"
+    run_wd
+    awk '/^[[:space:]]*#/ || /^[[:space:]]*$/ {next} /^[a-zA-Z_][a-zA-Z0-9_.]*[[:space:]]*=[[:space:]]*[-0-9]+/ {next} {bad=1; print "malformed: " $0} END{exit bad?1:0}' "${DROPIN}"
+}
+
+@test "INVARIANT (profile downgrade router → baseline: REMOVES ip_forward — operator-loosening bidirectional contract)" {
+    # When operator downgrades router → baseline, the host is no
+    # longer routing. ip_forward MUST be cleared from drop-in OR
+    # explicitly set back to 0. Locks bidirectional contract.
+    write_config "router"
+    run_wd
+    grep -qE 'ip_forward\s*=\s*1' "${DROPIN}"
+    write_config "baseline"
+    run_wd
+    # ip_forward either absent (kernel default 0) OR explicitly = 0.
+    if grep -qE '^net\.ipv4\.ip_forward' "${DROPIN}"; then
+        grep -qE 'net\.ipv4\.ip_forward\s*=\s*0' "${DROPIN}"
+    fi
+    grep -q 'profile=baseline' "${DROPIN}"
+}
