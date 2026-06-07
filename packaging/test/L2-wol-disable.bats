@@ -244,3 +244,13 @@ run_wd() {
     run_wd
     grep -qE '^Description=.*selfdef|^Documentation=.*selfdef|^#.*selfdef|^#.*managed-by' "${SYSTEMD_DIR}/selfdef-wol-disable.service"
 }
+
+@test "INVARIANT (libexec is shell-sourceable: bash -n parses cleanly — service ExecStart contract)" {
+    # The libexec script runs at boot + sleep. bash -n must parse
+    # cleanly (no malformed syntax, no unterminated quotes). Sister
+    # to umask-baseline + shell-timeout-baseline + tensor-parallel-
+    # inference shell-sourceable INVARIANT.
+    write_config "enforce"
+    run_wd
+    bash -n "${LIBEXEC_DIR}/wol-disable.sh"
+}
