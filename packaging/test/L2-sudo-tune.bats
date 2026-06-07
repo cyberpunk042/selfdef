@@ -355,3 +355,18 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"sudo-tune"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: sudo-tune NEVER emits package-remove commands on sudo)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The sudo-tune installer writes a sudoers.d
+    # drop-in but MUST NEVER emit shell commands that uninstall
+    # the sudo package (apt/dpkg/dnf/rpm/yum remove|purge|
+    # uninstall sudo). Auto-removal of sudo during tuning would
+    # lock the operator out of root-escalation paths — sister
+    # to refuse-to-brick discipline. Locks anti-package-removal
+    # contract on the sudo-tune substrate.
+    write_config "audit-trail"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+sudo'
+    ! grep -qE 'apt|dpkg|dnf|rpm|yum' "${DST}"
+}
