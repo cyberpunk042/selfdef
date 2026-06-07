@@ -320,3 +320,14 @@ TOMLEOF
     [ -f "${DROPIN}" ]
     [ "$(stat -c '%a' "${DROPIN}")" = "644" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on login-defs-baseline installer
+    # surface across drop-in + legacy-fence phases.
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"login-defs-baseline"')
+    [ "${count}" = "1" ]
+}
