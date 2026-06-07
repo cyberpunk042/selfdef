@@ -445,3 +445,31 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -qE '"event":"(baseline_initial|logfile_intact)"' \
         || cap | grep -qE '"severity":"(ok|warn|alert)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on logfile-integrity surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The logfile-integrity-watchdog MUST only emit severity
+    # values from the closed set {ok,warn,alert} — never custom
+    # values (critical, error, fatal, notice, info). Operator
+    # dashboard parsers branch on the literal severity string;
+    # an out-of-set value silently falls through routing and
+    # the operator never sees the T1070.002 Clear Linux or Mac
+    # System Logs alert. Locks parser contract on the logfile-
+    # integrity inventory delta detection surface.
+    echo "initial line 1" > "${LOG1}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LOGINT_PROFILE=report \
+        SELFDEF_LOGINT_STATE="${STATE}" \
+        SELFDEF_LOGINT_WATCH="${LOG1}" \
+        bash "${WD}"
+    # Trigger a shrink/truncate
+    : > "${LOG1}"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LOGINT_PROFILE=report \
+        SELFDEF_LOGINT_STATE="${STATE}" \
+        SELFDEF_LOGINT_WATCH="${LOG1}" \
+        bash "${WD}"
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
