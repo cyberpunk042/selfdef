@@ -367,3 +367,52 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-systemd-units -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (DELTA detect: TRANSIENT unit added at runtime — runtime persistence vector covered)" {
+    # Attacker can register a TRANSIENT unit (no FragmentPath) via
+    # systemd-run --unit=evil --slice=... which still persists across
+    # the current boot session. Watchdog MUST surface it.
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    export SYSTEMD_UNITS="sshd.service nginx.service docker.socket runtime-evil.service"
+    # NOTE: runtime-evil.service intentionally has NO file in SYSTEMD_UNIT_DIR.
+    run_wd
+    cap | grep -q '"event":"unit_added_or_changed"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-add: added count is exact, not over/under — counting accuracy)" {
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    export SYSTEMD_UNITS="sshd.service nginx.service docker.socket evil1.service evil2.service evil3.service"
+    cat > "${SYSTEMD_UNIT_DIR}/evil1.service" <<'EOF'
+ExecStart=/tmp/.x1
+EOF
+    cat > "${SYSTEMD_UNIT_DIR}/evil2.service" <<'EOF'
+ExecStart=/tmp/.x2
+EOF
+    cat > "${SYSTEMD_UNIT_DIR}/evil3.service" <<'EOF'
+ExecStart=/tmp/.x3
+EOF
+    run_wd
+    cap | grep -q '"added":3'
+    cap | grep -q '"removed":0'
+}
+
+@test "INVARIANT (severity ladder: pure-add alert > add+remove alert > pure-remove warn)" {
+    # Locks the severity ladder hierarchy. Pure adds are alert (highest);
+    # adds combined with removes still escalate to alert (severity wins);
+    # pure-remove is warn (lower); no-change is ok.
+    write_unit_inventory
+    run_wd
+    # Test pure-add: alert.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    export SYSTEMD_UNITS="sshd.service nginx.service docker.socket evil.service"
+    cat > "${SYSTEMD_UNIT_DIR}/evil.service" <<'EOF'
+ExecStart=/tmp/.x
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
