@@ -360,3 +360,15 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # hosts-file-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/hosts for sensitive-domain MITM pins, emits a
+    # verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract
+    # on the hosts-file-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/hosts-file-watchdog/systemd/selfdef-hosts-file.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
