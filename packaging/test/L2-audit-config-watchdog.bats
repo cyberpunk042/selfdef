@@ -341,3 +341,58 @@ setup_baseline_state() {
     cap | grep -q '"event":"baseline_initial"'
     cap | grep -qE '"rule_count":3'
 }
+
+@test "INVARIANT (auditd inactive-since-baseline persistence: re-baseline auto-trust then attacker re-fires → alert again)" {
+    # Sister to pci-device-watchdog + selfdef-self-integrity
+    # multi-cycle re-baseline INVARIANT. Lock that auto-trust
+    # cycle works on EVERY T1562.001 attack, not just the first.
+    setup_baseline_state
+    run_wd
+    # First attack.
+    set_state "" "1" "inactive"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                              # alert
+    cap | grep -q '"severity":"alert"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                              # baseline refreshed
+    cap | grep -q '"severity":"ok"'
+    # Second attack: operator brings audit back up, then attacker
+    # disables again.
+    set_state "-w /etc/passwd -p wa -k passwd_changes" "1" "active"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                              # third refresh
+    : > "${SELFDEF_TEST_LOGCAP}"
+    set_state "" "1" "inactive"         # attacker re-attacks
+    run_wd                              # alert AGAIN
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (compound T1562.001: rules-flushed + enabled=0 + auditd inactive in same scan → still single alert event; consolidation)" {
+    # Triple-attack scenario: -D + -e 0 + stop. All three T1562.001
+    # signatures fire in same scan. Single consolidated alert event.
+    setup_baseline_state
+    run_wd
+    set_state "" "0" "inactive"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-audit-config -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (current-behavior: audit-config-watchdog conf-changed surfaces conf_changes COUNT, not file paths — privacy-by-design)" {
+    # Sister contract observation: unlike polkit-rules / nfs-exports
+    # / etc. which surface file paths in sample, audit-config
+    # surfaces conf_changes COUNT only. Lock current behavior so a
+    # future refinement that adds path-naming is intentional, not
+    # silent. Privacy-by-design: audit-config doesn't expose specific
+    # rule-file names in the dashboard (which could leak rule
+    # structure to an attacker observing the SIEM).
+    setup_baseline_state
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%s\n' '-w /etc/distinctive-attacker -p wa -k distinctive' > "${CONFDIR}/rules.d/99-distinctive-attacker.rules"
+    run_wd
+    cap | grep -q '"event":"audit_conf_changed"'
+    cap | grep -qE '"conf_changes":[1-9]'
+}
