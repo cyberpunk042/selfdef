@@ -312,3 +312,22 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^RestartSec=' "${UNIT}"
     grep -qE '^StartLimitBurst=' "${UNIT}"
 }
+
+@test "INVARIANT (.service ReadWritePaths covers all scheduler write targets — explicit-allowlist hardening discipline)" {
+    # Sister to brain-wide Ring-0 hardening + ReadOnlyPaths
+    # INVARIANT family. ProtectSystem=strict forbids ALL writes
+    # except to declared ReadWritePaths. The scheduler writes
+    # state into 3 dirs:
+    #   - /var/log/selfdef        (audit + decision log)
+    #   - /var/cache/selfdef      (per-cycle slice cache)
+    #   - /mnt/vault/context      (ZFS audit log on Ring-0 trust topology)
+    # ALL THREE MUST be enumerated in ReadWritePaths. A regression
+    # dropping any one would cause silent EROFS errors mid-cycle.
+    # Locks the explicit-allowlist write-path discipline on the
+    # scheduler unit substrate.
+    rwp=$(grep '^ReadWritePaths=' "${UNIT}")
+    case "${rwp}" in
+        *"/var/log/selfdef"*"/var/cache/selfdef"*"/mnt/vault/context"*) ;;
+        *) false ;;
+    esac
+}
