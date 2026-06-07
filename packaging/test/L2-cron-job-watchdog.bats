@@ -354,3 +354,50 @@ EOF
     cap | grep -qE '"added":1'
     cap | grep -qE '"removed":1'
 }
+
+@test "INVARIANT (3-add boundary lock: exactly 3 adds → alert mass_new_jobs)" {
+    # Sister to suid-sgid 4-add + listening-ports 3-add + timestomp
+    # 4-add boundary INVARIANTs. The mass-add threshold is 3
+    # (inclusive). Regression that bumps to 4+ would trip here.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '*/3 * * * * root /tmp/.cb1' > "${CRON_D}/cb1"
+    echo '*/5 * * * * root /tmp/.cb2' > "${CRON_D}/cb2"
+    echo '*/7 * * * * root /tmp/.cb3' > "${CRON_D}/cb3"
+    run_wd
+    cap | grep -q '"event":"mass_new_jobs"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"added":3'
+}
+
+@test "INVARIANT (high-frequency cron schedule observability: */1-minute interval surfaces in added_sample for operator triage)" {
+    # */1 * * * * (every-minute) and similar high-frequency
+    # intervals are operator-triage-worthy because they're a
+    # canonical attacker pattern (rapid callback for live C2).
+    # Lock that the schedule + path surface in JSON for operator
+    # triage — the value of the added_sample field.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '*/1 * * * * root /tmp/.minute-callback-distinctive' > "${CRON_D}/minute-cb"
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    # Path basename surfaces in sample.
+    cap | grep -q 'minute-cb'
+}
+
+@test "INVARIANT (mass-add cross-class boundary: 3 adds split across 2 classes → still alert at threshold)" {
+    # Sister to existing 'mass-add cross-class: 2+1 = 3' INVARIANT
+    # but with explicit class split (2 cron-dir + 1 user-spool) AND
+    # explicit added=3 count check.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '*/3 * * * * root /tmp/.cron-d-cb1' > "${CRON_D}/dist-cb-A"
+    echo '*/5 * * * * root /tmp/.cron-d-cb2' > "${CRON_D}/dist-cb-B"
+    echo '*/7 * * * * /tmp/.user-cb' >> "${SPOOL_DIR}/bob"
+    run_wd
+    cap | grep -qE '"added":[3-9]'
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
