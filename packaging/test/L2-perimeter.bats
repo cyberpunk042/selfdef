@@ -669,3 +669,12 @@ i = data['spec']['kprobes'][0]['args'][0]['index']
 assert i == 0, f'first arg index must be 0, got {i}'
 "
 }
+
+@test "INVARIANT (YAML's spec.kprobes[0].syscall=True — kprobe-syscall-layer attestation contract)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+s = data['spec']['kprobes'][0]['syscall']
+assert s == True, f'syscall must be True, got {s!r}'
+"
+}

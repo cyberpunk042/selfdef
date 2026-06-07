@@ -589,3 +589,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service ExecStart absolute path begins with / — systemd absolute-path requirement)" {
     grep -qE '^ExecStart=/' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler.service comment block references avx-plus-plus dump source — derivation-source canonical-vcs contract)" {
+    grep -qE 'avx-plus-plus|sain-01|sain01|SD-R[0-9]+' "${UNIT}"
+}

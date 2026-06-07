@@ -696,3 +696,7 @@ EOF
 @test "INVARIANT (script declares INITIATING SOVEREIGN HARDWARE FRICTION AUDIT verbatim — operator-startup-signal contract)" {
     grep -qE 'INITIATING SOVEREIGN HARDWARE FRICTION AUDIT' "${SCRIPT}"
 }
+
+@test "INVARIANT (script's Hardware Matrix Audited Successfully verbatim — operator-success-signal terminal-message contract)" {
+    grep -qE 'Hardware Matrix Audited Successfully' "${SCRIPT}"
+}

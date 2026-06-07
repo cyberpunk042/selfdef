@@ -729,3 +729,9 @@ assert 'sigma-correlator' in p, f'must provide sigma-correlator, got {p!r}'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (detect-host module.toml install.kind = debian-package — not script-runner kind contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    grep -qE 'kind[[:space:]]*=[[:space:]]*"debian-package"' "${mtoml}"
+}

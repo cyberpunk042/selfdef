@@ -817,3 +817,8 @@ chk_path = os.path.join('${BATS_TEST_DIRNAME}', '..', '..', 'modules', 'slm-cpu-
     [ -f "${inst}/check.sh" ]
     [ -f "${inst}/uninstall.sh" ]
 }
+
+@test "INVARIANT (slm-cpu-loop install/apply.sh declares bash shebang — bash-interpreter contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/apply.sh"
+    head -1 "${apply}" | grep -qE '#!/.*bash'
+}

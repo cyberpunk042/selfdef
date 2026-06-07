@@ -575,3 +575,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service ExecStart absolute path begins with / — systemd absolute-path requirement)" {
     grep -qE '^ExecStart=/' "${SERVICE}"
 }
+
+@test "INVARIANT (.timer file declares Unit= absolute path within selfdef namespace — namespace-scoped binding contract)" {
+    grep -qE '^Unit=selfdef-' "${TIMER}"
+}

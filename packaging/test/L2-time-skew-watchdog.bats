@@ -896,3 +896,12 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         grep -qE 'logger -t selfdef-' "${s}"
     done
 }
+
+@test "INVARIANT (time-skew-watchdog .sh script declares chronyc invocation — backend-binary-canonical contract)" {
+    # time-skew probes chronyc tracking output as its canonical query path
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'chronyc' "${s}"
+    done
+}

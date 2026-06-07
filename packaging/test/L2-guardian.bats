@@ -409,3 +409,8 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^ProtectHome=(read-only|true)' "${UNIT}" || \
     grep -qE '^ProtectSystem=strict' "${UNIT}"
 }
+
+@test "INVARIANT (postinst handles initial install AND upgrade case — Debian package-lifecycle dual-path contract)" {
+    grep -qE 'configure' "${POSTINST}" || \
+    grep -qE 'reinstall|upgrade' "${POSTINST}"
+}

@@ -709,3 +709,8 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
     [ -x "${inst}/check.sh" ]
     [ -x "${inst}/uninstall.sh" ]
 }
+
+@test "INVARIANT (suricata install/apply.sh declares bash shebang — bash-interpreter contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/suricata/install/apply.sh"
+    head -1 "${apply}" | grep -qE '#!/.*bash'
+}

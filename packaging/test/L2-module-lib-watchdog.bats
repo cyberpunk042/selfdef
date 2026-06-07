@@ -653,3 +653,8 @@ setup() {
     n="$(selfdef_injection_patterns | wc -l)"
     [ "${n}" -ge 10 ]
 }
+
+@test "INVARIANT (lib injection_patterns supports wget pipe-sh — wget-variant attack coverage)" {
+    out="$(selfdef_injection_patterns)"
+    echo "${out}" | grep -q 'wget'
+}
