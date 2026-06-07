@@ -296,3 +296,13 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs.
+    printf '[libnm]\nplugin=/tmp/.evil1.so\n' > "${NAME}"
+    NAME2="${VPND}/openvpn2.name"
+    printf '[libnm]\nplugin=/var/tmp/.evil2.so\nservice=org.evil\nprogram=/usr/sbin/legit-vpn\n' > "${NAME2}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-nm-vpn-plugin -- ')
+    [ "${main_count}" = "1" ]
+}
