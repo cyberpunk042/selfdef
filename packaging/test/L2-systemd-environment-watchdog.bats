@@ -310,3 +310,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (PERL5LIB injection — sister axis to PYTHONPATH on perl-loader family)" {
+    # Sister to PYTHONPATH + LD_* env-var injection INVARIANTs.
+    # PERL5LIB is the Perl-runtime equivalent — every perl
+    # process initiated under the systemd unit will use the
+    # attacker-controlled path for module @INC resolution,
+    # hijacking 'use File::Path' / any pragma. Closes axis-
+    # parity on the runtime-loader family for the perl
+    # ecosystem.
+    printf '[Manager]\nDefaultEnvironment=LANG=en_US.UTF-8\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Manager]\nDefaultEnvironment=PERL5LIB=/tmp/evil-perl-libs\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
