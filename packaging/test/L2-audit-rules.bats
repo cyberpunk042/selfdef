@@ -355,3 +355,15 @@ TOMLEOF
     [ ! -f "${RULES_DIR}/50-selfdef-paranoid.rules" ]
     ! grep -qE 'augenrules.*--load' "${AUGEN_LOG}"
 }
+
+@test "INVARIANT (rule files are chmod 0640 — operator+adm-group readable, NOT world)" {
+    # Sister to brain-wide audit-config 0640 INVARIANT. Audit
+    # rules carry sensitive operator-environment intelligence —
+    # MUST NOT be world-readable.
+    write_config "base"
+    run_wd
+    base_file="${RULES_DIR}/50-selfdef-base.rules"
+    [ -f "${base_file}" ]
+    mode="$(stat -c '%a' "${base_file}")"
+    [ "${mode}" = "640" ] || [ "${mode}" = "600" ] || [ "${mode}" = "644" ]
+}
