@@ -738,3 +738,17 @@ un = (data.get('install') or {}).get('uninstall', '')
 assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninstall.sh, got {un!r}'
 "
 }
+
+@test "INVARIANT (umask-baseline module.toml category field present + non-empty — module-taxonomy contract)" {
+    # Sister to brain-wide module.toml category INVARIANT
+    # family.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/umask-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+c = data.get('category', '')
+assert c, f'category must be non-empty, got {c!r}'
+"
+}

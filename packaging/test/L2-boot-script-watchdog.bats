@@ -768,3 +768,21 @@ seed_benign() {
         grep -qE '^Documentation=' "${s}"
     done
 }
+
+@test "INVARIANT (boot-script-watchdog timer unit declares OnCalendar= — daily-cadence operator-predictable contract)" {
+    # Sister to brain-wide systemd OnCalendar= INVARIANT
+    # family. Watchdog .timer units MUST declare an
+    # OnCalendar= directive (canonically daily at a staggered
+    # time per the watchdog ladder so simultaneous-fire
+    # thundering-herd is avoided). The operator can predict
+    # when each watchdog runs based on the canonical timer
+    # schedule. A regression dropping OnCalendar= would
+    # leave the watchdog firing ONLY at OnBootSec (no
+    # recurring daily cadence). Locks the daily-cadence
+    # discipline on the boot-script-watchdog timer substrate.
+    timer_dir="${BATS_TEST_DIRNAME}/../../modules/boot-script-watchdog/systemd"
+    for t in "${timer_dir}"/*.timer; do
+        [ -f "${t}" ] || continue
+        grep -qE '^OnCalendar=' "${t}"
+    done
+}
