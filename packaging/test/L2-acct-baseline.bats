@@ -326,3 +326,16 @@ TOMLEOF
     grep -qE 'accton[[:space:]]+on' "${LOGROTATE_DST}"
     grep -qE 'endscript' "${LOGROTATE_DST}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO logrotate drop-in written AND NO accton fires when DRY_RUN=1)" {
+    # Sister to brain-wide installer DRY_RUN INVARIANTs. The
+    # acct-baseline DRY_RUN path MUST be a no-op against live
+    # state — operator using --dry-run expects ZERO mutations
+    # (no rendered drop-in, no live accton command fires).
+    write_config "enabled"
+    rm -f "${LOGROTATE_DST}"
+    : > "${ACCT_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${LOGROTATE_DST}" ]
+    ! grep -qE 'accton' "${ACCT_LOG}"
+}
