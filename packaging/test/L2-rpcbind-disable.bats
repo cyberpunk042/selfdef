@@ -252,3 +252,24 @@ run_wd() {
     grep -q 'systemctl disable rpcbind.service' "${SYSEOF_LOG}"
     ! grep -q 'systemctl mask' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # rpcbind-disable TOML; parser must tolerate without altering
+    # the profile-gated behavior. mask-with-noise still fires
+    # systemctl mask on all 5 present RPC units (rpcbind.service +
+    # rpcbind.socket + nfs-common.service + others) — the full
+    # legacy-RPC neutralization (rpcbind is CVE-2017-8779 vector +
+    # general legacy-portmap attack surface).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "rpcbind = legacy portmap, CVE-2017-8779 vector"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q 'systemctl mask rpcbind.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask rpcbind.socket' "${SYSEOF_LOG}"
+}
