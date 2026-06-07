@@ -249,3 +249,21 @@ Warning: Suspicious file /dev/.hidden"
     run_wd
     cap | grep -q 'Distinctive-Attacker-Rootkit-Sig'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. selfdef-rkhunter tag must
+    # fire EXACTLY ONCE per scan regardless of how many warnings
+    # surface (the multi-mention same-path scenario, large-
+    # warning-count stress). Multi-line output would break SDD-
+    # 062 downstream JSON-line consumer. Locks consolidation
+    # discipline on rkhunter rootkit-detection surveillance
+    # surface.
+    mk_rk 1 "Warning: rootkit-A found
+Warning: rootkit-B found
+Warning: rootkit-C found
+Warning: rootkit-D found"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-rkhunter -- ')
+    [ "${main_count}" = "1" ]
+}
