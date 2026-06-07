@@ -379,3 +379,17 @@ EOF
     grep -qE 'WATCHDOG_PID' "${SCRIPT}"
     grep -qE 'trap.*kill.*WATCHDOG_PID.*EXIT' "${SCRIPT}"
 }
+
+@test "INVARIANT (OCSF jsonl carries time field + device.hostname — operator forensic-correlation contract)" {
+    # Sister to brain-wide OCSF schema-fidelity INVARIANT family.
+    # Each emitted OCSF jsonl record MUST carry a time field
+    # (epoch-ms timestamp) AND a device.hostname field (host-of-
+    # origin); these are the load-bearing fields for operator-
+    # side cross-host forensic correlation when multiple selfdef
+    # hosts surface friction-audit events into a SIEM. A schema
+    # change that drops either field breaks the
+    # forensic-correlation contract. Locks OCSF schema-fidelity
+    # on the friction-audit substrate.
+    grep -qE '"time":' "${SCRIPT}"
+    grep -qE '"device":\{"hostname"' "${SCRIPT}"
+}
