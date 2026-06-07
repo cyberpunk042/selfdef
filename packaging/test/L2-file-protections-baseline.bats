@@ -298,3 +298,21 @@ TOMLEOF
     grep -qE '^fs\.protected_hardlinks[[:space:]]*=' "${DROPIN}"
     grep -qE '^fs\.protected_symlinks[[:space:]]*=' "${DROPIN}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in render AND NO sysctl -w fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/sysctl.d/50-selfdef-file-
+    # protections.conf AND without firing sysctl -w on the
+    # protected_* knobs. A silent dry-run that committed would
+    # flip the live kernel knobs on a host where operator was
+    # investigating fs-protection behavior. Locks dry-run-
+    # preserves-state on the symlink/hardlink-race defense
+    # substrate.
+    write_config "strict"
+    rm -f "${DROPIN}"
+    : > "${SCTL_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DROPIN}" ]
+    ! grep -qE 'sysctl -w fs.protected_' "${SCTL_LOG}"
+}
