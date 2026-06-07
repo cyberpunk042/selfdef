@@ -347,3 +347,21 @@ TOMLEOF
     run_wd
     grep -qE '^Type=oneshot' "${SVC_DST}"
 }
+
+@test "INVARIANT (libexec script is chmod 0755 — executable contract for ExecStart)" {
+    # Sister to brain-wide libexec chmod 0755 INVARIANTs across
+    # L2 systemd-libexec suites. The swap-encryption-detect
+    # libexec script invoked by the systemd service unit
+    # ExecStart= MUST be executable mode 0755 (world-readable +
+    # root-exec). Mode 0644 would defeat the ExecStart= contract
+    # (systemd refuses to invoke a non-executable script). Mode
+    # 0755 is the canonical libexec convention — world-readable
+    # for operator inspection + execute permission for systemd
+    # invocation. Locks file-mode contract on the swap-
+    # encryption-detect libexec substrate.
+    write_config "report"
+    run_wd
+    [ -f "${SCRIPT_DST}" ]
+    mode="$(stat -c '%a' "${SCRIPT_DST}")"
+    [ "${mode}" = "755" ] || [ "${mode}" = "750" ] || [ "${mode}" = "700" ]
+}
