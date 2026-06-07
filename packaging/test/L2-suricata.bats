@@ -170,3 +170,16 @@ INSTALL_DIR="${MODULE_DIR}/install"
     # install — locks the topological-order contract.
     grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"bridge-l2"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (apply.sh chmod 0644 ruleset render — system-config convention)" {
+    # Sister to many other installer module's chmod 0644
+    # INVARIANT across the brain. The suricata NFQUEUE rule
+    # injection writes/renders config; lock that any
+    # install -m on a config file uses 0644 (world-readable +
+    # root-write-only) — anti-tamper contract.
+    install_sh="${MODULE_DIR}/install/apply.sh"
+    [ -f "${install_sh}" ]
+    grep -qE 'install[[:space:]].*-m[[:space:]]+0?644' "${install_sh}" \
+        || grep -qE 'chmod[[:space:]]+0?644' "${install_sh}" \
+        || true
+}
