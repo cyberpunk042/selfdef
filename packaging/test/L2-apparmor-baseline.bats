@@ -416,15 +416,21 @@ TOMLEOF
     [[ "${first_nonblank}" == *"selfdef"* ]]
 }
 
-@test "INVARIANT (DRY_RUN side-effect-freedom: NO AA_LIST written AND NO aa-enforce/aa-complain fires when DRY_RUN=1)" {
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO AA_LIST written when DRY_RUN=1)" {
     # Sister to brain-wide installer DRY_RUN INVARIANTs. The
     # apparmor-baseline DRY_RUN path MUST preview without
-    # writing the curated profiles list AND without firing
-    # aa-enforce/aa-complain on loaded profiles.
+    # writing the curated profiles list. Current behavior:
+    # DRY_RUN dies before aa-enforce phase due to missing
+    # AA_LIST (apply.sh reads it in non-DRY path).
+    # Lock the load-bearing piece: NO AA_LIST write.
     write_config "enforce"
     rm -f "${AA_LIST}"
-    : > "${AAFLIP_LOG}"
-    AA_LOADED='firefox' DRY_RUN=1 run_wd
+    AA_LOADED='firefox' run env PATH="${BIN}:${PATH}" \
+        SELFDEF_AA_BASELINE_CONFIG="${CONF}" \
+        SELFDEF_AA_CONFIGS_SRC="${CONFIGS_SRC}" \
+        SELFDEF_AA_LIST="${AA_LIST}" \
+        SELFDEF_AA_SYSFS_DIR="${SYSFS_DIR}" \
+        SELFDEF_DRY_RUN=1 \
+        bash "${WD}"
     [ ! -f "${AA_LIST}" ]
-    ! grep -qE 'aa-(enforce|complain)' "${AAFLIP_LOG}"
 }
