@@ -880,3 +880,8 @@ assert isinstance(data, dict)
     chk="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (bitnet-gpu-inference install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

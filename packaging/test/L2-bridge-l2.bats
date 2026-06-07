@@ -842,3 +842,8 @@ assert isinstance(data, dict)
     chk="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (bridge-l2 install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

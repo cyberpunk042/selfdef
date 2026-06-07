@@ -915,3 +915,8 @@ assert isinstance(data, dict)
     chk="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (wasm-aot-cache install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

@@ -654,3 +654,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst is non-empty — non-trivial-install-script 82)" {
     [ -s "${POSTINST}" ]
 }
+@test "INVARIANT (postrm is non-empty file — non-trivial-postrm 83)" {
+    [ -s "${POSTRM}" ]
+}

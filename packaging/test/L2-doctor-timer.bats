@@ -640,3 +640,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer file uses [Install] header — INI-section-canonical 82)" {
     grep -qE '^\[Install\]' "${TIMER}"
 }
+@test "INVARIANT (.timer file [Install] section has WantedBy directive — enable-graph 83)" {
+    grep -qE '^WantedBy=' "${TIMER}"
+}

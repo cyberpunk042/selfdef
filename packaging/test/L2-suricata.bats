@@ -812,3 +812,8 @@ assert ch == 'install/check.sh'
     chk="${BATS_TEST_DIRNAME}/../../modules/suricata/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (suricata install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/suricata/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

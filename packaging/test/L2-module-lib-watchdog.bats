@@ -718,3 +718,6 @@ setup() {
 @test "INVARIANT (lib defines run helper — exec-wrapper canonical 82)" {
     declare -F run >/dev/null
 }
+@test "INVARIANT (lib defines die helper — fail-loud canonical 83)" {
+    declare -F die >/dev/null
+}

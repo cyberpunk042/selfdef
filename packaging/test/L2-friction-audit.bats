@@ -760,3 +760,6 @@ EOF
 @test "INVARIANT (script declares hostname env-var resolved with hostname binary — backend-canonical 82)" {
     grep -qE 'hostname' "${SCRIPT}"
 }
+@test "INVARIANT (script uses set -e flag — exit-on-error contract 83)" {
+    grep -qE '^set -e' "${SCRIPT}"
+}

@@ -750,3 +750,10 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert isinstance(data.get('spec'), dict)
 "
 }
+@test "INVARIANT (YAML metadata block is dict — well-formed-CRD-metadata-typed 83)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert isinstance(data.get('metadata'), dict)
+"
+}

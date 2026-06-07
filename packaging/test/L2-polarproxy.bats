@@ -765,3 +765,8 @@ assert ch == 'install/check.sh'
     chk="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (polarproxy install/uninstall.sh is non-empty file — non-trivial-uninstall-script 83)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/uninstall.sh"
+    [ -s "${uni}" ]
+}
