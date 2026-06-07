@@ -293,3 +293,13 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (pipe to /opt — non-canonical-handler dir → alert; closed-set policy)" {
+    # Sister to pipe-handler writable-root + non-canonical-dir
+    # INVARIANTs. /opt is operator-app dir, NOT on the closed-
+    # allowlist of canonical coredump-handler dirs. An attacker
+    # who plants in /opt gets piped-to-root primitive.
+    write_pattern "|/opt/.evil-handler %p"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
