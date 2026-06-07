@@ -320,3 +320,23 @@ EOF
     cap | grep -q '"event":"baseline_initial"'
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named .rules file surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # polkit .rules file (T1548 — Abuse Elevation Control
+    # Mechanism via polkit YES grant; the planted rule lets
+    # attacker invoke privileged D-Bus methods without password
+    # prompt), the file name MUST surface in the JSON sample so
+    # operator dashboard routes triage to the right path.
+    cat > "${RULE}" <<'EOF'
+polkit.addRule(function(action, subject) { return polkit.Result.AUTH_ADMIN; });
+EOF
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RULESD}/99-distinctive-attacker-grant.rules" <<'EOF'
+polkit.addRule(function(action, subject) { return polkit.Result.YES; });
+EOF
+    run_wd
+    cap | grep -q 'distinctive-attacker-grant'
+}
