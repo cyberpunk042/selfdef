@@ -268,3 +268,24 @@ run_wd() {
     grep -qE '^Description=.*selfdef|^Documentation=.*selfdef' "${TIMER_DST}"
     grep -qE '^Description=.*selfdef|^Documentation=.*selfdef' "${SVC_DST}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # mta-loopback-detect TOML; parser must tolerate without
+    # altering the profile-gated behavior. enforce-with-noise
+    # still writes the SELFDEF_MTA_PROFILE=enforce
+    # drop-in (escalates non-loopback-bind from log-only to
+    # systemd-failure-recorded — the operator-dashboard signal
+    # for accidental-internet-facing-MTA exfil/abuse surface).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "enforce"
+operator_note = "MTA bind to 0.0.0.0:25 = open-relay risk + spam abuse"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q 'SELFDEF_MTA_PROFILE=enforce' "${DROPIN_PROFILE}"
+    ! grep -q 'SELFDEF_MTA_PROFILE=report' "${DROPIN_PROFILE}"
+}
