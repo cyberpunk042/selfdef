@@ -291,3 +291,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: needrestart hook invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs across
+    # the brain. Beyond inline reverse-shell payloads, attackers
+    # may keep the needrestart hook benign-looking but have it
+    # invoke a binary they've staged in /tmp / /var/tmp /
+    # /dev/shm. T1546 post-upgrade-trigger root-exec persistence
+    # then runs the writable-root binary AS ROOT after every
+    # apt/dpkg operation. Locks writable-root-exec axis on
+    # post-upgrade needrestart surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/var/tmp/staged_payload\n' > "${HOOKD}/10-dpkg"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
