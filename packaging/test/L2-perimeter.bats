@@ -297,3 +297,30 @@ teardown() {
     grep -qE '^set -e' "${POSTINST}"
     grep -qE '^set -e' "${POSTRM}"
 }
+
+@test "INVARIANT (postinst signals Tetragon reload AFTER chattr +i — operator-deploy ordering contract)" {
+    # Sister to brain-wide postinst-ordering INVARIANT family.
+    # The perimeter postinst MUST do operations in this order:
+    #   1. install YAML to /etc/tetragon/tracing-policies/
+    #   2. chattr +i to lock the YAML
+    #   3. systemctl reload tetragon.service (so the LOCKED
+    #      YAML is what tetragon picks up — not a still-
+    #      mutable copy that could be replaced mid-load)
+    # A regression that swapped 2+3 (reload before chattr +i)
+    # would create a TOCTOU window where an attacker on a
+    # compromised root shell could replace the YAML between
+    # postinst writing it and chattr locking it. We can't
+    # easily test the ORDER but we can lock that BOTH the
+    # chattr+i AND the reload references are present. Locks
+    # operator-deploy ordering on the perimeter postinst
+    # substrate (sister to the existing hot-reload INVARIANT).
+    grep -qE 'chattr \+i /etc/tetragon/tracing-policies/sovereign-perimeter.yaml' "${POSTINST}"
+    grep -qE 'tetragon.service' "${POSTINST}"
+    # Sequence check: chattr +i line MUST come before
+    # systemctl reload tetragon.service line.
+    chattr_line=$(grep -nE 'chattr \+i /etc/tetragon/tracing-policies/sovereign-perimeter.yaml' "${POSTINST}" | head -1 | cut -d: -f1)
+    reload_line=$(grep -nE 'systemctl reload tetragon.service' "${POSTINST}" | head -1 | cut -d: -f1)
+    [ -n "${chattr_line}" ]
+    [ -n "${reload_line}" ]
+    [ "${chattr_line}" -lt "${reload_line}" ]
+}
