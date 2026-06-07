@@ -155,3 +155,39 @@ scan_scripts() { compgen -G "${SCRIPTS_GLOB}"; }
         return 1
     fi
 }
+
+@test "INVARIANT (variant-D module-lib fail-loud SDD-061 D-6 contract): every scan script that sources module-lib does so via SELFDEF_MODULE_LIB env-var override + die-if-missing pattern" {
+    # Sister to the inventory-capture + routing-blind + baseline-leak
+    # silent-failure classes. Locks the SDD-061 D-6 module-lib fail-
+    # loud contract: every scan script that sources the shared
+    # module-lib.sh MUST do so via the SELFDEF_MODULE_LIB env-var
+    # override (so L2 tests can shadow it) AND fail loudly when the
+    # lib is missing (so a packaging regression that drops the lib
+    # path is caught at scan time, not silently no-op'd when source
+    # fails). Closes the structural axis on the fail-loud
+    # ladder alongside the 3 silent-failure classes already locked.
+    bad=()
+    for f in $(scan_scripts); do
+        # Only scripts that source module-lib.sh need this gate;
+        # scripts that don't source it skip cleanly.
+        grep -qE 'source[[:space:]]+.*module-lib' "$f" || continue
+        # Must reference SELFDEF_MODULE_LIB env-var as the override
+        # mechanism (L2 testability).
+        grep -qE 'SELFDEF_MODULE_LIB' "$f" || { bad+=("$(basename "$f"):no-env-override"); continue; }
+        # Must fail loudly when module-lib is missing — either via
+        # an explicit module_lib_missing emit + non-zero exit, or
+        # via [[ -r ... ]] || { ... ; exit } gate.
+        if ! grep -qE 'module_lib_missing|module-lib.*missing|MODULE_LIB.*\|\|.*exit' "$f"; then
+            bad+=("$(basename "$f"):no-fail-loud")
+        fi
+    done
+    if [ "${#bad[@]}" -gt 0 ]; then
+        printf 'scan script sources module-lib without env-override + fail-loud: %s\n' "${bad[*]}" >&2
+        printf 'FIX (SDD-061 D-6 pattern):\n' >&2
+        printf '    LIB="${SELFDEF_MODULE_LIB:-/usr/lib/selfdef/module-lib.sh}"\n' >&2
+        printf '    [[ -r "$LIB" ]] || { logger -t selfdef-MODULE -- '\''{"event":"module_lib_missing","severity":"alert"}'\''; exit 1; }\n' >&2
+        printf '    # shellcheck disable=SC1090\n' >&2
+        printf '    source "$LIB"\n' >&2
+        return 1
+    fi
+}
