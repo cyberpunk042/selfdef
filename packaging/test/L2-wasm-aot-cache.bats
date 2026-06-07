@@ -333,3 +333,15 @@ INSTALL_DIR="${MODULE_DIR}/install"
         || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
         || skip "no tomllib/tomli available; parser-contract check skipped"
 }
+
+@test "INVARIANT (no auto-uninstall: wasm-aot-cache installer NEVER emits package-remove commands on wasmtime/wasmer/wasi-sdk)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANT family.
+    # wasm-aot-cache writes the AOT cache env-file consumed by
+    # downstream WASM-runtime steps; package-removal of the
+    # underlying wasmtime/wasmer/wasi-sdk runtimes is operator-
+    # domain (not installed by THIS module). Locks no-auto-
+    # uninstall on the wasm-aot-cache substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum|cargo|pip|pip3)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(wasmtime|wasmer|wasi-sdk)' "${f}"
+    done
+}
