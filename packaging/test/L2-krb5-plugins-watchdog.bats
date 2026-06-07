@@ -267,3 +267,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"baseline_initial"'
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (relative-with-slash path 'sub/dir/p.so' → alert: PWD-at-exec attacker primitive)" {
+    # Sister to many other watchdog's relative-with-slash
+    # INVARIANT across the brain (syslog-ng, dnf-plugins, others).
+    # A module path with embedded slashes BUT no leading slash
+    # (e.g. 'sub/dir/p.so' instead of '/sub/dir/p.so') is NOT a
+    # fully-qualified absolute path — krb5 will resolve it
+    # relative to the CWD of the daemon at dlopen time. An
+    # attacker who can affect the daemon's CWD (PWD-at-exec
+    # primitive — via working-directory env-vars, chdir-by-
+    # init-script, or systemd WorkingDirectory= injection) gets
+    # to control where the .so loads from. Lock detection of the
+    # relative-with-slash variant — same threat as a relative
+    # bare-name but a stealthier presentation.
+    printf '[plugins]\n  kdcpreauth = { module = evil:sub/dir/p.so }\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
