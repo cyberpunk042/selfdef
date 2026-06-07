@@ -296,3 +296,21 @@ EOF
     grep -qE 'sysctl -n kernel\.unprivileged_userns_clone|sysctl -n .*unprivileged_userns' "${SCTL_LOG}" || \
         grep -q 'sysctl -n' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (drop-in is sysctl.d-parseable: kernel.unprivileged_userns_clone=<N> format — boot-time persistence contract)" {
+    # Sister to kernel-yama-baseline + aslr-baseline + coredump-
+    # suid-restrict + kernel-lockdown sysctl.d-parseable
+    # INVARIANTs already locked. The drop-in lives at /etc/
+    # sysctl.d/50-selfdef-userns.conf and is parsed by systemd-
+    # sysctl.service at boot. The format MUST be 'kernel.
+    # unprivileged_userns_clone = <N>' (or '=<N>' without space,
+    # both sysctl.d-valid). A malformed line would silently fail
+    # at boot — the runtime sysctl -w would set the value for
+    # current boot but it would NOT persist across reboot,
+    # leaving the host with degraded unprivileged-userns
+    # restriction on next boot.
+    write_config "deny" "true"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE '^kernel\.unprivileged_userns_clone[[:space:]]*=[[:space:]]*[01]$' "${DROPIN}"
+}
