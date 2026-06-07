@@ -376,3 +376,23 @@ mk_cap() { printf '#!/bin/sh\n' > "${ROOT}/$1"; chmod 0755 "${ROOT}/$1"; setcap 
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (cap_sys_ptrace dangerous-cap detect — process-injection axis on file-cap surface)" {
+    # Sister to capability-conf-watchdog cap_sys_ptrace INVARIANT
+    # just locked. cap_sys_ptrace lets a binary attach to ANY
+    # process via ptrace (including PID-1 systemd) for memory
+    # inspection/modification — process-injection primitive
+    # (T1055) + credential-theft (attach to privileged process,
+    # read /proc/<pid>/mem for secrets) + container-escape
+    # primitive. Closes axis-parity between the two capability-
+    # tracking watchdogs on the cap_sys_ptrace coverage. The
+    # ptrace-grade capability MUST also fire dangerous_
+    # capability_added on the file-cap surface, not just the
+    # pam_cap surface.
+    mk_cap baseline cap_net_raw+ep
+    run_wd
+    mk_cap ptrace_binary cap_sys_ptrace+ep
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
