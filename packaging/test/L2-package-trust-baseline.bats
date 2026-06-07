@@ -336,3 +336,19 @@ TOMLEOF
     [ -f "${DST}" ]
     grep -qE 'AllowUnauthenticated|AllowDowngradeToInsecure|Verify-Peer|secure' "${DST}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in written when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing the apt drop-in. A silent dry-run
+    # that committed would flip the apt-secure-by-default posture
+    # on a host where operator was investigating package-management
+    # behavior — could break operator workflow that intentionally
+    # uses 3rd-party-repo with relaxed authentication during
+    # bootstrap. Locks dry-run-preserves-state on the apt-supply-
+    # chain-defense substrate.
+    write_config "strict"
+    rm -f "${DST}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DST}" ]
+}
