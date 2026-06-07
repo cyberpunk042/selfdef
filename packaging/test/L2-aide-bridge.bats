@@ -260,3 +260,21 @@ Changed entries: 0"
     cap | grep -q '"severity":"alert"'
 }
 
+@test "INVARIANT (combined-all rc=7 → alert with adds+removes+changed all bits set)" {
+    # Sister to each-bit-individual axes locked above. When AIDE
+    # surfaces an attacker's full filesystem-rewrite (rc=7 — adds +
+    # removed + changed bits all set), severity stays alert (highest
+    # — the changed/removed bits win), not warn (which would happen
+    # if combined-rc was misclassified as adds-dominated). Locks the
+    # severity-ladder precedence: changed/removed beat adds in any
+    # combined finding. Closes the rc-bitmask combinatorial coverage
+    # axis on the file-integrity surveillance surface (T1565.001 —
+    # Stored Data Manipulation via mass filesystem rewrite).
+    mk_aide 7 "Added entries: 2
+Removed entries: 3
+Changed entries: 4"
+    run_wd
+    cap | grep -q '"event":"diff_changed_or_removed"'
+    cap | grep -q '"severity":"alert"'
+}
+
