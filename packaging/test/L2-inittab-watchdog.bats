@@ -352,3 +352,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # inittab-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/inittab respawn/bootwait/powerwait actions for
+    # injection patterns, emits a verdict, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the inittab-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/inittab-watchdog/systemd/selfdef-inittab.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
