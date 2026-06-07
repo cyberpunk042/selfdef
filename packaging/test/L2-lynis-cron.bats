@@ -331,3 +331,14 @@ EOF
     # contract on the lynis-cron substrate.
     ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+lynis' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # lynis-cron runs ON the timer's scheduled fire — invokes
+    # lynis audit, parses report, emits a verdict, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the lynis-cron substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/lynis-cron/systemd/selfdef-lynis-audit.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
