@@ -319,3 +319,23 @@ TOMLEOF
     [[ "${output}" == *"acknowledge_allowgroups"* ]]
     ! [ -f "${DST}" ]
 }
+
+@test "INVARIANT (drop-in carries selfdef self-identifying header — head -1 stale-cleanup discipline)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain. The drop-in lands at
+    # /etc/ssh/sshd_config.d/50-selfdef.conf alongside operator-
+    # hand-authored 60-/99- drop-ins. A stale-cleanup pass
+    # (operator housekeeping or uninstall path) inspects the first
+    # non-blank comment line to identify selfdef-rendered config
+    # from operator config. Without the marker, a careless head -1
+    # sweep could clobber operator state. Locks the provenance
+    # contract on BOTH standard + paranoid profiles.
+    write_config "standard"
+    run_wd
+    first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${DST}")"
+    [[ "${first_nonblank}" == *"selfdef"* ]]
+    write_config "paranoid" "true"
+    run_wd
+    first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${DST}")"
+    [[ "${first_nonblank}" == *"selfdef"* ]]
+}
