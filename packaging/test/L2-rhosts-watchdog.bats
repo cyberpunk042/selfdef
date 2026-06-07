@@ -954,3 +954,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/rhosts-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (rhosts-watchdog systemd dir exists at modules/rhosts-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/rhosts-watchdog/systemd"
+    [ -d "${sd}" ]
+}

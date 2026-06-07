@@ -958,3 +958,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/sudo-conf-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (sudo-conf-watchdog systemd dir exists at modules/sudo-conf-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/sudo-conf-watchdog/systemd"
+    [ -d "${sd}" ]
+}

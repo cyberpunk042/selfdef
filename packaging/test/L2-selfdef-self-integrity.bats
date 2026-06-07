@@ -1007,3 +1007,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (selfdef-self-integrity install dir exists at modules/selfdef-self-integrity/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/install"
+    [ -d "${inst_dir}" ]
+}

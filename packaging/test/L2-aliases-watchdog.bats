@@ -1013,3 +1013,8 @@ seed_benign() {
     mtoml="${BATS_TEST_DIRNAME}/../../modules/aliases-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (aliases-watchdog systemd dir exists at modules/aliases-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/aliases-watchdog/systemd"
+    [ -d "${sd}" ]
+}

@@ -930,3 +930,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/pkcs11-modules-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (pkcs11-modules-watchdog systemd dir exists at modules/pkcs11-modules-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/pkcs11-modules-watchdog/systemd"
+    [ -d "${sd}" ]
+}

@@ -1040,3 +1040,8 @@ EOF
     mtoml="${BATS_TEST_DIRNAME}/../../modules/anacrontab-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (anacrontab-watchdog systemd dir exists at modules/anacrontab-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/anacrontab-watchdog/systemd"
+    [ -d "${sd}" ]
+}

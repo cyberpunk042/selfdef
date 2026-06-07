@@ -970,3 +970,8 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     mtoml="${BATS_TEST_DIRNAME}/../../modules/at-jobs-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (at-jobs-watchdog systemd dir exists at modules/at-jobs-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/at-jobs-watchdog/systemd"
+    [ -d "${sd}" ]
+}

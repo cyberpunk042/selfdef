@@ -935,3 +935,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/timestomp-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (timestomp-watchdog systemd dir exists at modules/timestomp-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/timestomp-watchdog/systemd"
+    [ -d "${sd}" ]
+}

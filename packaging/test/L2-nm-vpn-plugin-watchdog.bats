@@ -926,3 +926,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/nm-vpn-plugin-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (nm-vpn-plugin-watchdog systemd dir exists at modules/nm-vpn-plugin-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/nm-vpn-plugin-watchdog/systemd"
+    [ -d "${sd}" ]
+}

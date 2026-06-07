@@ -1083,3 +1083,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/ssh-hostkey-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (ssh-hostkey-watchdog systemd dir exists at modules/ssh-hostkey-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/ssh-hostkey-watchdog/systemd"
+    [ -d "${sd}" ]
+}

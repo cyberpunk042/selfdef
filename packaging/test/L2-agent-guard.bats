@@ -856,3 +856,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/agent-guard"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (agent-guard install dir exists at modules/agent-guard/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/agent-guard/install"
+    [ -d "${inst_dir}" ]
+}

@@ -919,3 +919,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/rpcbind-disable"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (rpcbind-disable install dir exists at modules/rpcbind-disable/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/rpcbind-disable/install"
+    [ -d "${inst_dir}" ]
+}

@@ -939,3 +939,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/systemd-power-hooks-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (systemd-power-hooks-watchdog systemd dir exists at modules/systemd-power-hooks-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/systemd-power-hooks-watchdog/systemd"
+    [ -d "${sd}" ]
+}

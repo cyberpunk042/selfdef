@@ -1070,3 +1070,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-config-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (pam-config-watchdog systemd dir exists at modules/pam-config-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/pam-config-watchdog/systemd"
+    [ -d "${sd}" ]
+}

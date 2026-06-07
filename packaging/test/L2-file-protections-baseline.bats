@@ -948,3 +948,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/file-protections-baseline"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (file-protections-baseline install dir exists at modules/file-protections-baseline/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/file-protections-baseline/install"
+    [ -d "${inst_dir}" ]
+}

@@ -954,3 +954,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (mta-loopback-detect install dir exists at modules/mta-loopback-detect/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect/install"
+    [ -d "${inst_dir}" ]
+}

@@ -877,3 +877,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/rkhunter-cron"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (rkhunter-cron install dir exists at modules/rkhunter-cron/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/rkhunter-cron/install"
+    [ -d "${inst_dir}" ]
+}

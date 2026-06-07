@@ -988,3 +988,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/chrony-baseline"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (chrony-baseline install dir exists at modules/chrony-baseline/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/chrony-baseline/install"
+    [ -d "${inst_dir}" ]
+}

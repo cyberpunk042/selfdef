@@ -1019,3 +1019,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/apport-disable"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (apport-disable install dir exists at modules/apport-disable/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/apport-disable/install"
+    [ -d "${inst_dir}" ]
+}

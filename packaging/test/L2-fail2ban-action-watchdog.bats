@@ -943,3 +943,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/fail2ban-action-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (fail2ban-action-watchdog systemd dir exists at modules/fail2ban-action-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/fail2ban-action-watchdog/systemd"
+    [ -d "${sd}" ]
+}

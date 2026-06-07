@@ -945,3 +945,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/usb-storage-mass-disable"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (usb-storage-mass-disable install dir exists at modules/usb-storage-mass-disable/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/usb-storage-mass-disable/install"
+    [ -d "${inst_dir}" ]
+}

@@ -983,3 +983,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/kernel-lockdown"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (kernel-lockdown install dir exists at modules/kernel-lockdown/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/kernel-lockdown/install"
+    [ -d "${inst_dir}" ]
+}

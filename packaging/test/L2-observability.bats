@@ -807,3 +807,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/observability"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (observability install dir exists at modules/observability/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/observability/install"
+    [ -d "${inst_dir}" ]
+}

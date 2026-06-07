@@ -971,3 +971,8 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
     mtoml="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (time-skew-watchdog systemd dir exists at modules/time-skew-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    [ -d "${sd}" ]
+}

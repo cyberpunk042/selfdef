@@ -953,3 +953,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/rare-filesystems-disable"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (rare-filesystems-disable install dir exists at modules/rare-filesystems-disable/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/rare-filesystems-disable/install"
+    [ -d "${inst_dir}" ]
+}

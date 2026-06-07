@@ -972,3 +972,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/nsswitch-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (nsswitch-watchdog systemd dir exists at modules/nsswitch-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/nsswitch-watchdog/systemd"
+    [ -d "${sd}" ]
+}

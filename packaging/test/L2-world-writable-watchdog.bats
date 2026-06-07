@@ -918,3 +918,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/world-writable-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (world-writable-watchdog systemd dir exists at modules/world-writable-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/world-writable-watchdog/systemd"
+    [ -d "${sd}" ]
+}

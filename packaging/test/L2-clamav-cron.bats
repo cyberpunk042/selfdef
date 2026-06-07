@@ -976,3 +976,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/clamav-cron"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (clamav-cron install dir exists at modules/clamav-cron/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/clamav-cron/install"
+    [ -d "${inst_dir}" ]
+}

@@ -985,3 +985,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/usbguard"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (usbguard install dir exists at modules/usbguard/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/usbguard/install"
+    [ -d "${inst_dir}" ]
+}

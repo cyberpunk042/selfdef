@@ -996,3 +996,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (coredumpd-redirect install dir exists at modules/coredumpd-redirect/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/install"
+    [ -d "${inst_dir}" ]
+}

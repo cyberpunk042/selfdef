@@ -980,3 +980,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/avahi-disable"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (avahi-disable install dir exists at modules/avahi-disable/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/avahi-disable/install"
+    [ -d "${inst_dir}" ]
+}

@@ -1023,3 +1023,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/dbus-service-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (dbus-service-watchdog systemd dir exists at modules/dbus-service-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/dbus-service-watchdog/systemd"
+    [ -d "${sd}" ]
+}

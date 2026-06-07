@@ -1049,3 +1049,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/file-capabilities-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (file-capabilities-watchdog systemd dir exists at modules/file-capabilities-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/file-capabilities-watchdog/systemd"
+    [ -d "${sd}" ]
+}

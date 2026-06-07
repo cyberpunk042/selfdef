@@ -979,3 +979,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/dhclient-hooks-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (dhclient-hooks-watchdog systemd dir exists at modules/dhclient-hooks-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/dhclient-hooks-watchdog/systemd"
+    [ -d "${sd}" ]
+}

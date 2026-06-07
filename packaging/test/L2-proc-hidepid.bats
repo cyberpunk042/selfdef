@@ -948,3 +948,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/proc-hidepid"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (proc-hidepid install dir exists at modules/proc-hidepid/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/proc-hidepid/install"
+    [ -d "${inst_dir}" ]
+}

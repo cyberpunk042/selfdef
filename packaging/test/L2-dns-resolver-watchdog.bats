@@ -1123,3 +1123,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/dns-resolver-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (dns-resolver-watchdog systemd dir exists at modules/dns-resolver-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/dns-resolver-watchdog/systemd"
+    [ -d "${sd}" ]
+}

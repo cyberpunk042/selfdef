@@ -937,3 +937,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/pam-faillock"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (pam-faillock install dir exists at modules/pam-faillock/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/pam-faillock/install"
+    [ -d "${inst_dir}" ]
+}

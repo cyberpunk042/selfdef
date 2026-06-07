@@ -988,3 +988,8 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     mtoml="${BATS_TEST_DIRNAME}/../../modules/binfmt-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (binfmt-watchdog systemd dir exists at modules/binfmt-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/binfmt-watchdog/systemd"
+    [ -d "${sd}" ]
+}

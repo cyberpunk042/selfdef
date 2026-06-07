@@ -1124,3 +1124,8 @@ setup_baseline_state() {
     mtoml="${BATS_TEST_DIRNAME}/../../modules/audit-config-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (audit-config-watchdog systemd dir exists at modules/audit-config-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/audit-config-watchdog/systemd"
+    [ -d "${sd}" ]
+}

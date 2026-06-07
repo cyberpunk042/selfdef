@@ -996,3 +996,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/host-sentinel"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (host-sentinel install dir exists at modules/host-sentinel/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/host-sentinel/install"
+    [ -d "${inst_dir}" ]
+}

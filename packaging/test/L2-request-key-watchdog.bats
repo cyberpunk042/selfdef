@@ -962,3 +962,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/request-key-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (request-key-watchdog systemd dir exists at modules/request-key-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/request-key-watchdog/systemd"
+    [ -d "${sd}" ]
+}

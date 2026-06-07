@@ -1031,3 +1031,8 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     mtoml="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (apt-hooks-watchdog systemd dir exists at modules/apt-hooks-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/systemd"
+    [ -d "${sd}" ]
+}

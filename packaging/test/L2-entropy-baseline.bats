@@ -948,3 +948,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/entropy-baseline"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (entropy-baseline install dir exists at modules/entropy-baseline/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/entropy-baseline/install"
+    [ -d "${inst_dir}" ]
+}

@@ -978,3 +978,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/rsyslog-exec-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (rsyslog-exec-watchdog systemd dir exists at modules/rsyslog-exec-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/rsyslog-exec-watchdog/systemd"
+    [ -d "${sd}" ]
+}

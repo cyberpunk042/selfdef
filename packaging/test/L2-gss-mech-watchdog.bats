@@ -926,3 +926,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/gss-mech-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (gss-mech-watchdog systemd dir exists at modules/gss-mech-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/gss-mech-watchdog/systemd"
+    [ -d "${sd}" ]
+}

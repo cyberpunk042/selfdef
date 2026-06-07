@@ -1012,3 +1012,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/crypttab-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (crypttab-watchdog systemd dir exists at modules/crypttab-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/crypttab-watchdog/systemd"
+    [ -d "${sd}" ]
+}

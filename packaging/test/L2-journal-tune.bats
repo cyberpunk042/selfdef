@@ -954,3 +954,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/journal-tune"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (journal-tune install dir exists at modules/journal-tune/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/journal-tune/install"
+    [ -d "${inst_dir}" ]
+}

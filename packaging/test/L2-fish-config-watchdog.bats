@@ -929,3 +929,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/fish-config-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (fish-config-watchdog systemd dir exists at modules/fish-config-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/fish-config-watchdog/systemd"
+    [ -d "${sd}" ]
+}

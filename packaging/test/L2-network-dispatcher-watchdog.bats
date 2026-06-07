@@ -956,3 +956,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/network-dispatcher-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (network-dispatcher-watchdog systemd dir exists at modules/network-dispatcher-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/network-dispatcher-watchdog/systemd"
+    [ -d "${sd}" ]
+}

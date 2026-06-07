@@ -923,3 +923,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/shell-timeout-baseline"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (shell-timeout-baseline install dir exists at modules/shell-timeout-baseline/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/shell-timeout-baseline/install"
+    [ -d "${inst_dir}" ]
+}

@@ -985,3 +985,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/auditd-immutable"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (auditd-immutable install dir exists at modules/auditd-immutable/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/auditd-immutable/install"
+    [ -d "${inst_dir}" ]
+}

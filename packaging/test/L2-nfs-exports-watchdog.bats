@@ -981,3 +981,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/nfs-exports-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (nfs-exports-watchdog systemd dir exists at modules/nfs-exports-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/nfs-exports-watchdog/systemd"
+    [ -d "${sd}" ]
+}

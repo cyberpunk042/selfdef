@@ -1016,3 +1016,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/dns-shield"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (dns-shield install dir exists at modules/dns-shield/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/dns-shield/install"
+    [ -d "${inst_dir}" ]
+}

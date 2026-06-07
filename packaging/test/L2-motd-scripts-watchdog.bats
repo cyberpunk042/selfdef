@@ -943,3 +943,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/motd-scripts-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (motd-scripts-watchdog systemd dir exists at modules/motd-scripts-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/motd-scripts-watchdog/systemd"
+    [ -d "${sd}" ]
+}

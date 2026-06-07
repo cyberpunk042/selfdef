@@ -848,3 +848,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/tetragon"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (tetragon install dir exists at modules/tetragon/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/tetragon/install"
+    [ -d "${inst_dir}" ]
+}

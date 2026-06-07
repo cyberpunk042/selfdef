@@ -1006,3 +1006,8 @@ seed_benign() {
     mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-plugins-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (auditd-plugins-watchdog systemd dir exists at modules/auditd-plugins-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/auditd-plugins-watchdog/systemd"
+    [ -d "${sd}" ]
+}

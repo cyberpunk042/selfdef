@@ -1078,3 +1078,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/service-account-lock"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (service-account-lock install dir exists at modules/service-account-lock/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/service-account-lock/install"
+    [ -d "${inst_dir}" ]
+}

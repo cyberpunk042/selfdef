@@ -1032,3 +1032,8 @@ seed_benign() {
     mtoml="${BATS_TEST_DIRNAME}/../../modules/boot-script-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (boot-script-watchdog systemd dir exists at modules/boot-script-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/boot-script-watchdog/systemd"
+    [ -d "${sd}" ]
+}

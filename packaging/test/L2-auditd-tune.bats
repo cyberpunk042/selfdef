@@ -980,3 +980,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/auditd-tune"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (auditd-tune install dir exists at modules/auditd-tune/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/auditd-tune/install"
+    [ -d "${inst_dir}" ]
+}

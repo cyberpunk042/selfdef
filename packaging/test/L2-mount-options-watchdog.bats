@@ -1040,3 +1040,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/mount-options-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (mount-options-watchdog systemd dir exists at modules/mount-options-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/mount-options-watchdog/systemd"
+    [ -d "${sd}" ]
+}

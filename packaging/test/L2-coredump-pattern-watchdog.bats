@@ -960,3 +960,8 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
     mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (coredump-pattern-watchdog systemd dir exists at modules/coredump-pattern-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    [ -d "${sd}" ]
+}

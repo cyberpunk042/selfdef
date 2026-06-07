@@ -938,3 +938,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/needrestart-hooks-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (needrestart-hooks-watchdog systemd dir exists at modules/needrestart-hooks-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/needrestart-hooks-watchdog/systemd"
+    [ -d "${sd}" ]
+}

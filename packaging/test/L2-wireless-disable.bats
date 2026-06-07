@@ -954,3 +954,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/wireless-disable"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (wireless-disable install dir exists at modules/wireless-disable/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/wireless-disable/install"
+    [ -d "${inst_dir}" ]
+}

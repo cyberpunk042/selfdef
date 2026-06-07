@@ -1017,3 +1017,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/polkit-rules-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (polkit-rules-watchdog systemd dir exists at modules/polkit-rules-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/polkit-rules-watchdog/systemd"
+    [ -d "${sd}" ]
+}

@@ -1130,3 +1130,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/cron-job-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (cron-job-watchdog systemd dir exists at modules/cron-job-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/cron-job-watchdog/systemd"
+    [ -d "${sd}" ]
+}

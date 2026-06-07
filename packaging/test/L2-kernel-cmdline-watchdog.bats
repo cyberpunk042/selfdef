@@ -979,3 +979,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/kernel-cmdline-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (kernel-cmdline-watchdog systemd dir exists at modules/kernel-cmdline-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/kernel-cmdline-watchdog/systemd"
+    [ -d "${sd}" ]
+}

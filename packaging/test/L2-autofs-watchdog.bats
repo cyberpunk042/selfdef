@@ -966,3 +966,8 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     mtoml="${BATS_TEST_DIRNAME}/../../modules/autofs-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (autofs-watchdog systemd dir exists at modules/autofs-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/autofs-watchdog/systemd"
+    [ -d "${sd}" ]
+}

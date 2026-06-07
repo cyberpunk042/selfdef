@@ -960,3 +960,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/systemd-generator-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (systemd-generator-watchdog systemd dir exists at modules/systemd-generator-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/systemd-generator-watchdog/systemd"
+    [ -d "${sd}" ]
+}

@@ -962,3 +962,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/shell-init-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (shell-init-watchdog systemd dir exists at modules/shell-init-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/shell-init-watchdog/systemd"
+    [ -d "${sd}" ]
+}

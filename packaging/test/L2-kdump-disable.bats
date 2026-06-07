@@ -940,3 +940,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/kdump-disable"
     [ -d "${mod_dir}" ]
 }
+
+@test "INVARIANT (kdump-disable install dir exists at modules/kdump-disable/install — install-dir-existence 73-cycle)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/kdump-disable/install"
+    [ -d "${inst_dir}" ]
+}

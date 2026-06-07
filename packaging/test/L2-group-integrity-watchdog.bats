@@ -1071,3 +1071,8 @@ assert 'install' in data, 'install missing'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/group-integrity-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (group-integrity-watchdog systemd dir exists at modules/group-integrity-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/group-integrity-watchdog/systemd"
+    [ -d "${sd}" ]
+}

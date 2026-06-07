@@ -992,3 +992,8 @@ seed_benign() {
     mtoml="${BATS_TEST_DIRNAME}/../../modules/bash-completion-watchdog/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (bash-completion-watchdog systemd dir exists at modules/bash-completion-watchdog/systemd — systemd-dir-existence 73-cycle)" {
+    sd="${BATS_TEST_DIRNAME}/../../modules/bash-completion-watchdog/systemd"
+    [ -d "${sd}" ]
+}
