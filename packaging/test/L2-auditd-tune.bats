@@ -313,3 +313,21 @@ TOMLEOF
     # high-volume-specific knob present (num_logs higher than standard).
     grep -qE '^num_logs[[:space:]]*=' "${AUDITD_CONF}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO auditd.conf written AND NO restart fired)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain (acct-baseline / aslr-baseline / audit-rules
+    # / auditd-immutable / many others). Operator's exploratory
+    # --dry-run MUST preview without writing /etc/audit/auditd.conf
+    # AND without restarting auditd. A silent dry-run that committed
+    # would flip the in-memory + on-disk audit-daemon retention/
+    # rotation behavior on a host where operator was investigating.
+    # Locks the dry-run-preserves-state contract on the auditd
+    # tunable substrate (log rotation + retention defense layer).
+    rm -f "${AUDITD_CONF}"
+    write_config "high-volume"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${AUDITD_CONF}" ]
+    ! grep -q 'restart auditd' "${SYSEOF_LOG}"
+}
