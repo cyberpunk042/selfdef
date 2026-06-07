@@ -475,3 +475,15 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # pam-config-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/pam.d for rogue pam_*.so paths in writable
+    # roots, emits a verdict, then exits. Type=simple would
+    # break timer OnUnitActiveSec semantics. Locks oneshot-probe
+    # contract on the pam-config-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/pam-config-watchdog/systemd/selfdef-pam-config.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
