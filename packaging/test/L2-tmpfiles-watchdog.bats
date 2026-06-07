@@ -283,3 +283,20 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (sticky-bit 1777 on /tmp-like dir is benign + not flagged — false-positive guard on the dir-permissions ladder)" {
+    # Sister to the suid/sgid alert axes. Mode 1777 is the
+    # canonical /tmp + /var/tmp + /dev/shm sticky-bit
+    # convention (rwx for everyone + sticky restricts deletion
+    # to owner). Selfdef MUST NOT false-fire on this widely-
+    # used legitimate pattern. Locks the false-positive guard
+    # on the dir-perm ladder so operator dashboards aren't
+    # flooded with bogus alerts on every routine /tmp creation
+    # in tmpfiles.d.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'd /var/lib/myapp-scratch 1777 root root -\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
