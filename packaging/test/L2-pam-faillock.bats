@@ -298,3 +298,20 @@ run_wd() {
     run_wd
     grep -qE 'unlock_time\s*=' "${FAILLOCK_CONF}"
 }
+
+@test "INVARIANT (faillock.conf carries even_deny_root directive — root accounts are protected too, not just non-root)" {
+    # Sister to deny / fail_interval / unlock_time directive
+    # INVARIANTs already locked. By default, pam_faillock does
+    # NOT lock the root account — leaving the root account
+    # vulnerable to indefinite brute-force from privileged-
+    # context (su / sudo with cached creds). The even_deny_root
+    # directive applies the lockout policy uniformly. Without
+    # it, the brute-force defense is asymmetric in a way an
+    # attacker can exploit (target root specifically). Lock
+    # that at least the strict profile carries even_deny_root
+    # — root MUST be protected by the same lockout window as
+    # non-root in the hardened profile.
+    write_config "strict"
+    run_wd
+    grep -qE 'even_deny_root' "${FAILLOCK_CONF}"
+}
