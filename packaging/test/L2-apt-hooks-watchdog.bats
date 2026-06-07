@@ -651,3 +651,24 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         grep -qE '^PrivateTmp=' "${s}"
     done
 }
+
+@test "INVARIANT (apt-hooks-watchdog service unit declares ProtectHome= — /home + /root + /run/user namespace-isolation hardening contract)" {
+    # Sister to brain-wide systemd ProtectHome= INVARIANT
+    # family. Watchdog .service units have no business
+    # reading /home — their probe targets are system-config
+    # paths (/etc/*). The ProtectHome= directive
+    # (canonically =read-only) instructs systemd to either
+    # hide (=true) or read-only-mount (=read-only) the
+    # /home, /root, and /run/user directories within the
+    # unit's mount namespace. An exploited watchdog cannot
+    # then exfiltrate ~/.bash_history, ~/.ssh/*, or operator
+    # credentials. A regression dropping ProtectHome= would
+    # expose all operator home contents to a compromised
+    # watchdog. Locks the home-namespace-isolation
+    # discipline on the apt-hooks-watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^ProtectHome=' "${s}"
+    done
+}

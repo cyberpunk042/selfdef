@@ -646,3 +646,28 @@ paths = ip.get('paths', [])
 assert isinstance(paths, list) and len(paths) > 0, f'install_paths.paths must be non-empty list, got {paths!r}'
 "
 }
+
+@test "INVARIANT (usbguard module.toml [install_paths] scope = \"system\" — install_paths scope canonical contract)" {
+    # Sister to brain-wide [install_paths].scope INVARIANT
+    # family. Per MS011 Z-8 / SDD-026, the scope field on the
+    # install_paths block declares whether the module writes
+    # to system locations (/etc, /usr, /var — scope="system")
+    # or per-operator locations ($HOME/.config — scope=
+    # "user"). The selfdef installer surface uses scope to
+    # gate sudo-required apply (system) vs operator-only
+    # apply (user). The canonical value for usbguard is
+    # "system" because it writes to /etc/selfdef + /usr/
+    # local/libexec/selfdef. A regression that swapped scope
+    # to "user" would silently skip sudo elevation + fail
+    # the apply with EACCES. Locks the system-scope discipline
+    # on the usbguard substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/usbguard/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+sc = (data.get('install_paths') or {}).get('scope', '')
+assert sc == 'system', f'install_paths.scope must be system, got {sc!r}'
+"
+}
