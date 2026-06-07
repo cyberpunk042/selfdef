@@ -446,3 +446,17 @@ EOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"selinux-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: selinux-policy packages NEVER auto-removed)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs.
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=disabled
+SELINUXTYPE=targeted
+EOF
+    write_config "permissive"
+    run_wd
+    # Watchdog flips SELINUX= to target profile but MUST NEVER emit shell
+    # commands that uninstall selinux-policy packages (apt/dpkg/dnf/rpm/yum
+    # remove|purge). Sister to brain-wide no-auto-uninstall discipline.
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${SELINUX_CONFIG}"
+}
