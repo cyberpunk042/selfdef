@@ -273,3 +273,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (negate operation 'negate * * /bin/false' canonical pattern — NOT flagged as exec)" {
+    # Sister to the negate-not-exec false-positive-guard already
+    # locked. The canonical request-key negate-operation pattern is
+    # 'negate * * /bin/false' which intentionally fails the upcall
+    # without exec. Lock that this canonical operator-pattern does
+    # NOT false-fire even when the binary path is absolute (/bin/
+    # false is a system binary; not a writable-root signal).
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\nnegate * * /bin/false\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    # Second run on unchanged config → severity ok / intact.
+    cap | grep -q '"event":"request_key_intact"'
+    cap | grep -q '"severity":"ok"'
+}
