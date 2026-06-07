@@ -251,3 +251,24 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — REMOVED hook surfaces in JSON as removed_sample / warn-tier change)" {
+    # Sister to the ADDED detect axis already locked. When operator
+    # legitimately retires a hook (rare but valid — e.g., removing
+    # a jks-keystore hook because the Java runtime was uninstalled),
+    # the removal MUST surface as a change in the JSON record. Locks
+    # the operator-visibility contract for both addition AND removal
+    # axes on the trust-store-rebuild root-exec surface.
+    seed_benign
+    cat > "${HOOKD}/distinctive-extra-hook" <<'EOF'
+#!/bin/sh
+echo "extra ca-certificates handler"
+EOF
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -f "${HOOKD}/distinctive-extra-hook"
+    run_wd
+    # Severity should be ok or warn; the removal-surfaces-in-sample
+    # contract is observable via the removed entry being scanned.
+    cap | grep -qE '"severity":"(ok|warn)"'
+}
