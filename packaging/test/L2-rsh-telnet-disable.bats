@@ -276,3 +276,25 @@ run_wd() {
     # When none present, acted=0 OR no-op messaging.
     [[ "${output_none}" == *'acted=0'* ]] || [[ "${output_none}" == *'no-op'* ]]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # rsh-telnet-disable TOML; parser must tolerate without altering
+    # the profile-gated behavior. mask-with-noise still fires
+    # systemctl mask on all 14 legacy plaintext-protocol units
+    # (telnet/rsh/rlogin/rexec/tftp/finger.socket + .service pairs)
+    # — the full legacy-cleartext-protocol neutralization (these
+    # protocols transmit credentials in cleartext; CVE-laden;
+    # historical-but-still-shipped attack surface).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "rsh/telnet/finger = cleartext-creds legacy attack surface"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    LEGACY_PRESENT=1 run_wd
+    grep -q 'systemctl mask telnet.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask rsh.socket' "${SYSEOF_LOG}"
+}
