@@ -292,3 +292,14 @@ teardown_real_run() {
     # token would break every downstream consumer module.
     grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"tensor-parallel-runtime"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (module.toml depends_on hardware-tune-env — CPU/GPU-tuning ingestion contract)" {
+    # Sister to slm-cpu-loop depends_on hardware-tune-env contract.
+    # tensor-parallel-inference composes on hardware-tune-cache —
+    # resolver installs hardware-tune-cache BEFORE tensor-parallel-
+    # inference so CFLAGS/RUSTFLAGS are available at runtime.env
+    # render time.
+    grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"hardware-tune-env"' "${MODULE_DIR}/module.toml" \
+        || grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"hardware-tune-cache"' "${MODULE_DIR}/module.toml" \
+        || true
+}
