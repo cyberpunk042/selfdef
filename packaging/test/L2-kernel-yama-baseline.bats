@@ -335,3 +335,20 @@ TOMLEOF
     run_wd
     grep -qE '^kernel\.yama\.ptrace_scope[[:space:]]*=[[:space:]]*3' "${DROPIN}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on kernel-yama-baseline installer
+    # surface across drop-in + sysctl-w phases.
+    write_config "standard" "false"
+    run env PATH="${BIN}:${PATH}" \
+        SCTL_LOG="${SCTL_LOG}" \
+        SELFDEF_DRY_RUN=0 \
+        SELFDEF_YAMA_CONFIG="${CONF}" \
+        SELFDEF_YAMA_DROPIN="${DROPIN}" \
+        LIVE_YAMA=1 \
+        bash "${WD}"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"kernel-yama-baseline"')
+    [ "${count}" = "1" ]
+}
