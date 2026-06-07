@@ -304,3 +304,15 @@ Warning: rootkit-D found"
     # package-removal contract on the rkhunter-cron substrate.
     ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+rkhunter' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # rkhunter-cron runs ON the timer's scheduled fire — invokes
+    # rkhunter --check, parses output, emits a verdict, then
+    # exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the rkhunter-
+    # cron substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/rkhunter-cron/systemd/selfdef-rkhunter-check.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
