@@ -234,3 +234,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (mechanism .so under /var/tmp): writable-root expansion on GSSAPI auth code-load surface" {
+    # Sister to the writable-root axes already locked (/tmp, /home,
+    # /dev/shm). /var/tmp is an equally-writable surface — an
+    # attacker who gains user write may swap in a malicious mech.so
+    # to be dlopen()'d into every GSSAPI consumer (sshd, libnfs,
+    # samba, anything krb5-linked). Lock axis-symmetry across the
+    # writable-root family on the GSSAPI authentication-handling
+    # code-load primitive (T1574 — Hijack Execution Flow via shared
+    # object substitution).
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 /usr/lib/mech_krb5.so\n' > "${MECH}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'gssapi_evil 1.2.3.4 /var/tmp/evil.so\n' > "${MECH}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
