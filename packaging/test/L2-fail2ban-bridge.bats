@@ -408,3 +408,18 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: fail2ban-bridge installer NEVER deletes operator-pre-existing jail.local — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # fail2ban-bridge writes its own /etc/fail2ban/jail.d/
+    # drop-ins (standard / recidive); it MUST NEVER rm/find-
+    # delete an operator's pre-existing /etc/fail2ban/jail.local
+    # or jail.d entries not owned by THIS module. Locks no-auto-
+    # delete on the fail2ban-bridge installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/fail2ban/jail\.local' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/fail2ban.*-delete' "${f}"
+    done
+}
