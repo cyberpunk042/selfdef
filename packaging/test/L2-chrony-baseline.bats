@@ -358,3 +358,23 @@ run_wd() {
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"chrony-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: chrony-baseline NEVER emits package-remove commands on chrony/ntp)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The chrony-baseline installer writes a chrony
+    # drop-in pinning operator-curated NTP sources but MUST
+    # NEVER emit shell commands that uninstall the chrony or
+    # ntp package itself (apt/dpkg/dnf/rpm/yum remove|purge|
+    # uninstall chrony|ntp|ntpsec|ntpd). Silent auto-removal
+    # would leave the host with no time-sync substrate —
+    # degrading every downstream defense that depends on
+    # accurate timestamps (audit trails, certificate validation,
+    # Kerberos, JWT expiration, time-window-based detection).
+    # Locks anti-package-removal contract on the chrony NTP
+    # substrate.
+    write_config "pool"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(chrony|ntp|ntpsec|ntpd)'
+    drop_in="${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    [ ! -f "${drop_in}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${drop_in}"
+}
