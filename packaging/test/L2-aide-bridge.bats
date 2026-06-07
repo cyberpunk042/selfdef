@@ -300,3 +300,24 @@ Changed entries: 0"
     ! cap | grep -q '"severity":"alert"'
 }
 
+@test "INVARIANT (rc=5 added+changed — adds-with-tamper → alert; closes the rc-bitmask combinatorial slot)" {
+    # Sister to rc=3 (added+removed), rc=7 (all 3) and changed-only
+    # / removed-only / adds-only individual-bit INVARIANTs already
+    # locked above. Closes the remaining rc-bitmask combinatorial
+    # coverage: rc=5 (1+4 = added bit + changed bit). Severity must
+    # be alert — the changed bit tips severity ladder over the
+    # adds-only baseline. This is the "attacker added new files +
+    # tampered existing files" pattern (eg. dropped a malicious
+    # /etc/cron.d/.evil AND modified /etc/passwd in the same scan).
+    # If the wrapper misclassified rc=5 as adds-dominated, the
+    # operator would lose the tamper signal underneath the adds.
+    # Locks the changed-bit-tips-severity invariant on the
+    # file-integrity surveillance surface (T1565.001).
+    mk_aide 5 "Added entries: 3
+Removed entries: 0
+Changed entries: 2"
+    run_wd
+    cap | grep -q '"event":"diff_changed_or_removed"'
+    cap | grep -q '"severity":"alert"'
+}
+
