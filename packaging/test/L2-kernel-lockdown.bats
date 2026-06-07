@@ -317,3 +317,19 @@ EOF
     [[ "${output}" == *"IRREVERSIBLE until reboot"* ]] || [[ "${output}" == *"acknowledge_modules_disabled"* ]]
     ! [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" ]
 }
+
+@test "INVARIANT (drop-in is sysctl.d-parseable: kernel.modules_disabled=<N> format — boot-time persistence contract)" {
+    # Sister to kernel-yama-baseline + aslr-baseline + coredump-
+    # suid-restrict sysctl.d-parseable INVARIANTs already locked.
+    # The strict-profile drop-in lives at /etc/sysctl.d/50-selfdef-
+    # kernel-lockdown-strict.conf and is parsed by systemd-sysctl.
+    # service at boot. A malformed kernel.modules_disabled line
+    # would silently fail at boot — the runtime sysctl -w would
+    # set it for current boot but the value would NOT persist
+    # across reboot, leaving the host with degraded module-loading
+    # restriction on next boot.
+    write_config "strict" "true"
+    run_wd
+    [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" ]
+    grep -qE '^kernel\.modules_disabled[[:space:]]*=[[:space:]]*1$' "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf"
+}
