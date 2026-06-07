@@ -264,3 +264,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (execute() under /home → alert: user-writable hijack coverage on dhcpd exec surface)" {
+    # Sister to many other watchdog's /home user-writable
+    # INVARIANT across the brain. /home is the user-writable
+    # surface — an attacker with a regular user account can
+    # drop a malicious binary into their home and have dhcpd
+    # exec it AS ROOT on every lease-grant / lease-release
+    # event. Locks axis-symmetry on /home for the dhcpd execute()
+    # surface (T1546 — dhcpd executes binary AS ROOT on lease
+    # events; recurrent trigger fires the planted exec).
+    printf 'on commit { execute("/home/user/.evil"); }\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
