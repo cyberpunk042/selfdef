@@ -300,3 +300,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-mod'
 }
+
+@test "INVARIANT (plugin .so under /home — user-writable hijack on Kerberos auth plugin dlopen surface)" {
+    # Sister to /tmp + /var/tmp + /dev/shm + relative-with-slash
+    # plugin .so writable-root INVARIANTs already locked.
+    # /home/<user> is writable by the owning user; attacker who
+    # pivots into a user account plants /home/<user>/.evil-
+    # krb5.so + edits krb5.conf to point at it — every Kerberos
+    # auth (preauth / GSSAPI / DNS-resolution-of-realm) loads
+    # planted .so AS consuming process (typically root for
+    # kinit / sshd-gssapi). T1574 Hijack Execution Flow via
+    # Kerberos plugin substitution.
+    printf '[plugins]\n  clpreauth = { module = pkinit:/usr/lib/krb5/plugins/preauth/pkinit.so }\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[plugins]\n  kdcpreauth = { module = evil:/home/alice/.evil-krb5.so }\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
