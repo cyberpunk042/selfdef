@@ -361,3 +361,22 @@ TOMLEOF
     [ -f "${SVC_DST}" ]
     grep -qE '^Type=oneshot' "${SVC_DST}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. mta-loopback-detect manifest declares install +
+    # profile gating (report / enforce) the resolver enforces;
+    # malformed manifest wedges the MTA loopback-binding probe.
+    # Python's tomllib is the canonical parser. Locks anti-
+    # malformed-manifest on the mta-loopback-detect substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'mta-loopback-detect', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
