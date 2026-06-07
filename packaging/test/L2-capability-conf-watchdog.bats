@@ -255,3 +255,21 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (dangerous-cap detect): cap_kill grant → alert (T1499 process-disrupt axis)" {
+    # Sister to the cap_audit_control + cap_setuid + cap_sys_admin
+    # + cap_dac_override + cap_sys_ptrace + cap_sys_module dangerous-
+    # cap axes already locked. cap_kill bypasses signal-permission
+    # checks, letting a granted user kill any process regardless of
+    # uid match (including critical system daemons + selfdef's own
+    # watchdog services + the very audit daemon that would log the
+    # tampering). T1499 (Endpoint DoS) — Service Stop via signal.
+    # Locks coverage of the kill-grade capability alongside the
+    # other dangerous-cap families on the pam_cap surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'cap_net_raw netuser\ncap_kill evil\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
