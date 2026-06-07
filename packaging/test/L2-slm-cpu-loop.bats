@@ -209,3 +209,63 @@ INSTALL_DIR="${MODULE_DIR}/install"
     [[ "${output}" == *'"module":"slm-cpu-loop"'* ]]
     [[ "${output}" == *'"status":"ok"'* ]]
 }
+
+@test "INVARIANT (env file is shell-sourceable: bash -n parses cleanly — downstream consumer contract)" {
+    # Downstream SLM loop runtime sources slm-loop.env. It MUST be
+    # valid shell syntax (no malformed assignments, no unterminated
+    # quotes). Sister to hardware-tune-cache + tensor-parallel-
+    # inference shell-sourceable INVARIANT.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    bash -n "${SELFDEF_SLM_LOOP_ENV}"
+    parse_rc=$?
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+    [ "${parse_rc}" -eq 0 ]
+}
+
+@test "INVARIANT (current-behavior: slm-loop.env is self-contained — consumer reference to hardware-tune.env is via apply-time env-injection, NOT runtime sourcing)" {
+    # Distinct from tensor-parallel-inference's runtime.env which
+    # explicitly sources hardware-tune.env. The slm-cpu-loop module
+    # consumes hardware-tune.env at APPLY TIME (CFLAGS bake into the
+    # SLM compile chain via the orchestrator), not at runtime. The
+    # written env file contains the SLM_* knobs only. Lock the
+    # architectural distinction so a future runtime-source refinement
+    # is intentional, not silent.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    # env file carries SLM knobs (load-bearing).
+    grep -q 'SELFDEF_SLM_AFFINITY' "${SELFDEF_SLM_LOOP_ENV}"
+    grep -q 'SELFDEF_SLM_THREADS'  "${SELFDEF_SLM_LOOP_ENV}"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+}
+
+@test "INVARIANT (re-arm after operator deletion: env file re-created on next apply)" {
+    # Sister to many other modules' re-arm INVARIANT. When operator
+    # out-of-band rm the env file, the next apply MUST re-create it
+    # cleanly with all SELFDEF_SLM_* knobs intact.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    [ -f "${SELFDEF_SLM_LOOP_ENV}" ]
+    rm -f "${SELFDEF_SLM_LOOP_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    re_armed=0
+    [ -f "${SELFDEF_SLM_LOOP_ENV}" ] && grep -q 'SELFDEF_SLM_AFFINITY' "${SELFDEF_SLM_LOOP_ENV}" && re_armed=1
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+    [ "${re_armed}" = "1" ]
+}
