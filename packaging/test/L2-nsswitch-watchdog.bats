@@ -256,3 +256,20 @@ seed_benign() {
     cap | grep -q '"event":"nsswitch_rogue_source"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (rogue on group db — group-membership hijack — also alerts)" {
+    # Sister to rogue-on-passwd + rogue-on-shadow + rogue-on-hosts axes
+    # already locked. group db backs the group-membership lookup. A
+    # rogue source on group lets an attacker swap in their own libnss_
+    # X.so that returns whatever group memberships they choose — direct
+    # privesc vector (claim 'root', 'wheel', 'sudo' membership via the
+    # rogue NSS provider). T1556/T1574 sister axis on the group-
+    # membership resolution chain.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'passwd: files\ngroup: files evil_group_hijack\nshadow: files\nhosts: files dns\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"nsswitch_rogue_source"'
+    cap | grep -q '"severity":"alert"'
+}
