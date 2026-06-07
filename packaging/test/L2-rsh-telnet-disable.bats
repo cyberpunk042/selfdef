@@ -347,3 +347,13 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"rsh-telnet-disable"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (downgrade mask → stop does NOT auto-unmask — mask is sticky)" {
+    # Sister to brain-wide mask-sticky-downgrade INVARIANTs.
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    LEGACY_PRESENT=1 run_wd
+    ! grep -qE 'systemctl unmask' "${SYSEOF_LOG}"
+}
