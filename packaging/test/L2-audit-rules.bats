@@ -337,3 +337,21 @@ TOMLEOF
     # augenrules --load fired.
     grep -qE 'augenrules.*--load' "${AUGEN_LOG}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO rule files written AND NO augenrules --load fired)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain (acct-baseline / aslr-baseline / apport-
+    # disable / many others). Operator's exploratory --dry-run
+    # MUST preview without writing /etc/audit/rules.d/50-selfdef-*
+    # AND without firing augenrules --load. Without strict DRY_RUN
+    # gating, a previewed dry-run would silently flip the kernel-
+    # level audit rule set on a host where operator was
+    # investigating — and might not even know the rules are
+    # reloaded. Locks the dry-run-preserves-state contract on the
+    # audit rule-loading substrate (forensics enable surface).
+    write_config "paranoid"
+    : > "${AUGEN_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${RULES_DIR}/50-selfdef-paranoid.rules" ]
+    ! grep -qE 'augenrules.*--load' "${AUGEN_LOG}"
+}
