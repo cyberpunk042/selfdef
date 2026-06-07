@@ -281,3 +281,13 @@ Warning: rootkit-D found"
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (rkhunter binary non-zero exit → wrapper rc=0 + emits JSON — advisory contract holds even on rkhunter crash)" {
+    # Sister to brain-wide advisory-rc INVARIANTs (lynis-cron, etc.).
+    # rkhunter may crash on parse error or missing data file. Wrapper
+    # MUST still emit JSON record + return rc=0 (cron + systemd
+    # success — advisory not enforcement).
+    mk_rk 99 "rkhunter: internal error"
+    run_wd
+    cap | grep -q '"tag":"selfdef-rkhunter"'
+}
