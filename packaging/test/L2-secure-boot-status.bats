@@ -357,3 +357,22 @@ TOMLEOF
     run_wd
     grep -qE '^Type=oneshot' "${SVC_DST}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. secure-boot-status manifest declares install +
+    # profile gating the resolver enforces; malformed manifest
+    # wedges the Secure Boot status probe. Python's tomllib is
+    # the canonical parser. Locks anti-malformed-manifest on
+    # the secure-boot-status substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/secure-boot-status/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'secure-boot-status', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
