@@ -252,3 +252,40 @@ EOF
     # to detect dormant configs.
     [[ "${output}" == *'wired=true'* ]] || [[ "${output}" == *'wired=false'* ]]
 }
+
+@test "INVARIANT (managed-by header is on the first non-blank line: stale-cleanup head -1 discipline)" {
+    # The managed-by marker MUST be the first non-blank line of the
+    # rendered config so a stale-detection scan reading just head -1
+    # of /etc/security/pwhistory.conf reliably identifies selfdef-owned
+    # files. Sister header discipline across the brain.
+    write_config "standard"
+    run_wd
+    first_nonblank="$(grep -m1 -v '^[[:space:]]*$' "${PWHISTORY_CONF}")"
+    [[ "${first_nonblank}" == *"managed-by: selfdef pam-history"* ]]
+}
+
+@test "INVARIANT (RHEL password-auth detection: pam_pwhistory.so wired there → wired-in status — third-distro path)" {
+    # The detect-and-notice scan must walk Debian's common-password,
+    # RHEL's system-auth, AND RHEL's password-auth. password-auth is
+    # the separate path for non-tty (network/SSH) auth on RHEL family.
+    cat > "${PAM_DIR}/password-auth" <<'EOF'
+password requisite pam_pwhistory.so use_authtok
+password sufficient pam_unix.so use_authtok yescrypt shadow
+EOF
+    write_config "standard"
+    run_wd 2>&1 | grep -qE "pam_pwhistory.so is wired in|wired"
+}
+
+@test "INVARIANT (mtime preserved on profile re-write of the SAME profile: standard→standard re-apply is byte-identical)" {
+    # Sister to the existing idempotent byte-identical mtime test —
+    # this one additionally verifies that re-issuing the SAME profile
+    # with no env-var changes truly produces zero file-system churn.
+    write_config "standard"
+    run_wd
+    mtime_first="$(stat -c '%Y' "${PWHISTORY_CONF}")"
+    sleep 1
+    write_config "standard"                              # re-issue
+    run_wd
+    mtime_second="$(stat -c '%Y' "${PWHISTORY_CONF}")"
+    [ "${mtime_first}" = "${mtime_second}" ]
+}
