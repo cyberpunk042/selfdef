@@ -318,3 +318,24 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on systemd-generator surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The systemd-generator-watchdog MUST only emit severity
+    # values from the closed set {ok,warn,alert} — never custom
+    # values (critical, error, fatal, notice, info). Operator
+    # dashboard parsers branch on the literal severity string;
+    # an out-of-set value silently falls through routing and the
+    # operator never sees the T1037 systemd-generator-trigger
+    # root-exec persistence alert. Locks parser contract on the
+    # systemd generator early-boot detection surface.
+    seed_benign
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    printf '#!/bin/sh\n/dev/tcp/1.1.1.1/4444\n' > "${GEND}/my-generator"
+    chmod 0755 "${GEND}/my-generator"
+    run_wd                                              # alert path
+    # Every severity value emitted MUST be one of {ok,warn,alert}.
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
