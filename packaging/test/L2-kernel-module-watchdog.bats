@@ -452,3 +452,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # kernel-module-watchdog runs ON the timer's scheduled fire
+    # — diffs lsmod output against baseline + checks .ko in-tree
+    # vs out-of-tree, emits a verdict, then exits. Type=simple
+    # would break timer OnUnitActiveSec semantics. Locks oneshot-
+    # probe contract on the kernel-module-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/kernel-module-watchdog/systemd/selfdef-kernel-modules.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
