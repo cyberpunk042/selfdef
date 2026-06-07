@@ -391,3 +391,14 @@ TOMLEOF
         [ "${mode}" = "644" ] || [ "${mode}" = "640" ] || [ "${mode}" = "600" ]
     fi
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on tmpfs-baseline installer
+    # surface across multi-drop-in (tmp + var-tmp) phases.
+    write_config "noexec"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"tmpfs-baseline"')
+    [ "${count}" = "1" ]
+}
