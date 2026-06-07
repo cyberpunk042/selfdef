@@ -244,3 +244,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named master-map entry surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker adds a new
+    # autofs master-map entry pointing at a writable program map,
+    # the entry detail MUST surface in the JSON sample so
+    # operator dashboard routes triage to the right path. Locks
+    # the new-entry-discovered operator-visibility contract on
+    # the autofs program-map root-exec persistence surface (T1546
+    # — autofs runs program-map scripts AS ROOT on every mount
+    # request).
+    printf '/mnt/data program:/usr/sbin/auto.smb\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/mnt/distinctive-attacker-mount program:/tmp/.distinctive-attacker-evil\n' > "${CONF}"
+    run_wd
+    cap | grep -q 'distinctive-attacker'
+}
