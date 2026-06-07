@@ -435,3 +435,22 @@ EOF
     run_wd
     cap | grep -qE '"event":"(new_account|new_privileged_account)"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger-line INVARIANTs.
+    # selfdef-accounts tag must fire EXACTLY ONCE per scan
+    # regardless of how many uid0/sudo/account adds surface.
+    # Locks consolidation discipline on T1136/T1098 account-
+    # surveillance surface.
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat >> "${PASSWD_FILE}" <<'EOF'
+evil1:x:0:0:Evil1:/root:/bin/bash
+evil2:x:0:0:Evil2:/root:/bin/bash
+evil3:x:1500:1500:Evil3:/home/evil3:/bin/bash
+EOF
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-accounts -- ')
+    [ "${main_count}" = "1" ]
+}
