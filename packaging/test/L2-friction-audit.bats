@@ -748,3 +748,6 @@ EOF
 @test "INVARIANT (script declares set flags in first 30 lines — strict-mode-prologue 78)" {
     head -30 "${SCRIPT}" | grep -qE '^set -'
 }
+@test "INVARIANT (script declares ts_ms variable in emit_ring — ring-buffer-timestamp 79)" {
+    awk '/^emit_ring\(\)/,/^}/' "${SCRIPT}" | grep -qE 'ts_ms'
+}

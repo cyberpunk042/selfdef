@@ -706,3 +706,6 @@ setup() {
 @test "INVARIANT (lib first-line is comment OR shellcheck marker — POSIX-conformant header 78)" {
     head -1 "${LIB}" | grep -qE '^#'
 }
+@test "INVARIANT (lib file uses shellcheck shell=bash — POSIX-conformant 79)" {
+    head -5 "${LIB}" | grep -qE 'shellcheck shell=bash'
+}

@@ -792,3 +792,8 @@ assert ch == 'install/check.sh'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/suricata/module.toml"
     head -1 "${mtoml}" | grep -qE '^#|^name'
 }
+
+@test "INVARIANT (suricata install/apply.sh has shebang line — POSIX-conformant 79)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/suricata/install/apply.sh"
+    head -1 "${apply}" | grep -qE '^#!'
+}

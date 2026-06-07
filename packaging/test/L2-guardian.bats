@@ -463,3 +463,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postrm file has shebang line — POSIX-conformant 78)" {
     head -1 "${POSTRM}" | grep -qE '^#!'
 }
+@test "INVARIANT (postrm has shebang #!/usr/bin/env bash or #!/bin/bash — POSIX-conformant 79)" {
+    head -1 "${POSTRM}" | grep -qE '^#!.*(bash|sh)'
+}

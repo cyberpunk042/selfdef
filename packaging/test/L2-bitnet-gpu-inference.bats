@@ -860,3 +860,8 @@ assert isinstance(data, dict)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
     head -1 "${mtoml}" | grep -qE '^#|^name'
 }
+
+@test "INVARIANT (bitnet-gpu-inference install/apply.sh has shebang line — POSIX-conformant 79)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install/apply.sh"
+    head -1 "${apply}" | grep -qE '^#!'
+}

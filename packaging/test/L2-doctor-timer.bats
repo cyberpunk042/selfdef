@@ -628,3 +628,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer file uses [Unit] header — INI-section-canonical 78)" {
     grep -qE '^\[Unit\]' "${TIMER}"
 }
+@test "INVARIANT (.service file uses [Service] header — INI-section-canonical 79)" {
+    grep -qE '^\[Service\]' "${SERVICE}"
+}

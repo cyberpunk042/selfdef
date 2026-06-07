@@ -882,3 +882,7 @@ assert isinstance(data, dict)
 @test "INVARIANT (slm-cpu-loop module.toml first-line is comment OR declaration — TOML-canonical-start 78)" {
     head -1 "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml" | grep -qE '^#|^name'
 }
+@test "INVARIANT (slm-cpu-loop install/apply.sh has shebang — POSIX-conformant 79)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/apply.sh"
+    head -1 "${apply}" | grep -qE '^#!'
+}

@@ -795,3 +795,6 @@ assert isinstance(data, dict)
 @test "INVARIANT (detect-host module.toml first-line is comment OR declaration — TOML-canonical-start 78)" {
     head -1 "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml" | grep -qE '^#|^name'
 }
+@test "INVARIANT (detect-host module.toml declares depends_on field — dependency-resolver 79)" {
+    grep -qE '^depends_on' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+}

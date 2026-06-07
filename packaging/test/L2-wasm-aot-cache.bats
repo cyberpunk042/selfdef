@@ -895,3 +895,8 @@ assert isinstance(data, dict)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
     head -1 "${mtoml}" | grep -qE '^#|^name'
 }
+
+@test "INVARIANT (wasm-aot-cache install/apply.sh has shebang line — POSIX-conformant 79)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install/apply.sh"
+    head -1 "${apply}" | grep -qE '^#!'
+}
