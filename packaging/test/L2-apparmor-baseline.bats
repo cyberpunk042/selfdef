@@ -434,3 +434,19 @@ TOMLEOF
         bash "${WD}"
     [ ! -f "${AA_LIST}" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on apparmor-baseline installer
+    # surface across AA_LIST + aa-enforce phases.
+    write_config "enforce"
+    AA_LOADED='firefox' run env PATH="${BIN}:${PATH}" \
+        SELFDEF_AA_BASELINE_CONFIG="${CONF}" \
+        SELFDEF_AA_CONFIGS_SRC="${CONFIGS_SRC}" \
+        SELFDEF_AA_LIST="${AA_LIST}" \
+        SELFDEF_AA_SYSFS_DIR="${SYSFS_DIR}" \
+        bash "${WD}"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"apparmor-baseline"')
+    [ "${count}" = "1" ]
+}
