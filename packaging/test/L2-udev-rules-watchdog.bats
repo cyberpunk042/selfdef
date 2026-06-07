@@ -398,3 +398,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*udev'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # udev-rules-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/udev/rules.d + /lib/udev/rules.d for RUN+=
+    # injection patterns, emits a verdict, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the udev-rules-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/udev-rules-watchdog/systemd/selfdef-udev-rules.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
