@@ -288,3 +288,20 @@ seed_benign() {
     run_wd
     ! cap | grep -q '"event":"nsswitch_rogue_source"'
 }
+
+@test "INVARIANT (DELTA detect — distinctive-attacker-named rogue NSS source surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker adds a
+    # distinctively-named NSS module to passwd/group/shadow/
+    # hosts (T1556.001 — Modify Authentication Process via
+    # NSS module hijack; libnss_<distinctive>.so.2 gets
+    # dlopen()'d by every name-resolution call), the rogue
+    # module name MUST surface in the JSON sample so operator
+    # dashboard routes triage to the right module.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'passwd: files distinctive_attacker_mod\ngroup: files\nshadow: files\nhosts: files dns\n' > "${CONF}"
+    run_wd
+    cap | grep -q 'distinctive_attacker_mod'
+}
