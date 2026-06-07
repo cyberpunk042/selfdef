@@ -429,3 +429,18 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: cron-baseline installer NEVER deletes operator-pre-existing cron.allow/cron.deny — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # cron-baseline writes its own /etc/cron.allow/cron.deny +
+    # /etc/at.allow/at.deny; it MUST NEVER rm/find-delete an
+    # operator's pre-existing files outside the canonical set.
+    # Locks no-auto-delete on the cron-baseline installer
+    # substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/cron-baseline/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/cron\.(d|hourly|daily|weekly|monthly)' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/cron\.(d|hourly|daily|weekly|monthly).*-delete' "${f}"
+    done
+}
