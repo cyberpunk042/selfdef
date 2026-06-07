@@ -416,3 +416,16 @@ EOF
     mode="$(stat -c '%a' "${BASELINE}")"
     [ "${mode}" = "600" ] || [ "${mode}" = "640" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # polkit-rules-watchdog runs ON the timer's scheduled fire —
+    # diffs /etc/polkit-1/rules.d against baseline, emits a
+    # verdict on yes-without-auth rule additions, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the polkit-rules-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/polkit-rules-watchdog/systemd/selfdef-polkit-rules.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
