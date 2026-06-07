@@ -413,3 +413,24 @@ action = data['spec']['kprobes'][0]['selectors'][0]['matchActions'][0]['action']
 assert action == 'Sigkill', f'matchAction must be Sigkill, got {action}'
 "
 }
+
+@test "INVARIANT (YAML spec.kprobes[0].selectors[0].matchArgs[0].operator=NotIn — allowlist-not-blocklist semantics contract)" {
+    # Sister to brain-wide allowlist-vs-blocklist INVARIANT
+    # family. The MS047 perimeter is allowlist-by-design: the
+    # NotIn operator means "kill any execve whose path is NOT
+    # in the listed values". A regression that swapped NotIn
+    # for In would INVERT the semantics — Tetragon would
+    # then kill the allowlisted entries (python3, nvidia-smi,
+    # vllm, podman) and let every off-list execve through.
+    # That inversion would brick selfdef hosts at first apply
+    # AND simultaneously open the kernel-fence. The operator
+    # MUST NOT be able to slip an "In" into the policy under
+    # any refactor. Locks the NotIn allowlist semantics on the
+    # perimeter YAML substrate.
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+op = data['spec']['kprobes'][0]['selectors'][0]['matchArgs'][0]['operator']
+assert op == 'NotIn', f'matchArgs operator must be NotIn (allowlist), got {op}'
+"
+}

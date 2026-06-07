@@ -506,3 +506,21 @@ EOF
     grep -qE 'emit_ring.*"fail"' "${SCRIPT}"
     grep -qE 'emit_ring.*"skip"' "${SCRIPT}"
 }
+
+@test "INVARIANT (ts_ms computed as epoch-milliseconds via date +%s%N / 1000000 — OCSF time-field precision contract)" {
+    # Sister to brain-wide OCSF time-field INVARIANT family.
+    # OCSF time= MUST be epoch-milliseconds (per OCSF schema
+    # https://schema.ocsf.io/1.0.0/) — NOT epoch-seconds, NOT
+    # ISO-8601 string. The script computes ts_ms via
+    # \$(date +%s%N) / 1000000 (nanoseconds-since-epoch divided
+    # by 10^6 = milliseconds-since-epoch). A regression that
+    # swapped to date +%s (seconds) would emit time= values
+    # 1000x smaller, breaking downstream OCSF-conformant
+    # consumers that compute time-deltas in millisecond units.
+    # A regression to date +%Y-%m-%dT%H:%M:%SZ (ISO string)
+    # would change the JSON type from int to string, breaking
+    # \`jq '.time'\` numeric comparisons. Locks the epoch-ms
+    # numeric-precision discipline on the friction-audit
+    # ts_ms substrate (shared by emit_ocsf + emit_ring).
+    grep -qE 'ts_ms=\$\(\(\$\(date \+%s%N\) / 1000000\)\)' "${SCRIPT}"
+}

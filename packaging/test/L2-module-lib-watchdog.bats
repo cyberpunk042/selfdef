@@ -430,3 +430,30 @@ setup() {
     # reversed)
     grep -qE 'SELFDEF_MODULE_LIB_VERSION_REQUIRED.*-gt' "${LIB}"
 }
+
+@test "INVARIANT (toml_get returns non-zero rc when key is missing — consumer if-then-fi-rc contract)" {
+    # Sister to brain-wide library-helper-rc INVARIANT family.
+    # Callers consume toml_get via the if-then pattern:
+    #   if val=$(toml_get summary module.toml); then
+    #       use "$val"
+    #   else
+    #       handle missing
+    #   fi
+    # This pattern requires toml_get to return rc!=0 when the
+    # key is absent — NOT rc=0 + empty stdout (which would
+    # silently let consumers use empty strings as if the value
+    # were intentionally blank). The implementation guards
+    # via [[ -z "$line" ]] && return 1. A regression that
+    # dropped the guard or returned rc=0 on missing-key would
+    # break the consumer if-then-fi pattern across every
+    # module's apply/check/uninstall script. Locks the rc!=0
+    # on missing-key discipline on the toml_get substrate.
+    local tmp
+    tmp=$(mktemp)
+    printf 'present = "value"\n' >"${tmp}"
+    # Present key: rc=0
+    toml_get present "${tmp}" >/dev/null
+    # Missing key: rc!=0
+    ! toml_get absent "${tmp}" >/dev/null
+    rm -f "${tmp}"
+}

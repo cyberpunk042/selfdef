@@ -226,3 +226,21 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # hardening discipline on the guardian unit substrate.
     grep -qE '^Protect[A-Z]' "${UNIT}"
 }
+
+@test "INVARIANT (guardian.service uses Wants=tetragon.service, NOT Requires= — graceful-degrade contract)" {
+    # Sister to brain-wide Wants-vs-Requires INVARIANT family.
+    # Guardian taps tetragon's eBPF socket, but per sain-01 §10
+    # dump 569-588 the unit MUST use Wants=tetragon.service
+    # (graceful, dependency-encouraged-but-not-required) rather
+    # than Requires=tetragon.service (hard-dependency that
+    # would refuse to start guardian on hosts where tetragon
+    # is not installed). A regression that swapped Wants= for
+    # Requires= would break MS044's "guardian still starts +
+    # waits patiently on the socket" promise — on hosts
+    # without tetragon, guardian would never start, leaving
+    # the perimeter watchdog blind. Locks the Wants-not-
+    # Requires graceful-degrade discipline on the guardian
+    # unit substrate.
+    grep -qE '^Wants=tetragon\.service' "${UNIT}"
+    ! grep -qE '^Requires=tetragon\.service' "${UNIT}"
+}

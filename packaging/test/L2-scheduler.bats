@@ -400,3 +400,24 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^RestrictAddressFamilies=.*AF_UNIX' "${UNIT}"
     grep -qE '^RestrictAddressFamilies=.*AF_INET' "${UNIT}"
 }
+
+@test "INVARIANT (.service has NO [Timer] section — daemon-driven (Type=simple+Restart=always loop), NOT timer-driven)" {
+    # Sister to brain-wide systemd-unit-kind INVARIANT family.
+    # The scheduler is a long-running daemon (Type=simple +
+    # Restart=always loop) listening on /proc/pressure/* + DCGM
+    # continuously — it MUST NOT have a [Timer] section because
+    # systemd would refuse to start the unit as a service if a
+    # [Timer] section co-existed in a .service file (timer
+    # directives belong only in .timer units). A regression
+    # that pasted [Timer] directives into selfdef-scheduler.
+    # service would either: (a) fail systemd-analyze verify,
+    # or (b) silently no-op the timer directives while ALSO
+    # confusing operators about whether scheduler is timer-
+    # driven (it isn't — sister to selfdef-doctor.service which
+    # IS timer-driven). Locks the daemon-vs-timer kind
+    # discipline on the scheduler unit substrate.
+    ! grep -qE '^\[Timer\]' "${UNIT}"
+    ! grep -qE '^OnBootSec=' "${UNIT}"
+    ! grep -qE '^OnUnitActiveSec=' "${UNIT}"
+    ! grep -qE '^OnCalendar=' "${UNIT}"
+}

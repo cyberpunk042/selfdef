@@ -355,3 +355,18 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     # substrate.
     grep -qE '^ExecStart=/usr/bin/selfdefctl doctor$' "${SERVICE}"
 }
+
+@test "INVARIANT (.service declares NO Restart= directive — Type=oneshot anti-restart-storm contract)" {
+    # Sister to brain-wide anti-restart-storm INVARIANT family
+    # (already locked on watchdog .service substrates). The
+    # doctor.service is Type=oneshot timer-driven — systemd
+    # Restart=always|on-failure on a Type=oneshot would either
+    # be a no-op or worse: trigger a restart storm where the
+    # timer-fired oneshot loops on transient FAIL (e.g. /proc/
+    # pressure unreadable for 200ms during ZFS unmount).
+    # The .timer's OnUnitActiveSec=1h cadence IS the retry
+    # mechanism; in-service Restart= would short-circuit the
+    # cadence + flood journald. Locks the no-Restart= discipline
+    # on the doctor service substrate.
+    ! grep -qE '^Restart=' "${SERVICE}"
+}
