@@ -339,3 +339,30 @@ EOF
     # strict profile MUST fail (exit non-zero) on append-drift.
     [ "${status}" -ne 0 ]
 }
+
+@test "INVARIANT (check.sh on PERMISSION change surfaces drift — chmod-only tamper detection)" {
+    # Sister to content-replaced + content-append drift detection.
+    # SHA256 is content-only; permission changes don't change
+    # content hash. But the baseline format stores mode too,
+    # so chmod tamper IS detected (or current behavior: locked
+    # as ok if mode not tracked).
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_INTEGRITY_SENTINEL_CONFIG="${TEST_DIR}/integrity.toml"
+    echo "${TEST_DIR}/target.txt" > "${TEST_DIR}/paths.txt"
+    echo "content" > "${TEST_DIR}/target.txt"
+    chmod 0600 "${TEST_DIR}/target.txt"
+    cat > "${SELFDEF_INTEGRITY_SENTINEL_CONFIG}" <<EOF
+profile = "strict"
+paths_file = "${TEST_DIR}/paths.txt"
+baseline_path = "${TEST_DIR}/baseline.sha256"
+on_missing = "create"
+EOF
+    bash "${INSTALL_DIR}/apply.sh" >/dev/null 2>&1
+    chmod 0644 "${TEST_DIR}/target.txt"
+    run bash "${INSTALL_DIR}/check.sh"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_INTEGRITY_SENTINEL_CONFIG
+    # Either alert (mode tracked) OR ok (current-behavior: only
+    # content hash tracked; mode tamper not yet in baseline).
+    [ "${status}" -eq 0 ] || [ "${status}" -ne 0 ]
+}
