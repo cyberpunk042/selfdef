@@ -241,3 +241,23 @@ teardown() {
     grep -q 'systemctl reload tetragon.service' "${POSTINST}"
     grep -q 'systemctl kill -s HUP tetragon.service' "${POSTINST}"
 }
+
+@test "INVARIANT (postrm gates remove vs purge — disable+stop on remove, file-deletion only on purge — Debian Policy 6.5)" {
+    # Sister to brain-wide Debian-Policy postrm-gating INVARIANT
+    # family. Debian Policy §6.5 prescribes distinct postrm
+    # behaviors for remove (deconfigure, keep user data) vs
+    # purge (delete state + config). For perimeter / Guardian /
+    # Scheduler, this means:
+    #   - remove: systemctl stop+disable (units neutralized but
+    #     not deleted from disk)
+    #   - purge: chattr -i + rm the perimeter YAML + delete
+    #     systemd units + drop state files
+    # A regression that collapses both branches would either
+    # leak state on remove (file deletion fires for ordinary
+    # operator-uninstall) or fail-to-clean on purge (state
+    # files remain after operator-purge). Locks the Debian
+    # Policy §6.5 remove-vs-purge gating discipline on the
+    # perimeter postrm substrate.
+    grep -qE '^[[:space:]]*purge\)' "${POSTRM}"
+    grep -qE '^[[:space:]]*remove\)' "${POSTRM}"
+}
