@@ -158,3 +158,15 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"ids"' "${MODULE_DIR}/module.toml"
     grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"eve-json"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (module.toml depends_on bridge-l2 — downstream-substrate dependency lock)" {
+    # Sister to many other installer module's depends_on
+    # contract INVARIANT across the brain. Suricata's NFQUEUE
+    # mode composes on the bridge-l2 nftables table — the
+    # bridge-l2 module MUST be installed first, or suricata's
+    # NFQUEUE rule injection has no table to add into. A silent
+    # removal of the depends_on token would let operators install
+    # suricata before bridge-l2 and silently get a broken
+    # install — locks the topological-order contract.
+    grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"bridge-l2"' "${MODULE_DIR}/module.toml"
+}
