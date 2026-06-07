@@ -636,3 +636,7 @@ EOF
 @test "INVARIANT (PCIe gate test uses lspci LnkSta — kernel-PCIe-link-status canonical query path)" {
     grep -qE 'lspci.*LnkSta' "${SCRIPT}"
 }
+
+@test "INVARIANT (script's ZFS gate uses zpool status command — canonical-pool-health-query-path contract)" {
+    grep -qE 'zpool status' "${SCRIPT}"
+}

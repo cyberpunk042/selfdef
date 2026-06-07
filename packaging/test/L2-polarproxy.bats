@@ -560,3 +560,15 @@ d = data.get('depends_on')
 assert isinstance(d, list), f'depends_on must be TOML list (may be empty), got {type(d).__name__}'
 "
 }
+
+@test "INVARIANT (polarproxy module.toml consumes field present as TOML list — capability-consumer contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+c = data.get('consumes')
+assert isinstance(c, list), f'consumes must be TOML list, got {type(c).__name__}'
+"
+}

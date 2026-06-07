@@ -588,3 +588,14 @@ setup() {
     # If we get here, the lib has safe top-level
     [ -f "${LIB}" ]
 }
+
+@test "INVARIANT (lib does NOT call exit at top-level — sourceable lib contract: source must not terminate caller)" {
+    # The only exit calls in lib body are inside the version
+    # gate (specific failure path) + die() function. Top-level
+    # exit would terminate the sourcing apply.sh script.
+    # Verify no bare 'exit' lines exist outside function bodies + version gate.
+    # Count top-level exit (no leading whitespace, no 'if/then/fi' wrapper)
+    bare_exits=$(grep -cE '^exit ' "${LIB}" || true)
+    # Allow only the version-gate exit (1) — this is intentional
+    [ "${bare_exits}" -le 1 ]
+}

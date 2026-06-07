@@ -573,3 +573,7 @@ assert 'namespace' not in meta, f'metadata.namespace must be absent (cluster-sco
 @test "INVARIANT (postinst extension-config dir mode is 0755 OR operator-staged with explicit chmod — operator-extension dir-mode contract)" {
     grep -qE 'mkdir.*-p.*perimeter-extensions|chmod.*perimeter-extensions' "${POSTINST}"
 }
+
+@test "INVARIANT (postinst installs YAML mode 0644 — system-config file-mode convention)" {
+    grep -qE 'chmod 0644|install.*-m 0644|install.*-m 644' "${POSTINST}"
+}

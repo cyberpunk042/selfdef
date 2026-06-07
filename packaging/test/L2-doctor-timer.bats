@@ -518,3 +518,8 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     # OK; 5min jitter on 5min cadence would skew probes).
     grep -qE '^RandomizedDelaySec=[0-9]+(s|min|m)$' "${TIMER}"
 }
+
+@test "INVARIANT (cargo-deb assets list is reachable from packaging/ tree — Debian build manifest discoverable)" {
+    [ -f "${DAEMON_CARGO}" ]
+    grep -qE 'package.metadata.deb|\[\[package.metadata.deb.assets\]\]|maintainer-scripts' "${DAEMON_CARGO}"
+}

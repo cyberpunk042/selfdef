@@ -352,3 +352,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^User=root$' "${UNIT}"
     grep -qE '^Group=root$' "${UNIT}"
 }
+
+@test "INVARIANT (postinst pre-creates /var/log/selfdef directory — operator-log-dir staging contract)" {
+    grep -qE '/var/log/selfdef' "${POSTINST}"
+}

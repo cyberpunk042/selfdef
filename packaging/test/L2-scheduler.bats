@@ -530,3 +530,14 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^User=root$' "${UNIT}"
     grep -qE '^Group=root$' "${UNIT}"
 }
+
+@test "INVARIANT (cargo-deb assets shipping target for scheduler.service is /usr/share/selfdef/ — operator-extension postinst-staging contract)" {
+    # Sister to brain-wide cargo-deb shipping-target INVARIANT
+    # family. The scheduler unit ships to /usr/share/selfdef/
+    # (not directly to /etc/systemd/system/) — the postinst
+    # script copies from /usr/share/selfdef/ to /etc/systemd/
+    # system/ at install time. This stage-then-install pattern
+    # lets the postinst control mode + ownership + ordering.
+    DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
+    grep -qE 'selfdef-scheduler\.service.*usr/share/selfdef' "${DAEMON_CARGO}"
+}

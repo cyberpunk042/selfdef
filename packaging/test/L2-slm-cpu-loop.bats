@@ -708,3 +708,15 @@ c = data.get('conflicts')
 assert isinstance(c, list), f'conflicts must be TOML list (may be empty), got {type(c).__name__}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml provides field present as TOML list — capability-export contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+p = data.get('provides')
+assert isinstance(p, list), f'provides must be TOML list, got {type(p).__name__}'
+"
+}
