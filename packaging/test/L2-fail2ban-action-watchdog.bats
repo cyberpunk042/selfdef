@@ -340,3 +340,15 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # fail2ban-action-watchdog runs ON the timer's scheduled fire
+    # — scans fail2ban action.d *.conf for actionban injection,
+    # emits a verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the fail2ban-action-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/fail2ban-action-watchdog/systemd/selfdef-fail2ban-action.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
