@@ -268,3 +268,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (action under /home: user-writable hijack on package-transaction trigger surface)" {
+    # Sister to the /tmp + /var/tmp + /dev/shm writable-root axes
+    # already locked. /home is the user-writable surface — an
+    # attacker with regular user account can drop a malicious
+    # binary into their home and have DNF exec it AS ROOT after
+    # the next package transaction. Locks axis-symmetry across the
+    # writable-root family on the post-transaction-action surface.
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '*:in:/home/user/.evil-action\n' > "${ACTION}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
