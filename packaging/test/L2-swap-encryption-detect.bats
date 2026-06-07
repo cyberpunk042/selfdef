@@ -384,3 +384,17 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: swap-encryption-detect installer NEVER deletes operator-pre-existing configs in target dir — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # swap-encryption-detect writes its own drop-in/config; it MUST NEVER
+    # rm/find-delete operator-pre-existing entries not owned by
+    # THIS module. Locks no-auto-delete on the swap-encryption-detect
+    # installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/swap-encryption-detect/install"
+    for sh in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${sh}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/etc/(sysctl\.conf|sysctl\.d|fstab|fstab\.d|systemd|profile\.d|login\.defs|apt|modprobe\.d|usbguard)[/[:space:]]' "${sh}"
+        ! grep -qE 'find[[:space:]]+/etc/(sysctl\.d|fstab\.d|systemd|profile\.d|apt|modprobe\.d|usbguard).*-delete' "${sh}"
+    done
+}
