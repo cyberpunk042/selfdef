@@ -518,3 +518,24 @@ assert 'install' in data, 'install missing'
         grep -qE '^Description=' "${s}"
     done
 }
+
+@test "INVARIANT (systemd-generator-watchdog service unit declares TimeoutStartSec= — anti-hang oneshot bound contract)" {
+    # Sister to brain-wide TimeoutStartSec= INVARIANT family.
+    # Watchdog .service units are Type=oneshot probes — they
+    # MUST declare a TimeoutStartSec= upper bound so systemd
+    # kills a hung probe (e.g. a stuck sha256sum on a slow
+    # NFS-mounted target file) rather than blocking the
+    # next timer fire indefinitely. Without TimeoutStartSec=
+    # systemd's default (90s) applies, but the canonical
+    # selfdef contract pins this explicitly per watchdog so
+    # operators reading the .service know the bound at a
+    # glance. A regression that dropped TimeoutStartSec=
+    # would silently revert to the systemd default + mask
+    # the explicit-bound contract. Locks anti-hang oneshot-
+    # bound discipline on the systemd-generator-watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/systemd-generator-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^TimeoutStartSec=' "${s}"
+    done
+}
