@@ -266,3 +266,18 @@ TOMLEOF
     grep -qE '^apply_updates[[:space:]]*=[[:space:]]*yes' "${DNF_AUTO_CONF}"
     ! grep -qE '^apply_updates[[:space:]]*=[[:space:]]*no' "${DNF_AUTO_CONF}"
 }
+
+@test "INVARIANT (security-only carries upgrade_type=security — actually narrows to CVE patch axis)" {
+    # Sister to security-only apply_updates=yes INVARIANT above
+    # (the actual-execute half of the asymmetric gate). The
+    # selfdef security-only profile must explicitly narrow the
+    # dnf-automatic transaction to security advisories only,
+    # NOT the full upgrade_type=default which would auto-apply
+    # ALL repo updates (including potential regression-risk
+    # feature updates the operator hasn't tested). Locks
+    # upgrade_type=security so the security-only label
+    # honestly reflects the chosen scope.
+    write_config "security-only"
+    run_wd
+    grep -qE '^upgrade_type[[:space:]]*=[[:space:]]*security' "${DNF_AUTO_CONF}"
+}
