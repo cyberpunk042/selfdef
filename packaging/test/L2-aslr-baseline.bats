@@ -314,3 +314,22 @@ TOMLEOF
     grep -qE 'kernel\.randomize_va_space[[:space:]]*=[[:space:]]*2' "${DROPIN}"
     grep -q 'managed-by: selfdef aslr-baseline' "${DROPIN}"
 }
+
+@test "INVARIANT (drop-in is sysctl.d-parseable: kernel.randomize_va_space=<N> format — boot-time persistence contract)" {
+    # Sister to kernel-yama-baseline sysctl.d-parseable INVARIANT
+    # and many other installer module's parser-compatible-format
+    # INVARIANTs across the brain. The drop-in lives at
+    # /etc/sysctl.d/50-selfdef-aslr.conf and is parsed by
+    # systemd-sysctl.service at boot. The format MUST be
+    # 'kernel.randomize_va_space = <N>' (or '=<N>' without
+    # space, both sysctl.d-valid). A malformed line would
+    # silently fail at boot — the runtime sysctl -w would set
+    # the value for current boot but it would NOT persist
+    # across reboot, leaving the host with degraded ASLR on
+    # next boot. Locks the boot-time persistence contract on
+    # the memory-layout-randomization substrate.
+    write_config "full"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE '^kernel\.randomize_va_space[[:space:]]*=[[:space:]]*[012]$' "${DROPIN}"
+}
