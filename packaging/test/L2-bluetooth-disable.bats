@@ -343,3 +343,10 @@ TOMLEOF
     ! grep -qE 'rfkill block bluetooth' "${RF_LOG}"
     [ ! -f "${MODPROBE_BLACKLIST}" ]
 }
+
+@test "INVARIANT (no auto-uninstall: bluez package NEVER auto-removed)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs.
+    write_config "mask"
+    run_wd
+    ! grep -qE '(apt-get|dpkg|dnf|rpm)[[:space:]]+(remove|purge|uninstall)' "${SYSEOF_LOG}"
+}
