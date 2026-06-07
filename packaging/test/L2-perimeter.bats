@@ -611,3 +611,12 @@ vals = data['spec']['kprobes'][0]['selectors'][0]['matchArgs'][0]['values']
 assert len(vals) == 4, f'allowlist must have 4 entries per sain-01 §6, got {len(vals)}'
 "
 }
+
+@test "INVARIANT (YAML uses spec.kprobes[0].args[0].type=string — pointer-deref attestation type contract)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+t = data['spec']['kprobes'][0]['args'][0]['type']
+assert t == 'string', f'arg type must be string, got {t!r}'
+"
+}

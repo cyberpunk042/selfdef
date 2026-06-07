@@ -541,3 +541,8 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service is invoked via .timer not directly enabled — Type=oneshot + .timer-trigger-only contract)" {
     grep -qE '^Type=oneshot' "${SERVICE}"
 }
+
+@test "INVARIANT (.timer's OnUnitActiveSec is paired with OnBootSec — boot+recurring pair contract)" {
+    grep -qE '^OnBootSec=' "${TIMER}"
+    grep -qE '^OnUnitActiveSec=' "${TIMER}"
+}

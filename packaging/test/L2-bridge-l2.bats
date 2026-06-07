@@ -695,3 +695,11 @@ un = (data.get('install') or {}).get('uninstall', '')
 assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninstall.sh, got {un!r}'
 "
 }
+
+@test "INVARIANT (bridge-l2 install scripts (apply/check/uninstall) all exist as files — script-file existence contract)" {
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install"
+    [ -d "${inst_dir}" ]
+    [ -f "${inst_dir}/apply.sh" ]
+    [ -f "${inst_dir}/check.sh" ]
+    [ -f "${inst_dir}/uninstall.sh" ]
+}

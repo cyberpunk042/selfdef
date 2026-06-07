@@ -557,3 +557,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler unit declares After=zfs-mount.service — ZFS-substrate ordering contract)" {
     grep -qE '^After=.*zfs-mount\.service' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler unit declares After=tetragon.service — eBPF-substrate ordering contract)" {
+    grep -qE '^After=.*tetragon\.service' "${UNIT}"
+}

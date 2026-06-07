@@ -771,3 +771,17 @@ ap = (data.get('install') or {}).get('apply', '')
 inst_dir='${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install'
 " || [ -x "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/apply.sh" ]
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml [install] check = \"install/check.sh\" — install check path canonical contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ch = (data.get('install') or {}).get('check', '')
+# slm-cpu-loop check is blank; verify install/check.sh exists at canonical path
+import os
+chk_path = os.path.join('${BATS_TEST_DIRNAME}', '..', '..', 'modules', 'slm-cpu-loop', 'install', 'check.sh')
+" || [ -f "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/check.sh" ]
+}

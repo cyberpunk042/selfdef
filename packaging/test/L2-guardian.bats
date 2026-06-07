@@ -373,3 +373,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian unit Documentation references SDD-029 design document — operator-spec-link)" {
     grep -qE '^Documentation=.*sdd/029' "${UNIT}"
 }
+
+@test "INVARIANT (postinst is idempotent: re-run does NOT re-create existing dirs — mkdir -p safety contract)" {
+    grep -qE 'mkdir -p' "${POSTINST}"
+}

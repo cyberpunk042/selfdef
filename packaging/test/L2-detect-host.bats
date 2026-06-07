@@ -658,3 +658,15 @@ assert isinstance(data, dict), f'TOML root must be table'
 assert 'name' in data, 'name field is required'
 "
 }
+
+@test "INVARIANT (detect-host module.toml category field present + non-empty — module-taxonomy contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+c = data.get('category', '')
+assert c, f'category must be non-empty, got {c!r}'
+"
+}

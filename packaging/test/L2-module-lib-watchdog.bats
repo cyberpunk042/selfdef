@@ -616,3 +616,7 @@ setup() {
 @test "INVARIANT (lib selfdef_is_writable_path returns true for /tmp/* — known-writable-path coverage)" {
     selfdef_is_writable_path /tmp/foo
 }
+
+@test "INVARIANT (lib selfdef_is_writable_dir returns true for /tmp — known-writable-dir coverage)" {
+    selfdef_is_writable_dir /tmp
+}

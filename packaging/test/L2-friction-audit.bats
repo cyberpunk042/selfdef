@@ -656,3 +656,7 @@ EOF
 @test "INVARIANT (overall verdict line is always emitted — operator-pass-signal final-write contract)" {
     grep -qE 'emit_ocsf.*overall' "${SCRIPT}"
 }
+
+@test "INVARIANT (script uses bash -c invocation OR /bin/bash shebang — bash-only-not-sh contract)" {
+    head -3 "${SCRIPT}" | grep -qE '#!/.*bash|^#!/usr/bin/env bash'
+}
