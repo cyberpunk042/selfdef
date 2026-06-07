@@ -289,3 +289,25 @@ EOF
     mtime_second="$(stat -c '%Y' "${PWHISTORY_CONF}")"
     [ "${mtime_first}" = "${mtime_second}" ]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # pam-history TOML; parser must tolerate without altering the
+    # profile-gated behavior. strict-with-noise still writes the
+    # stricter remember=N (compliance-grade password-reuse defense)
+    # AND header marker present (the load-bearing PCI/CIS-mapped
+    # password history substrate).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "strict"
+operator_note = "PCI/CIS compliance — 24-password history"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${PWHISTORY_CONF}" ]
+    grep -q 'profile=strict' "${PWHISTORY_CONF}"
+    grep -qE '^remember[[:space:]]*=[[:space:]]*[0-9]+' "${PWHISTORY_CONF}"
+    grep -q 'managed-by: selfdef pam-history' "${PWHISTORY_CONF}"
+}
