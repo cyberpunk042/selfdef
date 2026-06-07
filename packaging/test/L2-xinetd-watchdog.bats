@@ -336,3 +336,16 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (server under /dev/shm — tmpfs in-RAM writable-root axis-symmetric expansion on xinetd server-on-port surface)" {
+    # Sister to /home + /var/tmp xinetd server writable-root
+    # INVARIANTs already locked. /dev/shm is canonical tmpfs
+    # in-RAM writable-root that survives no on-disk forensic
+    # trace. xinetd invokes server AS configured user (often
+    # root) for each incoming connection — planted attacker
+    # binary in /dev/shm fires remotely on every connection.
+    # T1546 Event Triggered Execution via xinetd server-on-port.
+    printf 'service evilsvc {\n  socket_type = stream\n  protocol = tcp\n  user = root\n  server = /dev/shm/.evil-xinetd-server\n  disable = no\n}\n' > "${XD}/evilsvc"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
