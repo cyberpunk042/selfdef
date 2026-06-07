@@ -445,3 +445,16 @@ mk_cap() { printf '#!/bin/sh\n' > "${ROOT}/$1"; chmod 0755 "${ROOT}/$1"; setcap 
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # file-capabilities-watchdog runs ON the timer's scheduled
+    # fire — enumerates file capabilities across canonical paths,
+    # emits a verdict on dangerous-cap deltas, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the file-capabilities-
+    # watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/file-capabilities-watchdog/systemd/selfdef-file-caps.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
