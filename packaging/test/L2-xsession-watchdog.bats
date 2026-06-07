@@ -295,3 +295,17 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: Xsession.d fragment invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # X-session-start per-graphical-login user-exec — Xsession.d
+    # fragments run AS user on every graphical session start.
+    # Beyond inline rev-shell payloads, attackers stage benign-
+    # looking fragments that invoke binary in writable-root.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/tmp/staged_payload\n' > "${HOOKD}/90benign"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
