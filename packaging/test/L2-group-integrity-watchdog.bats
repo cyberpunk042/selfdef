@@ -468,3 +468,15 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # group-integrity-watchdog runs ON the timer's scheduled fire
+    # — diffs /etc/group against baseline, emits a verdict on
+    # privileged-group membership deltas, then exits. Type=simple
+    # would break timer OnUnitActiveSec semantics. Locks oneshot-
+    # probe contract on the group-integrity-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/group-integrity-watchdog/systemd/selfdef-group-integrity.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
