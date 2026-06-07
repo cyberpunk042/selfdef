@@ -311,3 +311,17 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (dangerous-cap detect): cap_sys_module grant → alert (T1547.006 kernel module loading axis)" {
+    # Sister to capability-conf-watchdog cap_setuid + cap_dac_
+    # override + cap_sys_admin + cap_audit_control + cap_kill +
+    # cap_chown + cap_sys_ptrace dangerous-cap INVARIANTs.
+    # cap_sys_module lets a user load/unload kernel modules —
+    # this is direct kernel-mode persistence (T1547.006).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'cap_net_raw netuser\ncap_sys_module evil\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
