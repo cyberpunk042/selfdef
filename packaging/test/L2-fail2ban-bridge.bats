@@ -371,3 +371,21 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"fail2ban-bridge"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: fail2ban-bridge NEVER emits package-remove commands on fail2ban)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The fail2ban-bridge installer writes jail.d
+    # drop-ins for sshd + recidive but MUST NEVER emit shell
+    # commands that uninstall the fail2ban package itself
+    # (apt/dpkg/dnf/rpm/yum remove|purge|uninstall fail2ban).
+    # Silent auto-removal would tear down the auth-brute-force
+    # mitigation substrate entirely — every downstream defense
+    # depending on fail2ban's ban-on-failed-auth loses
+    # substrate. T1110 Brute Force defense self-defeat. Locks
+    # anti-package-removal contract on the fail2ban bridge
+    # substrate.
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+fail2ban'
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${JAIL_D}/50-selfdef.conf"
+}
