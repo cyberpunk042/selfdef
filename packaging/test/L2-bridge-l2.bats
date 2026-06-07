@@ -157,3 +157,23 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -qiE 'sever|severs|severing' "${MODULE_DIR}/README.md"
     grep -qiE 'management interface|console' "${MODULE_DIR}/README.md"
 }
+
+@test "INVARIANT (apply.sh emits emit_status JSON for operator dashboard observability — SDD-062 consumer contract)" {
+    # Sister to every other installer module's emit_status INVARIANT
+    # across the brain. The bridge-l2 apply.sh MUST surface its
+    # apply outcome to the operator dashboard via the emit_status
+    # JSON record (status=ok / skipped, profile, message). Without
+    # it, an operator deploying a transparent L2 bridge has no
+    # signal whether the bridge came up successfully, was skipped
+    # as already-at-target, or which forward_policy is live. Closes
+    # the emit_status visibility axis on the L2-bridge substrate
+    # alongside the E0248 emit_status skipped contract already
+    # locked. The MS024 transparent L2 bridge + nftables policy
+    # surface is foundational for all inline network modules
+    # (suricata, polarproxy, …); dashboard observability gates
+    # operator confidence to deploy.
+    grep -q 'emit_status' "${INSTALL_DIR}/apply.sh"
+    # Should emit at least the canonical success+skipped pair.
+    n_emits=$(grep -cE '^[[:space:]]*emit_status' "${INSTALL_DIR}/apply.sh" || echo 0)
+    [ "${n_emits}" -ge 1 ]
+}
