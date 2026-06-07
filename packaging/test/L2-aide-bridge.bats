@@ -235,3 +235,28 @@ F: /etc/shadow"
     detail_count=$(cap | grep -cE '^-t selfdef-aide-detail -- ')
     [ "${detail_count}" -ge 1 ]
 }
+
+@test "INVARIANT (changed-only rc=4 → alert without adds/removes — changed bit alone tips severity)" {
+    # rc=4 (changed bit only set) must alert. Sister axis to the
+    # rc=6 (removed+changed) test and rc=3 (added+removed) test.
+    # Locks that EACH dangerous bit independently triggers alert,
+    # not only combinations.
+    mk_aide 4 "Added entries: 0
+Removed entries: 0
+Changed entries: 5"
+    run_wd
+    cap | grep -q '"event":"diff_changed_or_removed"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (removed-only rc=2 → alert without changes/adds — removed bit alone tips severity)" {
+    # Sister to changed-only test. rc=2 (removed bit only) must
+    # alert. Locks each dangerous bit individually.
+    mk_aide 2 "Added entries: 0
+Removed entries: 4
+Changed entries: 0"
+    run_wd
+    cap | grep -q '"event":"diff_changed_or_removed"'
+    cap | grep -q '"severity":"alert"'
+}
+
