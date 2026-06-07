@@ -307,3 +307,14 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-lynis -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (report-path surfaces in JSON for report_missing event — operator triage)" {
+    # Sister to brain-wide observability INVARIANTs. When the
+    # Lynis report file is missing, the wrapper emits event=
+    # report_missing AND MUST surface the report_path so
+    # operator can correlate which file was expected.
+    rm -f "${REPORT}"
+    run_wd
+    cap | grep -q '"event":"report_missing"'
+    cap | grep -qE '"report_path":"[^"]+"'
+}
