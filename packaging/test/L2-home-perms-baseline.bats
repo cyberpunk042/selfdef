@@ -350,3 +350,15 @@ run_wd() {
     # mtime preserved across profile change.
     [ "${backup_mtime_before}" = "${backup_mtime_after}" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on home-perms-baseline installer
+    # surface across chmod + backup phases.
+    write_config "strict"
+    mk_home alice 1001 0755
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"home-perms-baseline"')
+    [ "${count}" = "1" ]
+}
