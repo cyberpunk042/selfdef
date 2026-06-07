@@ -267,3 +267,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (module under /var/tmp — writable-root axis-symmetric expansion on PKCS#11 credential-handler dlopen surface)" {
+    # Sister to /home module writable-root + relative-with-slash
+    # INVARIANTs already locked. /var/tmp is writable by ALL
+    # users AND persists across reboots — attackers prefer for
+    # boot-survival persistence. p11-kit / consuming PKCS#11
+    # applications (browsers, ssh, openvpn) dlopen the planted
+    # .so AS the consuming process which means smartcard /
+    # YubiKey / HSM operations may be intercepted at credential
+    # access time. T1574 Hijack Execution Flow via PKCS#11
+    # module substitution. Closes /var/tmp axis on PKCS#11
+    # writable-root coverage.
+    printf 'module: /var/tmp/.evil-pkcs11.so\n' > "${MOD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
