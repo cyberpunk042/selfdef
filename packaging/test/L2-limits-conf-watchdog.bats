@@ -367,3 +367,25 @@ seed_benign() {
         bash "${WD}"
     cap | grep -qE 'distinctive-attacker-limits|"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (commented core re-enable NOT flagged: # prefix filtered from limits inventory)" {
+    # Sister to brain-wide comment-filter INVARIANTs. Operator
+    # may pre-stage commented core-reenable directive for
+    # debugging notes — '# * hard core unlimited' must NOT
+    # silently escalate.
+    printf '# benign baseline\n* hard core 0\n' > "${CONF}"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# benign baseline\n* hard core 0\n# * hard core unlimited\n' > "${CONF}"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        bash "${WD}"
+    # Bounded severity vocabulary; current behavior locked.
+    cap | grep -qE '"severity":"(ok|warn|alert)"'
+}
