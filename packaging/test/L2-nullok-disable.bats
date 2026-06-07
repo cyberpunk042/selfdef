@@ -281,3 +281,47 @@ EOF
     [ "${pre_sha}" = "${post_sha}" ]
     ! [ -f "${PAM_D}/login.selfdef-nullok-backup" ]
 }
+
+@test "INVARIANT (multiple PAM files all enforced in single apply — file-loop discipline)" {
+    # Apply must walk every regular file in /etc/pam.d and enforce on
+    # all that need it. Locks the file-loop discipline against regression
+    # where the apply might short-circuit after the first file.
+    write_vulnerable_pam "login"
+    write_vulnerable_pam "su"
+    write_vulnerable_pam "sudo"
+    write_config "enforce"
+    run_wd
+    # All 3 files modified; all 3 backups created.
+    ! grep -qE '\bnullok\b' "${PAM_D}/login"
+    ! grep -qE '\bnullok\b' "${PAM_D}/su"
+    ! grep -qE '\bnullok\b' "${PAM_D}/sudo"
+    [ -f "${PAM_D}/login.selfdef-nullok-backup" ]
+    [ -f "${PAM_D}/su.selfdef-nullok-backup" ]
+    [ -f "${PAM_D}/sudo.selfdef-nullok-backup" ]
+}
+
+@test "INVARIANT (emit_status JSON: module + audited + modified surfaced for operator dashboard)" {
+    # Strengthens existing audited/modified checks with module-key
+    # detection.
+    write_vulnerable_pam "login"
+    write_clean_pam "passwd"
+    write_config "enforce"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"nullok-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'audited=1'* ]]
+    [[ "${output}" == *'modified=1'* ]]
+}
+
+@test "INVARIANT (enforce idempotent: re-applying enforce on already-clean file fires modified=0)" {
+    # After first enforce removes nullok, a second enforce on the same
+    # file must report modified=0 (no more nullok to remove). Locks
+    # idempotency at the count-emission layer.
+    write_vulnerable_pam "login"
+    write_config "enforce"
+    run_wd                                              # first apply: modified=1
+    ! grep -qE '\bnullok\b' "${PAM_D}/login"
+    # Second apply.
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'modified=0'* ]]
+}
