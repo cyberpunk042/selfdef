@@ -342,3 +342,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*(atrm|find[[:space:]].*-delete)'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(JOB|FILE|file)'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # at-jobs-watchdog runs ON the timer's scheduled fire —
+    # scans /var/spool/at + /var/spool/cron/atjobs for injection
+    # patterns, emits a verdict, then exits. Type=simple would
+    # break timer OnUnitActiveSec semantics. Locks oneshot-probe
+    # contract on the at-jobs-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/at-jobs-watchdog/systemd/selfdef-at-jobs.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
