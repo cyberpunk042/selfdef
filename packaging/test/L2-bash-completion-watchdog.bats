@@ -247,3 +247,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED completion file surfaces in sample for operator triage)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # bash-completion file (per-bash-login attack surface), the
+    # added file MUST surface in the JSON sample so operator
+    # dashboard routes triage to the right path. Locks the new-
+    # file-discovered operator-visibility contract on the per-bash-
+    # login source surface alongside the modified-file detection
+    # axis.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/bash\ncomplete -W "x y" attacker-tool\n' > "${HOOKD}/distinctive-attacker-completion"
+    run_wd
+    cap | grep -q 'distinctive-attacker-completion'
+}
