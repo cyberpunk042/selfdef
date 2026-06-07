@@ -248,3 +248,24 @@ run_wd() {
     # No error/warning markers in success path.
     [[ "${output}" != *'"status":"error"'* ]]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # nscd-disable TOML; parser must tolerate without altering the
+    # profile-gated behavior. mask-with-noise still fires
+    # systemctl mask on BOTH nscd.service AND nscd.socket (the
+    # full attack-surface neutralization — nscd has CVE-2014-0475 +
+    # CVE-2022-23218 history, obsoleted by systemd-resolved / sssd /
+    # direct nsswitch caching).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "nscd = obsolete glibc cache, CVE history"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q 'systemctl mask nscd.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask nscd.socket' "${SYSEOF_LOG}"
+}
