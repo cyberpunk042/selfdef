@@ -875,3 +875,12 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         grep -qE 'logger -t selfdef-' "${s}"
     done
 }
+
+@test "INVARIANT (time-skew-watchdog .sh script declares severity= variable with canonical vocabulary — bounded-severity contract)" {
+    # Sister to brain-wide bounded-severity INVARIANT family.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'severity=' "${s}"
+    done
+}

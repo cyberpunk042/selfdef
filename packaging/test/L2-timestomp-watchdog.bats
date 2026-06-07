@@ -838,3 +838,12 @@ assert 'install' in data, 'install missing'
         grep -qE 'logger -t selfdef-' "${s}"
     done
 }
+
+@test "INVARIANT (timestomp-watchdog .sh script declares severity= variable with canonical vocabulary — bounded-severity contract)" {
+    # Sister to brain-wide bounded-severity INVARIANT family.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/timestomp-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'severity=' "${s}"
+    done
+}

@@ -784,3 +784,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     [ -f "${uni}" ]
     grep -qE '^set -euo pipefail' "${uni}"
 }
+
+@test "INVARIANT (motd-doctrine install/uninstall.sh is executable — script-runnable contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/motd-doctrine/install/uninstall.sh"
+    [ -x "${uni}" ]
+}

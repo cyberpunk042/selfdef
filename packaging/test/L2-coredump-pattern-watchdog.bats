@@ -863,3 +863,12 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         grep -qE 'logger -t selfdef-' "${s}"
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .sh script declares severity= variable with canonical vocabulary — bounded-severity contract)" {
+    # Sister to brain-wide bounded-severity INVARIANT family.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE 'severity=' "${s}"
+    done
+}

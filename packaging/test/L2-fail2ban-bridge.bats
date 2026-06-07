@@ -917,3 +917,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     [ -f "${uni}" ]
     grep -qE '^set -euo pipefail' "${uni}"
 }
+
+@test "INVARIANT (fail2ban-bridge install/uninstall.sh is executable — script-runnable contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge/install/uninstall.sh"
+    [ -x "${uni}" ]
+}

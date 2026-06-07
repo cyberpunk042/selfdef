@@ -875,3 +875,16 @@ assert 'install' in data, 'install missing'
         grep -qE 'logger -t selfdef-' "${s}"
     done
 }
+
+@test "INVARIANT (dhclient-hooks-watchdog .sh script emits canonical severity vocabulary {ok,warn,alert} — bounded-severity contract)" {
+    # Sister to brain-wide bounded-severity INVARIANT family.
+    # Watchdog scripts emit logger -t selfdef-<name> -- {...severity:...}
+    # with severity in the canonical vocabulary. A regression
+    # introducing custom severity values (info, error, critical)
+    # would break operator-side filtering.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/dhclient-hooks-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '"severity":"(ok|warn|alert)"' "${s}"
+    done
+}

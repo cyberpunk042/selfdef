@@ -888,3 +888,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     [ -f "${uni}" ]
     grep -qE '^set -euo pipefail' "${uni}"
 }
+
+@test "INVARIANT (rare-filesystems-disable install/uninstall.sh is executable — script-runnable contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/rare-filesystems-disable/install/uninstall.sh"
+    [ -x "${uni}" ]
+}

@@ -944,3 +944,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     [ -f "${uni}" ]
     grep -qE '^set -euo pipefail' "${uni}"
 }
+
+@test "INVARIANT (audit-rules install/uninstall.sh is executable — script-runnable contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/audit-rules/install/uninstall.sh"
+    [ -x "${uni}" ]
+}
