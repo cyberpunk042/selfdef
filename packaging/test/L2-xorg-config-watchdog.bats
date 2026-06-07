@@ -322,3 +322,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on xorg-config surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The xorg-config-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1574 Hijack Execution Flow via X-server
+    # module-load alert. Locks parser contract on the xorg.conf
+    # ModulePath detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'Section "Files"\n    ModulePath "/usr/lib/xorg/modules"\nEndSection\n' > "${CONF}"
+    run_wd                                              # ok path
+    printf 'Section "Files"\n    ModulePath "/tmp/.evil"\nEndSection\n' > "${CONF}"
+    run_wd                                              # alert path
+    # Every severity value emitted MUST be one of {ok,warn,alert}.
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
