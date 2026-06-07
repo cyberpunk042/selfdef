@@ -310,3 +310,36 @@ mk_cap() { printf '#!/bin/sh\n' > "${ROOT}/$1"; chmod 0755 "${ROOT}/$1"; setcap 
     cap | grep -qE '"added":1[0-9]'                       # 12+ adds
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (cap_net_raw is NOT dangerous — ping/traceroute legitimate use): non-dangerous cap classification holds" {
+    # cap_net_raw is granted to ping + traceroute as standard distro
+    # practice. Lock that the watchdog correctly classifies it as
+    # benign (added → warn at most, not alert via dangerous path).
+    # A regression that adds cap_net_raw to the dangerous set would
+    # produce false positives on every operator distro upgrade.
+    mk_cap baseline cap_net_bind_service+ep
+    run_wd
+    mk_cap new_ping cap_net_raw+ep
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"capability_added"'           # not dangerous
+    cap | grep -q '"severity":"warn"'                    # not alert
+    cap | grep -qE '"dangerous":0'
+}
+
+@test "INVARIANT (severity precedence: dangerous + non-dangerous added in same scan → SINGLE alert event, not warn — alert wins)" {
+    # Sister to sudoers-integrity severity-precedence INVARIANT.
+    # When both dangerous and non-dangerous caps are added in the
+    # same scan, the JSON record fires as dangerous_capability_added
+    # alert, not as capability_added warn. Locks consolidation.
+    mk_cap baseline cap_net_raw+ep
+    run_wd
+    mk_cap ordinary cap_net_bind_service+ep
+    mk_cap dangerous cap_dac_override+ep
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"dangerous_capability_added"'
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-file-caps -- ')
+    [ "${main_count}" = "1" ]
+}
