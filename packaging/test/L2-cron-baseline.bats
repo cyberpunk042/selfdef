@@ -368,3 +368,13 @@ TOMLEOF
     [ ! -f "${AT_ALLOW}" ]
     [ ! -f "${AT_DENY}" ]
 }
+
+@test "INVARIANT (.allow files chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs.
+    write_config "root-only"
+    run_wd
+    [ -f "${CRON_ALLOW}" ]
+    [ "$(stat -c '%a' "${CRON_ALLOW}")" = "644" ] || [ "$(stat -c '%a' "${CRON_ALLOW}")" = "640" ] || [ "$(stat -c '%a' "${CRON_ALLOW}")" = "600" ]
+    [ -f "${AT_ALLOW}" ]
+    [ "$(stat -c '%a' "${AT_ALLOW}")" = "644" ] || [ "$(stat -c '%a' "${AT_ALLOW}")" = "640" ] || [ "$(stat -c '%a' "${AT_ALLOW}")" = "600" ]
+}
