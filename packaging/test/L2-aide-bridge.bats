@@ -420,3 +420,27 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (aide-bridge libexec uses set -u — anti-unbound-variable contract on the watchdog probe)" {
+    # Sister to brain-wide shell-discipline INVARIANT family.
+    # The aide-bridge libexec uses set -u (and NOT set -e) by
+    # design: watchdog probes WANT to continue scanning even
+    # when individual checks fail (rather than abort-on-first-
+    # error like installers), so they emit a complete verdict
+    # at the end. But set -u remains essential — it catches
+    # typo'd env-var references ($SELFDEF_FOO_BASELINE vs
+    # $SELFDEF_FOO_BASLINE) before they propagate as silent
+    # empty-string into baseline-path operations. A regression
+    # dropping set -u would let a typo'd var name produce a
+    # silent baseline-rewrite to /. Locks set -u discipline on
+    # the aide-bridge libexec substrate.
+    wd_libexec="${BATS_TEST_DIRNAME}/../../modules/aide-bridge/systemd"
+    found=0
+    for sh in "${wd_libexec}"/*.sh; do
+        [ -f "${sh}" ] || continue
+        if grep -qE '^set[[:space:]]+-u' "${sh}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
