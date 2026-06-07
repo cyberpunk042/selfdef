@@ -341,3 +341,19 @@ run_wd() {
     [ -f "${FAILLOCK_CONF}" ]
     [ "$(stat -c '%a' "${FAILLOCK_CONF}")" = "644" ]
 }
+
+@test "INVARIANT (no auto-uninstall: pam-faillock NEVER emits package-remove commands on libpam-modules)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The pam-faillock installer wires faillock.conf
+    # but MUST NEVER emit shell commands that uninstall the
+    # libpam-modules / libpwquality packages themselves (apt/
+    # dpkg/dnf/rpm/yum remove|purge|uninstall libpam-modules|
+    # libpam0g). Silent auto-removal would tear down the PAM
+    # auth substrate entirely — every auth path (login, sudo,
+    # sshd) would break. T1556 self-defeat. Locks anti-package-
+    # removal contract on the pam-faillock substrate.
+    write_config "strict"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(libpam-modules|libpam0g|pam)'
+    [ ! -f "${FAILLOCK_CONF}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${FAILLOCK_CONF}"
+}
