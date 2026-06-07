@@ -329,3 +329,23 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: xsession-watchdog NEVER deletes Xsession.d fragments — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # xsession-watchdog DETECTS T1546 X-session-start per-
+    # graphical-login user-exec persistence but MUST NEVER emit
+    # rm/unlink commands to auto-clean the Xsession.d fragment.
+    # The detected fragment may be operator-legitimate (custom
+    # session keyring setup, ssh-agent activation, dbus-launch
+    # wiring). Silent auto-delete would destroy operator
+    # baseline state AND could break the X session entirely.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the xsession surveillance substrate.
+    seed_benign
+    printf '#!/bin/sh\n/dev/tcp/1.1.1.1/4444\n' > "${HOOKD}/90benign"
+    run_wd
+    [ -f "${HOOKD}/90benign" ]
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(HOOKD|XSESSION|FILE|file)'
+}
