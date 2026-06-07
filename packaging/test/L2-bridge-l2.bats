@@ -271,3 +271,16 @@ assert 'requires' in data, 'requires missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: bridge-l2 apply.sh NEVER deletes pre-existing operator nftables rulesets — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # bridge-l2 writes its own ruleset to /etc/nftables.d/
+    # selfdef-bridge.conf; it MUST NEVER rm/find-delete an
+    # operator's pre-existing /etc/nftables.conf or
+    # /etc/nftables.d/*.conf not owned by THIS module. Locks
+    # no-auto-delete on the bridge-l2 installer substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh" "${INSTALL_DIR}/lib.sh"; do
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/nftables\.conf' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/nftables(\.d)?.*-delete' "${f}"
+    done
+}
