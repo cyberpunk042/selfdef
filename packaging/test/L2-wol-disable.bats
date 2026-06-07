@@ -275,3 +275,18 @@ TOMLEOF
     [ -f "${LIBEXEC_DIR}/wol-disable.sh" ]
     grep -qE 'ethtool -s .* wol d' "${LIBEXEC_DIR}/wol-disable.sh"
 }
+
+@test "INVARIANT (service is Type=oneshot — runs to completion then exits, no daemon-residency)" {
+    # Sister to many other installer module's systemd unit
+    # contract INVARIANTs. The selfdef-wol-disable.service runs
+    # ethtool to clear WoL once per fire then exits — it does
+    # NOT need to run as a long-lived daemon. Type=oneshot is
+    # the correct systemd primitive (vs simple/forking/notify
+    # which all assume a long-running process). A regression
+    # that switched to Type=simple would silently make the
+    # unit fail-cycle on every fire (systemd would expect a
+    # daemon to stay running but the script exits immediately).
+    write_config "enforce"
+    run_wd
+    grep -qE '^Type=oneshot' "${SYSTEMD_DIR}/selfdef-wol-disable.service"
+}
