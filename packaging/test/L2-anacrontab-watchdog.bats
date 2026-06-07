@@ -365,3 +365,27 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on anacrontab surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The anacrontab-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1053.003 anacron-schedule-trigger root-
+    # exec persistence alert. Locks parser contract on the
+    # /etc/anacrontab job-line detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd                                              # ok / baseline
+    cat > "${ANAC}" <<'EOF'
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+1	5	evil	/tmp/.evil
+EOF
+    run_wd                                              # alert path
+    # Every severity value emitted MUST be one of {ok,warn,alert}.
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
