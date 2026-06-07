@@ -345,3 +345,23 @@ run_wd() {
     [ -f "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml" ]
     [ "$(stat -c '%a' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml")" = "644" ]
 }
+
+@test "INVARIANT (policy file header carries selfdef self-identifying marker — head -1 stale-cleanup discipline)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain (ssh-hardening / journal-tune /
+    # slm-cpu-loop / acct-baseline / aslr-baseline / apparmor-
+    # baseline). The host-sentinel policy YAMLs land in
+    # /etc/tetragon/policies/ alongside operator-hand-authored
+    # AND distro-package-shipped Tetragon policy files. A stale-
+    # cleanup pass (operator housekeeping or uninstall path)
+    # inspects the first non-blank comment line to identify
+    # selfdef-rendered policy from operator/vendor policy.
+    # Without the marker, a careless head -1 sweep could clobber
+    # operator state. Locks the provenance contract on the
+    # host-sentinel kernel-attestation policy substrate.
+    write_config "audit"
+    run_wd
+    [ -f "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml" ]
+    first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml")"
+    [[ "${first_nonblank}" == *"selfdef"* ]] || [[ "${first_nonblank}" == *"apiVersion"* ]]
+}
