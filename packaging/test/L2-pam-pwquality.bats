@@ -268,3 +268,21 @@ TOMLEOF
     grep -qE '^(dcredit|ucredit|lcredit|ocredit)[[:space:]]*=' "${DST}"
     grep -qE '^# selfdef pam-pwquality' "${DST}"
 }
+
+@test "INVARIANT (strict minlen >= standard minlen — profile-rank monotonic depth)" {
+    # Sister to pam-history profile-rank-monotonic INVARIANT
+    # just locked. The strict profile MUST require at LEAST as
+    # long a minlen as the standard profile. If strict had a
+    # smaller minlen than standard, operator's intent ("tighten
+    # password length requirement") would be silently inverted.
+    # Lock the monotonic depth ordering across profiles.
+    write_config "standard"
+    run_wd
+    standard_n="$(grep -oE '^minlen[[:space:]]*=[[:space:]]*[0-9]+' "${DST}" | grep -oE '[0-9]+$' | head -1)"
+    write_config "strict"
+    run_wd
+    strict_n="$(grep -oE '^minlen[[:space:]]*=[[:space:]]*[0-9]+' "${DST}" | grep -oE '[0-9]+$' | head -1)"
+    [ -n "${standard_n}" ]
+    [ -n "${strict_n}" ]
+    [ "${strict_n}" -ge "${standard_n}" ]
+}
