@@ -302,3 +302,52 @@ run_wd() {
     [[ "${output}" == *'profile=locked'* ]]
     [[ "${output}" == *'egress=drop'* ]]
 }
+
+@test "INVARIANT (refuse-to-brick precedence over profile-key: locked+ack=false ALWAYS dies — config layering doesn't bypass)" {
+    # Sister to tmpfs-baseline refuse-to-brick-precedence INVARIANT
+    # + kernel-yama paranoid + unprivileged-userns deny pattern. The
+    # acknowledge_egress gate fires BEFORE other knobs (extra config
+    # lines must not bypass the gate).
+    write_config "locked" 'acknowledge_egress = false' 'extra_knob = "anything"'
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_NFT_CONFIG="${CONF}" \
+        SELFDEF_NFT_DROPIN_DIR="${NFT_DROPIN_DIR}" \
+        SELFDEF_NFT_DROPIN="${NFT_DROPIN}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"acknowledge_egress"* ]]
+    ! [ -f "${NFT_DROPIN}" ]
+}
+
+@test "INVARIANT (anti-lockout SSH-accept rule on EVERY profile — baseline + web + locked all include SSH accept)" {
+    # Anti-lockout is the foundational discipline. Locks that
+    # SSH-accept fires across all 3 profiles, not just baseline.
+    # A regression that drops SSH-accept from any profile would
+    # produce a remote-lockout on apply.
+    write_config "baseline"
+    run_wd
+    grep -q 'tcp dport { 22' "${NFT_DROPIN}"
+    write_config "web" 'allow_tcp = "80,443"'
+    run_wd
+    grep -q 'tcp dport { 22' "${NFT_DROPIN}"
+    write_config "locked" 'acknowledge_egress = true'
+    run_wd
+    grep -q 'tcp dport { 22' "${NFT_DROPIN}"
+}
+
+@test "INVARIANT (nft delete + nft -f ordering: delete BEFORE -f load on content-change reload — atomic swap)" {
+    # Order matters: nft delete table fires BEFORE nft -f load on
+    # content-change. Otherwise the new rules would be added on
+    # top of the old rules, creating a transient double-rule
+    # state visible to attacker traffic.
+    write_config "baseline"
+    run_wd
+    : > "${NFT_LOG}"
+    write_config "web" 'allow_tcp = "8080"'
+    run_wd
+    delete_line="$(grep -n 'nft delete table inet selfdef_filter' "${NFT_LOG}" | head -1 | cut -d: -f1)"
+    load_line="$(grep -n "nft -f ${NFT_DROPIN}" "${NFT_LOG}" | head -1 | cut -d: -f1)"
+    [ -n "${delete_line}" ]
+    [ -n "${load_line}" ]
+    [ "${delete_line}" -lt "${load_line}" ]
+}
