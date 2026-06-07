@@ -310,3 +310,16 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: bash-completion invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # bash-completion-trigger user-exec — completion scripts are
+    # sourced AS user on every new bash shell; attacker stages
+    # benign-looking completion that invokes binary in /tmp.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/bash\n/tmp/staged_payload\n' > "${HOOKD}/distinctive-attacker-completion"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
