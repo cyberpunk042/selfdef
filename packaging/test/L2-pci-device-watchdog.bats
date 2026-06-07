@@ -290,3 +290,57 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # A regression that adds class would break downstream parsers.
     cap | grep -qE 'added_sample":"[^"]*0000:02:00.0\(13fe:deed\)'
 }
+
+@test "INVARIANT (re-baselining cycle: alert → auto-trust → next-tamper-alerts — multi-cycle works)" {
+    # Sister to selfdef-self-integrity manifest-reset-cycle INVARIANT.
+    # Lock that auto-trust cycle works on EVERY hardware change, not
+    # just the first. After one acked-add, a second new device
+    # should still alert.
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    mk_device "0000:02:00.0" "13fe" "deed" "020000"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                              # alert
+    cap | grep -q '"severity":"alert"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                              # baseline refreshed → ok
+    cap | grep -q '"severity":"ok"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    mk_device "0000:03:00.0" "abcd" "1234" "020000"
+    run_wd                              # NEW tamper → alert AGAIN
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"pci_device_added"'
+}
+
+@test "INVARIANT (network-class device add — class=0200xx — surfaces in sample for operator triage of unexpected NIC)" {
+    # Adding a network controller (class 02xxxx) is the canonical
+    # network-implant attacker pattern. Lock that the class is
+    # implicit-detected via the alert path (no class-specific
+    # filter — just the generic 'device added' fires alert).
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    mk_device "0000:04:00.0" "8086" "15b8" "020000"   # generic NIC class
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"pci_device_added"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '0000:04:00.0(8086:15b8)'
+}
+
+@test "INVARIANT (mass-add operator scenario: 3 devices added in one scan → still single alert event; consolidation)" {
+    # Sister axis to existing 'multiple devices ADDED' test but with
+    # 3 devices and explicit single-JSON-line check. Locks
+    # consolidation discipline.
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    mk_device "0000:02:00.0" "13fe" "deed" "020000"
+    mk_device "0000:03:00.0" "1234" "5678" "0c0330"
+    mk_device "0000:04:00.0" "abcd" "ef01" "020000"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"pci_device_added"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"added":3'
+    main_count=$(cap | grep -cE '^-t selfdef-pci-device -- ')
+    [ "${main_count}" = "1" ]
+}
