@@ -322,3 +322,10 @@ TOMLEOF
     [ ! -f "${LIBEXEC_DIR}/bootloader-password-detect.sh" ]
     ! grep -q 'daemon-reload' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (timer unit carries Persistent=true — missed-fires catch up after long downtime)" {
+    # Sister to brain-wide timer Persistent=true INVARIANTs.
+    write_config "report"
+    run_wd
+    grep -qE '^Persistent=true' "${SYSTEMD_DIR}/selfdef-bootloader-password.timer"
+}
