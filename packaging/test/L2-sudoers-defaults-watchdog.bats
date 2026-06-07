@@ -270,3 +270,48 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-sudoers-defaults -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (current-behavior: sudoers-defaults-watchdog auto-refreshes baseline on delta — sister of auto-trust family vs no-auto-trust sudoers-integrity / sudo-conf)" {
+    # Current architectural choice: sudoers-defaults-watchdog
+    # auto-refreshes baseline on detected delta. CONTRAST against
+    # sudoers-integrity-watchdog which tracks GRANTS (no-auto-trust)
+    # and sudo-conf-watchdog which tracks PLUGINS (no-auto-trust).
+    # The distinction: Defaults are operator-tuning tunables that
+    # change more often (timestamp_timeout, requiretty, etc.).
+    # Lock current architectural shape so a future no-auto-trust
+    # refinement is intentional, not silent.
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    printf 'Defaults secure_path="/usr/bin:/tmp"\nDefaults env_reset\n' > "${SUDOERS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline auto-refreshed → ok
+    # Lock current behavior: third run sees no_delta + ok
+    cap | grep -q '"event":"sudoers_defaults_intact"' || cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (secure_path containing /home → alert: user-writable hijack on secure_path axis)" {
+    # Operator's home dir is a writable-root variant — symmetric
+    # axis to /tmp + /var/tmp + /dev/shm already locked. A
+    # secure_path element under /home means sudo will resolve
+    # binaries from there with root privilege.
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    printf 'Defaults secure_path="/usr/bin:/home/user/bin"\nDefaults env_reset\n' > "${SUDOERS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented dangerous Defaults NOT flagged: # prefix filtered)" {
+    # An operator note about a hypothetical dangerous Defaults
+    # must not trigger alert. Sister contract: nfs-exports/rhosts/
+    # sudoers-integrity commented-pattern filtering.
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%s# Defaults env_keep += "LD_PRELOAD" — example never enabled\n' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
