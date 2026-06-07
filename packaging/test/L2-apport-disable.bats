@@ -286,3 +286,26 @@ run_wd() {
     grep -q 'systemctl mask whoopsie.service' "${SYSEOF_LOG}"
     grep -q 'sysctl -w kernel.core_pattern=core' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # apport-disable TOML; parser must tolerate without altering the
+    # profile-gated behavior. mask-with-noise still fires the full
+    # architectural triplet (unit mask + autoreport mask + core_
+    # pattern reset) — the full crash-reporting-leak neutralization
+    # the operator selected (apport pipes kernel crash dumps to
+    # Canonical's crash-database — kernel memory leak surface).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "apport = kernel-memory exfil via Canonical crash DB"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    printf '|/usr/share/apport/apport %%p\n' > "${COREPAT}"
+    run_wd
+    grep -q 'systemctl mask apport.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask whoopsie.service' "${SYSEOF_LOG}"
+    grep -q 'sysctl -w kernel.core_pattern=core' "${SCTL_LOG}"
+}
