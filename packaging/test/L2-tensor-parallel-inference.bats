@@ -214,3 +214,48 @@ teardown_real_run() {
     teardown_real_run
     [ "${plan_ranks}" = "${env_nranks}" ]
 }
+
+@test "INVARIANT (runtime.env is shell-sourceable: bash -n parses cleanly — downstream consumer contract)" {
+    # Downstream TP runtime sources runtime.env. It MUST be valid
+    # shell syntax (no malformed assignments, no unterminated
+    # quotes). Sister to hardware-tune-cache shell-sourceable
+    # INVARIANT.
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    bash -n "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/runtime.env"
+    parse_rc=$?
+    teardown_real_run
+    [ "${parse_rc}" -eq 0 ]
+}
+
+@test "INVARIANT (slices array length equals ranks count — schema internal consistency)" {
+    # slice-plan.json carries both ranks (a count) and slices (an
+    # array). The array MUST have ranks entries — otherwise the
+    # cross-file consistency INVARIANT above is satisfiable while
+    # the plan itself is internally inconsistent. Locks the
+    # internal-consistency boundary.
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    consistent=$(python3 -c "import json; p=json.load(open('${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/slice-plan.json')); print(1 if len(p.get('slices', [])) == p.get('ranks') else 0)")
+    teardown_real_run
+    [ "${consistent}" = "1" ]
+}
+
+@test "INVARIANT (re-arm after operator deletion: both slice-plan.json + runtime.env re-created on next apply)" {
+    # Sister to many other modules' re-arm INVARIANT. When operator
+    # rm -rf the ETC_DIR contents, the next apply MUST re-create
+    # both files cleanly.
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    [ -f "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/slice-plan.json" ]
+    rm -f "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/slice-plan.json" "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/runtime.env"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    re_armed=0
+    [ -f "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/slice-plan.json" ] && [ -f "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/runtime.env" ] && re_armed=1
+    teardown_real_run
+    [ "${re_armed}" = "1" ]
+}
