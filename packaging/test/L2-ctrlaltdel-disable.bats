@@ -246,3 +246,22 @@ run_wd() {
     # systemctl mask MUST NOT have fired.
     ! grep -q 'systemctl mask ctrl-alt-del.target' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # ctrlaltdel-disable TOML; parser must tolerate without altering
+    # the profile-gated behavior. mask-with-noise still fires
+    # systemctl mask ctrl-alt-del.target without writing the burst-
+    # guard logind drop-in (mutual-exclusion preserved).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "ctrl+alt+del = janitor-with-rubber-ducky reboot vector"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q 'systemctl mask ctrl-alt-del.target' "${SYSEOF_LOG}"
+    ! [ -f "${LOGIND_DROPIN}" ]
+}
