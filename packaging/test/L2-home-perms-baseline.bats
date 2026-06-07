@@ -336,3 +336,17 @@ run_wd() {
     alice_mode_after="$(stat -c '%a' "${HOMES}/alice")"
     [ "${alice_mode_before}" = "${alice_mode_after}" ]
 }
+
+@test "INVARIANT (backup file is rendered once even on profile change — single-shot backup discipline holds across profile transitions)" {
+    # Sister to single-shot-backup INVARIANTs across the brain.
+    write_config "group"
+    mk_home alice 1001 0755
+    run_wd
+    backup_mtime_before="$(stat -c '%Y' "${BACKUP_DIR}/home-perms.bak")"
+    sleep 1
+    write_config "strict"
+    run_wd
+    backup_mtime_after="$(stat -c '%Y' "${BACKUP_DIR}/home-perms.bak")"
+    # mtime preserved across profile change.
+    [ "${backup_mtime_before}" = "${backup_mtime_after}" ]
+}
