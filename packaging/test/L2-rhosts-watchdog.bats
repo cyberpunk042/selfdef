@@ -295,3 +295,20 @@ seed_benign() {
     run_wd
     cap | grep -q 'distinctive-attacker-host'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. selfdef-rhosts tag must fire
+    # EXACTLY ONCE per scan regardless of how many trust-grant
+    # entries surface (multi-user .rhosts adds in one scan).
+    # Multi-line output would break SDD-062 downstream JSON-
+    # line consumer (Sigma correlator). Locks consolidation
+    # discipline on T1199 trusted-relationship surface.
+    printf 'trusted.example.com\n' > "${EQUIV}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'trusted.example.com\nevil1.example\nevil2.example\nevil3.example\n+\n' > "${EQUIV}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-rhosts -- ')
+    [ "${main_count}" = "1" ]
+}
