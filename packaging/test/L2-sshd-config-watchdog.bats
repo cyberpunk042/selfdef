@@ -323,3 +323,21 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (PasswordAuthentication yes → alert when prior was no — operator-intended key-only-auth downgrade)" {
+    # Sister to PermitRootLogin yes axis already locked. The
+    # PasswordAuthentication directive controls whether sshd
+    # accepts password-based login. Operator's hardened baseline
+    # typically has PasswordAuthentication=no (force key-only
+    # auth). An attacker who edits sshd_config to flip back to
+    # PasswordAuthentication=yes opens the host to remote
+    # brute-force / credential-stuffing — a configuration
+    # downgrade that defeats key-only-auth defense. Lock that
+    # the transition from no → yes is flagged as alert.
+    eff "permitrootlogin no" "passwordauthentication no" "x11forwarding no"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    eff "permitrootlogin no" "passwordauthentication yes" "x11forwarding no"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
