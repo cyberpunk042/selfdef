@@ -406,3 +406,18 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: coredumpd-redirect installer NEVER deletes operator-pre-existing systemd-coredump configs — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # coredumpd-redirect writes its own /etc/systemd/coredump.conf.d/
+    # drop-in; it MUST NEVER rm/find-delete an operator's
+    # pre-existing /etc/systemd/coredump.conf or coredump.conf.d
+    # entries not owned by THIS module. Locks no-auto-delete on
+    # the coredumpd-redirect installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/systemd/coredump\.conf' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/systemd/coredump.*-delete' "${f}"
+    done
+}
