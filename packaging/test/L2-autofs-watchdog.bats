@@ -278,3 +278,11 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs.
+    printf '/mnt/a program:/tmp/.evil1\n/mnt/b program:/var/tmp/.evil2\n/mnt/c program:/home/x/.evil3\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-autofs -- ')
+    [ "${main_count}" = "1" ]
+}
