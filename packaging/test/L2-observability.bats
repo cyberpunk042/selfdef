@@ -228,3 +228,22 @@ teardown_dry_run() {
         ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(prometheus|grafana|prometheus-node-exporter)' "${f}"
     done
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. observability manifest declares install + profile
+    # gating (bundled / external) the resolver enforces;
+    # malformed manifest wedges the prometheus/grafana stack
+    # bring-up. Python's tomllib is the canonical parser. Locks
+    # anti-malformed-manifest on the observability substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/observability/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'observability', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
