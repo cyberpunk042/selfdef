@@ -328,3 +328,23 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (membership-into-sudo: 'm myapp sudo' → alert — Debian/Ubuntu sudoers-grant via group axis sister to wheel)" {
+    # Sister to wheel + disk + shadow + docker + journal + kvm
+    # privileged-group membership axes already locked. The sudo
+    # group is the Debian/Ubuntu convention (vs RHEL/CentOS
+    # wheel) for sudoers-grant: %sudo ALL=(ALL:ALL) ALL in
+    # /etc/sudoers. Attacker who adds a sysusers.d entry
+    # granting sudo membership escalates the service account
+    # to full root via sudo. Locks sudo-group axis on the
+    # privileged-group surveillance family — symmetric to wheel
+    # on RHEL/CentOS; both axes together cover the canonical
+    # sudoers-via-group escalation primitive across distros.
+    # T1548.003 Sudo and Sudo Caching abuse via group membership.
+    seed_benign
+    run_wd
+    printf 'u myapp 999 "My App Daemon"\nm myapp sudo\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
