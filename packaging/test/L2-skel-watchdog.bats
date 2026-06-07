@@ -317,3 +317,23 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: skel-watchdog NEVER deletes /etc/skel files — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # skel-watchdog DETECTS T1546.004 skel per-new-user
+    # persistence via injection but MUST NEVER emit rm/unlink
+    # commands to auto-clean the file. The detected injection
+    # may be operator-legitimate (custom .bashrc PATH export,
+    # site-specific umask in .profile, tooling activation in
+    # .bash_profile) — silent auto-delete would destroy
+    # operator baseline state AND forensic evidence chain.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the skel surveillance substrate.
+    seed_benign
+    printf '# .bashrc\n/dev/tcp/1.1.1.1/4444\n' > "${SKELD}/.bashrc"
+    run_wd
+    [ -f "${SKELD}/.bashrc" ]
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+    ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(SKELD|SKEL|FILE|file)' "${WD}"
+}
