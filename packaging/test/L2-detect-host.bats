@@ -175,3 +175,14 @@ MODULE_DIR="${BATS_TEST_DIRNAME}/../../modules/detect-host"
     # module dependency graph at install time.
     grep -qE '^provides[[:space:]]*=[[:space:]]*\[' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (module.toml declares name = detect-host — module-identity contract)" {
+    # Sister to brain-wide module-name-identity INVARIANTs. The
+    # module.toml's name field is the canonical identifier used
+    # by the dependency resolver — every depends_on entry across
+    # the brain (slm-cpu-loop / tensor-parallel-inference / wasm-
+    # aot-cache / bitnet-gpu-inference / many more) references
+    # the module by its name field. A silent rename would
+    # cascade-break every consumer at resolution time.
+    grep -qE '^name[[:space:]]*=[[:space:]]*"detect-host"' "${MODULE_DIR}/module.toml"
+}
