@@ -326,3 +326,14 @@ TOMLEOF
     [ "$(stat -c '%a' "${SYSTEMD_DIR}/selfdef-entropy.timer")" = "644" ]
     [ "$(stat -c '%a' "${SYSTEMD_DIR}/selfdef-entropy.service")" = "644" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on entropy-baseline installer
+    # surface across libexec + service + timer phases.
+    write_config "report"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"entropy-baseline"')
+    [ "${count}" = "1" ]
+}
