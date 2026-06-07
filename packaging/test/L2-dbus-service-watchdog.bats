@@ -357,3 +357,20 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (Exec under /var/tmp: writable-root axis-symmetric expansion on D-Bus service activation)" {
+    # Sister to /home + /var/tmp Exec D-Bus axes. /var/tmp
+    # writable + persistent. Closes axis-symmetric coverage on
+    # T1543 Create-or-Modify-System-Process surface.
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${DBUSD}/evil-vartmp.service" <<EOF
+[D-BUS Service]
+Name=com.evil.vartmp
+Exec=/var/tmp/.evil
+User=root
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
