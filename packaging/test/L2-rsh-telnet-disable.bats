@@ -310,3 +310,18 @@ TOMLEOF
     DRY_RUN=1 LEGACY_PRESENT=1 run_wd
     ! grep -qE 'systemctl (mask|disable|stop)' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (emit_status JSON: status=ok + profile + acted count surfaced for operator dashboard)" {
+    # Sister to many other installer module's emit_status JSON
+    # INVARIANTs across the brain. The rsh-telnet-disable apply
+    # emit_status JSON MUST carry status=ok + profile=<set> +
+    # acted=N so the operator dashboard distinguishes successful
+    # cleartext-protocol neutralization from no-op (no legacy
+    # units present). Locks operator observability contract on
+    # the cleartext-protocol neutralization substrate.
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    cap | grep -qE '"status":"ok"'
+    cap | grep -qE 'profile=mask'
+    cap | grep -qE 'acted=[1-9]'
+}
