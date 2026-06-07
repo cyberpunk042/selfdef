@@ -299,3 +299,20 @@ EOF
         ! grep -qE 'find[[:space:]]+/etc/tetragon.*-delete' "${f}"
     done
 }
+
+@test "INVARIANT (requires entry kind = \"kernel-feature\" — CONFIG_BPF gated by kernel-feature kind, NOT binary)" {
+    # Sister to brain-wide module.toml requires-discipline
+    # INVARIANT family. CONFIG_BPF is a KERNEL FEATURE (compile-
+    # time kernel-config flag), NOT a binary or a package. The
+    # resolver's gating logic dispatches differently per
+    # requires.kind:
+    #   - binary: PATH lookup
+    #   - kernel-feature: /proc/config.gz parse OR /boot/config-$(uname -r) grep
+    #   - package: dpkg/rpm query
+    # If the manifest mis-declared CONFIG_BPF as kind="binary",
+    # the resolver would do a PATH lookup for a binary named
+    # "CONFIG_BPF" — guaranteed to fail. Locks the kernel-
+    # feature kind discipline on the tetragon CONFIG_BPF
+    # requirement substrate.
+    grep -qE '\{[[:space:]]*kind[[:space:]]*=[[:space:]]*"kernel-feature"[[:space:]]*,[[:space:]]*value[[:space:]]*=[[:space:]]*"CONFIG_BPF"[[:space:]]*\}' "${MODULE_DIR}/module.toml"
+}
