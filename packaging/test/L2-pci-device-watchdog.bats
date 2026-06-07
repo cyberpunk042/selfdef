@@ -404,3 +404,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '0000:0c:00.0\|0c0010'
 }
+
+@test "INVARIANT (severity field is bounded vocabulary {ok,warn,alert} — operator dashboard severity axis lock)" {
+    # Sister to brain-wide bounded-vocabulary INVARIANTs.
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    sev=$(cap | grep -oE '"severity":"[^"]+"' | head -1)
+    case "${sev}" in
+        '"severity":"ok"'|'"severity":"warn"'|'"severity":"alert"') : ;;
+        *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
+    esac
+}
