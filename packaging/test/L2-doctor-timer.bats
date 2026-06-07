@@ -200,3 +200,18 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     [ -f "${SERVICE}" ]
     grep -qE '^(Description|Documentation)=.*selfdef' "${SERVICE}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family
+    # for timer-driven scheduled probes (entropy-baseline,
+    # secure-boot-status, swap-encryption-detect, bootloader-
+    # password-detect). The doctor probe runs ON the timer's
+    # scheduled fire — executes ONCE, emits a verdict, then
+    # exits. Type=simple would leave systemd thinking the probe
+    # is a long-running daemon, breaking timer's OnSuccess /
+    # OnUnitActiveSec semantics (which depend on the service
+    # reaching inactive(dead) before the next fire). Locks
+    # oneshot-probe contract on the selfdef-doctor substrate.
+    [ -f "${SERVICE}" ]
+    grep -qE '^Type=oneshot' "${SERVICE}"
+}
