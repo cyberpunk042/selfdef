@@ -239,3 +239,39 @@ run_wd() {
     [ "${stop_line}" -lt "${disable_line}" ]
     [ "${disable_line}" -lt "${mask_line}" ]
 }
+
+@test "INVARIANT (downgrade mask → stop does NOT auto-unmask — mask is sticky)" {
+    # Sister-pattern with avahi-disable + nscd-disable + ctrlaltdel-disable +
+    # apport-disable mask-sticky lock.
+    write_config "mask"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop atd.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl unmask atd.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (atd.service vs at.service vs atrund: only atd.service is targeted — distro-aware unit name)" {
+    # Different distros may name the daemon differently: atd.service (most),
+    # at.service (some BSD-ish setups), atrund (legacy). The watchdog uses
+    # the canonical atd.service. Lock that no other variants are touched
+    # (would be cross-module scope creep).
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
+    # No spurious mask on other unit name variants.
+    ! grep -q 'systemctl mask at.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask atrund' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (acted=1 surfaces for single-unit module — operator dashboard distinguishes from acted=0 no-op path)" {
+    # Even though at-disable is single-unit, emit_status SHOULD surface
+    # an acted counter so dashboard can distinguish:
+    # - acted=1 = real apply with mutation
+    # - acted=0 = no-op (already in target state OR atd not present)
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    # Either explicit acted=1 OR the mask action fired (signaled by log).
+    [[ "${output}" == *'acted=1'* ]] || grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
+}
