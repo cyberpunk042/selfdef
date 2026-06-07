@@ -314,3 +314,16 @@ TOMLEOF
     [ ! -f "${DST}" ]
     ! grep -qE 'systemctl (restart|reload) systemd-resolved' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (baseline observability: changes count surfaces in emit_status — operator dashboard tracks first-install vs idempotent)" {
+    # Sister to brain-wide changes-count observability INVARIANTs.
+    # First install reports changes=1; idempotent re-apply
+    # reports changes=0. Operator dashboard distinguishes the
+    # two so audit-trail shows when the drop-in actually got
+    # mutated.
+    write_config "loopback"
+    output_first="$(run_wd 2>&1)"
+    [[ "${output_first}" == *'changes=1'* ]]
+    output_second="$(run_wd 2>&1)"
+    [[ "${output_second}" == *'changes=0'* ]]
+}
