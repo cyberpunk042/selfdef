@@ -373,3 +373,19 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: file-protections-baseline installer NEVER deletes operator-pre-existing sysctl configs — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # file-protections-baseline writes its own /etc/sysctl.d
+    # drop-in for fs.protected_* sysctls; it MUST NEVER
+    # rm/find-delete an operator's pre-existing /etc/sysctl.conf
+    # or sysctl.d entries not owned by THIS module. Locks no-
+    # auto-delete on the file-protections-baseline installer
+    # substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/file-protections-baseline/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/sysctl\.conf' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/sysctl\.d.*-delete' "${f}"
+    done
+}
