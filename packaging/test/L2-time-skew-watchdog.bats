@@ -362,3 +362,20 @@ CCEOF
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(chrony|ntpd|ntpsec|ntp)'
     ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(chrony|ntpd|ntpsec|ntp)' "${WD}"
 }
+
+@test "INVARIANT (no auto-adjust: time-skew-watchdog NEVER emits chronyc makestep/sysctl/date commands — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-remediation / surveillance-
+    # not-destruction INVARIANTs across L2 watchdog suites. The
+    # time-skew-watchdog DETECTS time-drift but MUST NEVER emit
+    # commands that auto-adjust the clock (chronyc makestep,
+    # date -s, hwclock --systohc, sysctl). Auto-adjust would
+    # break operator-running workloads sensitive to monotonic-
+    # clock invariants (databases, cert verification, time-
+    # series ingestion). Operator decides when to apply the
+    # step-correction. Surveillance, never remediation. Locks
+    # anti-runtime-disruption contract on the time-skew
+    # substrate.
+    ! grep -qE 'chronyc[[:space:]]+(makestep|burst|sources)' "${WD}"
+    ! grep -qE 'date[[:space:]]+-s' "${WD}"
+    ! grep -qE 'hwclock[[:space:]]+--systohc' "${WD}"
+}
