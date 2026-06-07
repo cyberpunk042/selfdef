@@ -377,3 +377,22 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-fix: sshd-config-watchdog NEVER edits sshd_config to revert dangerous directives — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-fix / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # sshd-config-watchdog DETECTS T1556 Modify Authentication
+    # Process / T1098 Account Manipulation via sshd_config
+    # tampering but MUST NEVER emit sed/awk commands to
+    # auto-revert the dangerous directive. The detected
+    # directive may be operator-legitimate (operator
+    # intentionally enabled PasswordAuthentication for emergency
+    # access) — silent auto-revert would lock the operator out.
+    # Auto-fix on sshd_config is also a denial-of-service
+    # primitive (watchdog could be tricked into fixing-itself
+    # into a broken state). Surveillance, never remediation.
+    # Locks anti-data-loss contract on the sshd-config
+    # surveillance substrate.
+    ! grep -qE 'sed[[:space:]]+-i.*sshd_config' "${WD}"
+    ! grep -qE 'sed[[:space:]]+-i.*\$\{?SSHD_CONFIG' "${WD}"
+}
