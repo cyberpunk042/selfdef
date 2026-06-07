@@ -333,3 +333,22 @@ EOF
     [ -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf" ]
     grep -qE '^kernel\.modules_disabled[[:space:]]*=[[:space:]]*1$' "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-strict.conf"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in render AND NO sysctl --system fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/sysctl.d/50-selfdef-kernel-
+    # lockdown-*.conf AND without firing sysctl --system. The
+    # strict profile in particular is IRREVERSIBLE until reboot
+    # — a silent dry-run that committed would lock out module-
+    # loading on a host under investigation, breaking any
+    # incident-response workflow that needs to insmod
+    # diagnostics modules. Locks dry-run-preserves-state on
+    # kernel-lockdown substrate.
+    write_config "balanced"
+    rm -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-balanced.conf"
+    : > "${SCTL_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-balanced.conf" ]
+    ! grep -qE 'sysctl --system' "${SCTL_LOG}"
+}
