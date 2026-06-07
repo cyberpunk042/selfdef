@@ -291,3 +291,23 @@ run_wd() {
     # Backup contains original 'someone' entry.
     grep -q '^someone$' "${CRON_ALLOW}.selfdef-backup"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # cron-baseline TOML; parser must tolerate without altering the
+    # profile-gated behavior. operator-list-with-noise still adds
+    # alice + bob alongside root.
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "operator-list"
+operator_users = "alice,bob"
+operator_note = "ops cluster — bridge sysadmins"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q '^root$' "${CRON_ALLOW}"
+    grep -q '^alice$' "${CRON_ALLOW}"
+    grep -q '^bob$' "${CRON_ALLOW}"
+}
