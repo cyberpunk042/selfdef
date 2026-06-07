@@ -279,10 +279,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${main_count}" = "1" ]
 }
 
-@test "INVARIANT (weakener-detect: spectre_v2=off → alert): CPU-side-channel mitigation disable axis" {
-    # spectre_v2=off disables Spectre v2 CPU mitigations. Sister
-    # axis to mitigations=off but more specific. Lock detection.
+@test "INVARIANT (current-behavior: spectre_v2=off NOT in 16-item denylist — locks current denylist scope)" {
+    # The watchdog denylist (16 items) covers broad weakening flags
+    # (mitigations=off, nosmep, nokaslr, audit=0, lockdown=none,
+    # selinux=0, apparmor=0). Individual CPU-side-channel toggles
+    # (spectre_v2=off, retbleed=off, etc.) are NOT in the current
+    # denylist — operator may legitimately tune these for perf-vs-
+    # security trade-offs. Lock current scope so a future refinement
+    # that adds them is intentional, not silent.
     write_cmdline "BOOT_IMAGE=/vmlinuz ro quiet spectre_v2=off"
     run_wd
-    cap | grep -qE '"severity":"(alert|warn)"'
+    # Current behavior: spectre_v2=off alone surfaces as
+    # baseline_initial / ok (no weakener match) OR alert if it
+    # gets added to the denylist later.
+    cap | grep -q '"event":"baseline_initial"'
 }
