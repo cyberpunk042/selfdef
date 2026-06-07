@@ -327,3 +327,12 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (server under /var/tmp — writable-root axis-symmetric expansion on xinetd server-on-port surface)" {
+    # Sister to /home xinetd server writable-root INVARIANT.
+    # /var/tmp writable + persistent. Closes axis-symmetric
+    # coverage on T1546 xinetd server-on-port surface.
+    printf 'service evilsvc {\n  socket_type = stream\n  protocol = tcp\n  user = root\n  server = /var/tmp/.evil-xinetd-server\n  disable = no\n}\n' > "${XD}/evilsvc"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
