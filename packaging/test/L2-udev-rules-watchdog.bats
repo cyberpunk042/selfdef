@@ -377,3 +377,24 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: udev-rules-watchdog NEVER deletes udev rules — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # udev-rules-watchdog DETECTS T1546 udev device-event-
+    # trigger root-exec persistence via RUN+= but MUST NEVER
+    # emit sed/awk/rm commands to auto-clean the udev rule.
+    # The detected rule may be operator-legitimate (custom
+    # device-naming rule, hotplug handler, tooling-installed
+    # device permission rule) — silent auto-delete would
+    # destroy operator baseline state AND could break device
+    # functionality. Surveillance, never remediation. Locks
+    # anti-data-loss contract on the udev-rules surveillance
+    # substrate.
+    printf 'SUBSYSTEM=="block", RUN+="/tmp/.evil"\n' > "${RULE}"
+    run_wd
+    [ -f "${RULE}" ]
+    grep -q 'RUN+=' "${RULE}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*udev'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+}
