@@ -343,3 +343,15 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # motd-scripts-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/update-motd.d for injection patterns, emits a
+    # verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the motd-scripts-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/motd-scripts-watchdog/systemd/selfdef-motd-scripts.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
