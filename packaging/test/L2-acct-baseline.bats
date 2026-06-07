@@ -306,3 +306,23 @@ TOMLEOF
     first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${LOGROTATE_DST}")"
     [[ "${first_nonblank}" == *"selfdef"* ]]
 }
+
+@test "INVARIANT (logrotate drop-in carries postrotate accton-restart — without it accton continues writing to the rotated/compressed file)" {
+    # Process-accounting via accton holds an OPEN file descriptor
+    # against /var/account/pacct. logrotate moves the file but the
+    # kernel keeps the FD valid against the rotated inode — accton
+    # continues appending to what becomes pacct.1.gz (broken).
+    # Without an accton off/on cycle in postrotate, ALL rotated
+    # entries land in the wrong file, and the forensic window
+    # silently corrupts. Locks rotation-correctness for the
+    # accton FD-holding surface. Sister to logrotate
+    # rotation-directive INVARIANTs (compress/missingok/notifempty/
+    # rotate N) — those define WHEN to rotate; postrotate accton
+    # defines that rotation actually works.
+    write_config "enabled"
+    run_wd
+    grep -qE 'postrotate' "${LOGROTATE_DST}"
+    grep -qE 'accton[[:space:]]+off' "${LOGROTATE_DST}"
+    grep -qE 'accton[[:space:]]+on' "${LOGROTATE_DST}"
+    grep -qE 'endscript' "${LOGROTATE_DST}"
+}
