@@ -894,3 +894,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     apply="${BATS_TEST_DIRNAME}/../../modules/dnf-automatic-config/install/apply.sh"
     head -1 "${apply}" | grep -qE '#!/.*bash|#!/usr/bin/env bash'
 }
+
+@test "INVARIANT (dnf-automatic-config install/check.sh declares bash shebang — bash-interpreter contract)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/dnf-automatic-config/install/check.sh"
+    head -1 "${chk}" | grep -qE '#!/.*bash'
+}

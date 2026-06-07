@@ -937,3 +937,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     apply="${BATS_TEST_DIRNAME}/../../modules/auditd-immutable/install/apply.sh"
     head -1 "${apply}" | grep -qE '#!/.*bash|#!/usr/bin/env bash'
 }
+
+@test "INVARIANT (auditd-immutable install/check.sh declares bash shebang — bash-interpreter contract)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/auditd-immutable/install/check.sh"
+    head -1 "${chk}" | grep -qE '#!/.*bash'
+}

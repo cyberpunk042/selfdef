@@ -977,3 +977,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     apply="${BATS_TEST_DIRNAME}/../../modules/firewalld-baseline/install/apply.sh"
     head -1 "${apply}" | grep -qE '#!/.*bash|#!/usr/bin/env bash'
 }
+
+@test "INVARIANT (firewalld-baseline install/check.sh declares bash shebang — bash-interpreter contract)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/firewalld-baseline/install/check.sh"
+    head -1 "${chk}" | grep -qE '#!/.*bash'
+}

@@ -965,3 +965,14 @@ assert 'install' in data, 'install missing'
         grep -qE 'PROFILE.*enforce|enforce.*PROFILE|profile.*enforce' "${s}"
     done
 }
+
+@test "INVARIANT (pci-device-watchdog .sh script declares baseline file path — operator-extensible baseline-state contract)" {
+    # Sister to brain-wide baseline-state INVARIANT family.
+    # Delta-scan watchdogs MUST declare a BASELINE variable referencing
+    # /var/lib/selfdef/ so operators know where baseline state lives.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/pci-device-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '/var/lib/selfdef/|BASELINE' "${s}"
+    done
+}
