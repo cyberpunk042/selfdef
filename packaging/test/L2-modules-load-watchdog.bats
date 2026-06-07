@@ -315,3 +315,23 @@ EOF
     run_wd
     cap | grep -q 'distinctive-attacker-conf\|evil_backdoor_module'
 }
+
+@test "INVARIANT (auto-trust current behavior: modules-load-watchdog DOES auto-refresh baseline after delta is logged — sister to access-conf auto-trust)" {
+    # Sister to access-conf-watchdog DOES-auto-trust INVARIANT
+    # already locked. modules-load.d operator-edits are routine
+    # (vendor packaging drops new conf entries on package
+    # install/upgrade) — so the watchdog auto-refreshes the
+    # baseline after logging the delta. Locks current behavior:
+    # after the FIRST delta surfaces as warn/alert, the SECOND
+    # run sees no delta (the baseline caught up). T1547.006
+    # detection is one-shot per change.
+    seed_benign
+    run_wd
+    printf 'distinctive_attacker_mod\n' > "${CONFD}/99-distinctive-attacker.conf"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert/warn
+    cap | grep -qE '"severity":"(alert|warn)"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline caught up
+    cap | grep -qE '"severity":"(ok|warn)"'
+}
