@@ -472,3 +472,14 @@ TOMLEOF
     # still be captured (snapshotting is non-destructive).
     [ "${pre_sha}" = "${post_sha}" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on ssh-moduli-harden installer
+    # surface despite moduli-filter + backup + emit phases.
+    write_config "strong"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"ssh-moduli-harden"')
+    [ "${count}" = "1" ]
+}
