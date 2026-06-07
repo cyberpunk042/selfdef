@@ -282,3 +282,19 @@ seed_benign() {
     run_wd                                              # baseline refreshed
     cap | grep -q '"event":"access_conf_intact"'
 }
+
+@test "INVARIANT (severity precedence: broad-permit + benign-change in same scan → alert wins over warn)" {
+    # When a scan surfaces BOTH a broad-permit add (alert) AND a
+    # benign rule change (warn), severity must be alert. Locks
+    # consolidation discipline. Sister to other watchdogs'
+    # severity-precedence INVARIANTs (sudoers-integrity, dns-
+    # resolver, file-capabilities, ld-so-conf, kernel-usermode-
+    # helper, ssh-authkeys, sysctl-hardening).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '+ : root : LOCAL\n+ : backdoor : ALL\n+ : admins : 192.168.1.0/24\n- : ALL : ALL\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"access_conf_broad_permit"'
+    cap | grep -q '"severity":"alert"'
+}
