@@ -308,3 +308,13 @@ TOMLEOF
     run_wd
     grep -qE '^OnUnitActiveSec=' "${TIMER_DST}"
 }
+
+@test "INVARIANT (timer unit carries Persistent=true — missed-fires catch up after long downtime)" {
+    # Sister to doctor-timer + entropy-baseline + secure-boot-
+    # status + mta-loopback-detect Persistent=true INVARIANTs.
+    # Without it host offline for 24+ hours misses every swap-
+    # encryption probe in that window.
+    write_config "report"
+    run_wd
+    grep -qE '^Persistent=true' "${TIMER_DST}"
+}
