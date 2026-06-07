@@ -312,3 +312,10 @@ TOMLEOF
     ! grep -q 'systemctl mask ctrl-alt-del.target' "${SYSEOF_LOG}"
     ! grep -qE 'systemctl (reload|kill).*logind' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (no auto-uninstall: ctrl-alt-del.target package NEVER auto-removed)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs.
+    write_config "mask"
+    run_wd
+    ! grep -qE '(apt-get|dpkg|dnf|rpm)[[:space:]]+(remove|purge|uninstall)' "${SYSEOF_LOG}"
+}
