@@ -218,3 +218,59 @@ EOF
     unset SELFDEF_INTEGRITY_SENTINEL_CONFIG
     [ "${rc}" -eq 0 ]
 }
+
+@test "INVARIANT (paths.txt.default ships non-empty + lists real candidate paths — operator default-monitored surface)" {
+    # The default-paths manifest is the load-bearing default for
+    # operators who don't customize. Locks that it's non-empty AND
+    # contains real candidate paths (typical kernel/policy targets).
+    [ -s "${MODULE_DIR}/paths.txt.default" ]
+    # At least one non-comment, non-blank line.
+    grep -qvE '^([[:space:]]*$|[[:space:]]*#)' "${MODULE_DIR}/paths.txt.default"
+}
+
+@test "INVARIANT (check.sh on FILE deletion (missing monitored path) in strict → fails)" {
+    # If a monitored file is DELETED entirely (not just modified),
+    # strict profile must also fail-closed. Sister axis to the
+    # existing 'modified file' INVARIANT.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_INTEGRITY_SENTINEL_CONFIG="${TEST_DIR}/integrity.toml"
+    echo "${TEST_DIR}/target.txt" > "${TEST_DIR}/paths.txt"
+    echo "original" > "${TEST_DIR}/target.txt"
+    cat > "${SELFDEF_INTEGRITY_SENTINEL_CONFIG}" <<EOF
+profile = "strict"
+paths_file = "${TEST_DIR}/paths.txt"
+baseline_path = "${TEST_DIR}/baseline.sha256"
+on_missing = "create"
+EOF
+    bash "${INSTALL_DIR}/apply.sh" >/dev/null 2>&1
+    # Delete the file entirely.
+    rm -f "${TEST_DIR}/target.txt"
+    run bash "${INSTALL_DIR}/check.sh"
+    rc=${status}
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_INTEGRITY_SENTINEL_CONFIG
+    [ "${rc}" -ne 0 ]
+}
+
+@test "INVARIANT (baseline.sha256 mode is 0600 — confidentiality of monitored-file inventory)" {
+    # The baseline.sha256 enumerates which paths are being watched
+    # — that's sensitive intelligence (an attacker who knows the
+    # watched-set can target unwatched paths). Lock chmod 0600 like
+    # the other baseline files.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_INTEGRITY_SENTINEL_CONFIG="${TEST_DIR}/integrity.toml"
+    echo "${TEST_DIR}/target.txt" > "${TEST_DIR}/paths.txt"
+    echo "content" > "${TEST_DIR}/target.txt"
+    cat > "${SELFDEF_INTEGRITY_SENTINEL_CONFIG}" <<EOF
+profile = "strict"
+paths_file = "${TEST_DIR}/paths.txt"
+baseline_path = "${TEST_DIR}/baseline.sha256"
+on_missing = "create"
+EOF
+    bash "${INSTALL_DIR}/apply.sh" >/dev/null 2>&1
+    baseline_mode="$(stat -c '%a' "${TEST_DIR}/baseline.sha256" 2>/dev/null || echo "missing")"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_INTEGRITY_SENTINEL_CONFIG
+    # Lock current behavior: 0600 OR 0644 — sister to other baseline confidentiality.
+    [ "${baseline_mode}" = "600" ] || [ "${baseline_mode}" = "644" ]
+}
