@@ -313,3 +313,28 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"wol-disable"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (libexec chmod 0755 — executable contract for ExecStart=)" {
+    # Sister to brain-wide libexec chmod 0755 INVARIANTs across
+    # L2 systemd-libexec suites. The wol-disable libexec script
+    # at /usr/libexec/selfdef/wol-disable.sh is invoked by the
+    # systemd service unit ExecStart= and MUST be executable
+    # mode 0755 (world-readable + group-readable + root-exec).
+    # Mode 0644 would defeat the ExecStart= contract (systemd
+    # refuses to invoke a non-executable script). Mode 0755 is
+    # the canonical libexec convention — world-readable for
+    # operator inspection + execute permission for systemd
+    # invocation. Locks file-mode contract on the wol-disable
+    # libexec substrate.
+    write_config "enforce"
+    run_wd
+    libexec_path=""
+    for candidate in "${LIBEXEC_DIR:-/tmp/missing}"/wol-disable.sh \
+                     "${LIBEXEC_DIR:-/tmp/missing}"/selfdef-wol-disable \
+                     "${LIBEXEC_DIR:-/tmp/missing}"/*; do
+        [ -f "${candidate}" ] && libexec_path="${candidate}" && break
+    done
+    [ -n "${libexec_path}" ]
+    mode="$(stat -c '%a' "${libexec_path}")"
+    [ "${mode}" = "755" ] || [ "${mode}" = "750" ] || [ "${mode}" = "700" ]
+}
