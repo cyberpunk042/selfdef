@@ -274,3 +274,16 @@ TOMLEOF
     grep -qE "accton ${PACCT_FILE}" "${ACCT_LOG}"
     [ -f "${LOGROTATE_DST}" ]
 }
+
+@test "INVARIANT (logrotate drop-in carries rotation-count directive — defines retention window)" {
+    # Beyond just daily/weekly/monthly + compress + missingok +
+    # notifempty already locked, the drop-in must declare a 'rotate
+    # N' count directive that defines the retention window (default
+    # would otherwise be 4 weeks, may be too short for forensic
+    # window in incident investigation). Locks against drift to a
+    # too-short retention. Sister to other rotation-directive
+    # INVARIANTs (rsyslog-tune, journal-tune, audit-rules retention).
+    write_config "enabled"
+    run_wd
+    grep -qE '^[[:space:]]*rotate[[:space:]]+[0-9]+' "${LOGROTATE_DST}"
+}
