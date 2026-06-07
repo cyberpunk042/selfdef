@@ -693,3 +693,22 @@ assert 'install' in data, 'install missing'
         grep -qE '^ExecStart=/usr/local/libexec/selfdef/' "${s}"
     done
 }
+
+@test "INVARIANT (fstab-watchdog service unit declares After= ordering directive — boot-sequencing contract)" {
+    # Sister to brain-wide systemd After= INVARIANT family.
+    # Watchdog .service units MUST declare an After= directive
+    # so they don't fire before the filesystem mounts that
+    # contain their probe targets (canonically After=local-
+    # fs.target so /etc/* is mounted before the watchdog
+    # tries to sha256sum a config file). A regression
+    # dropping After= would surface as "watchdog fires
+    # during early-boot before /etc is mounted" which then
+    # hashes nothing + emits a spurious "config missing"
+    # alert. Locks the boot-sequencing discipline on the
+    # fstab-watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/fstab-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^After=' "${s}"
+    done
+}

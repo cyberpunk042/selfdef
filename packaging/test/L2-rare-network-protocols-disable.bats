@@ -689,3 +689,25 @@ inst = data.get('instanced')
 assert isinstance(inst, bool), f'instanced must be boolean, got {type(inst).__name__}: {inst!r}'
 "
 }
+
+@test "INVARIANT (rare-network-protocols-disable module.toml [install].kind field present + canonical value — install-dispatch canonical contract)" {
+    # Sister to brain-wide module.toml [install].kind
+    # INVARIANT family. The kind field dispatches the install
+    # to the right runner (script-runner for kind=script,
+    # dpkg for kind=debian-package). The value MUST be in
+    # the canonical set {"script", "debian-package",
+    # "compose", "ansible"}. A regression to a typo
+    # ("scrupt", "deb-package") would silently fail the
+    # dispatch + leave the module uninstallable. Locks the
+    # canonical-dispatch-vocabulary discipline on the rare-network-protocols-disable
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/rare-network-protocols-disable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+k = (data.get('install') or {}).get('kind', '')
+assert k in {'script', 'debian-package', 'compose', 'ansible'}, f'install.kind must be canonical, got {k!r}'
+"
+}
