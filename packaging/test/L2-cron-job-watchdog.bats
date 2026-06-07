@@ -436,3 +436,17 @@ EOF
     run_wd
     cap | grep -qE '"added":[1-9]'
 }
+
+@test "INVARIANT (@hourly/@daily/@weekly schedule keywords surface as adds too — non-numeric schedule completeness)" {
+    # Sister to @reboot axis. The non-numeric schedule keywords
+    # (@hourly @daily @weekly @monthly @yearly @annually) are
+    # canonical cron-schedule shortcuts; attacker can use them
+    # to plant scheduled persistence. The watchdog MUST count
+    # them as job-adds equally to numeric crontab fields.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '@daily root /tmp/.daily-evil' > "${CRON_D}/99-daily-persistence"
+    run_wd
+    cap | grep -qE '"added":[1-9]'
+}
