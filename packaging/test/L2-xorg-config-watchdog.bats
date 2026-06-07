@@ -229,3 +229,39 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-xorg-config -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): xorg-config-watchdog does NOT refresh baseline on suspicious-ModulePath detection — alert STAYS until operator updates" {
+    # T1574/T1547 X-server root-exec module-load primitive — alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    printf 'Section "Files"\n    ModulePath "/usr/lib/xorg/modules"\nEndSection\n' > "${CONF}"
+    run_wd
+    printf 'Section "Files"\n    ModulePath "/tmp/evil"\nEndSection\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (ModulePath under /home — user-writable hijack coverage)" {
+    printf 'Section "Files"\n    ModulePath "/home/user/xmods"\nEndSection\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multiple comma-separated ModulePath dirs ALL evaluated: writable in middle position → alert)" {
+    # Attacker may try to hide writable path in middle of comma-separated
+    # list to evade naive first-or-last-only check. Lock that ALL positions
+    # are evaluated.
+    printf 'Section "Files"\n    ModulePath "/usr/lib/xorg/modules,/dev/shm/evil,/usr/lib/xorg/modules/extensions"\nEndSection\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: 'ModulePath    \"/tmp/evil\"' multi-space variant still triggers alert)" {
+    # Attacker may use multi-spaces between ModulePath and the path to
+    # evade naive grep.
+    printf 'Section "Files"\n    ModulePath    "/tmp/evil"\nEndSection\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
