@@ -389,3 +389,15 @@ Changed entries: 1"
     # substrate.
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+aide'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # aide-bridge runs ON the timer's scheduled fire — invokes
+    # aide --check, parses rc bitmask, emits a verdict, then
+    # exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the aide-bridge
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/aide-bridge/systemd/selfdef-aide-check.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
