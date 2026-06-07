@@ -306,3 +306,18 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-hosts-allow -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (exec-path under writable-root: tcpwrappers spawn invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # connection-event-trigger root-exec — tcpwrappers spawn=
+    # fires AS ROOT on every matching incoming connection
+    # (remotely-triggerable). Beyond inline rev-shell payloads,
+    # attackers stage benign-looking spawn that invokes binary
+    # in writable-root.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'ALL: ALL: spawn /tmp/staged_payload\n' > "${HALLOW}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
