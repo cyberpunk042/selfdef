@@ -333,3 +333,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named apt hook file surfaces in sample for operator-triage routing)" {
+    # Sister to brain-wide DELTA-detect sample-naming INVARIANTs.
+    # When attacker drops a new apt.conf.d/<file> with a new
+    # injection, the FILE NAME MUST surface in JSON sample so
+    # operator routes triage to the right path on T1546 apt-
+    # transaction-trigger surface.
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${HOOK}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'DPkg::Pre-Invoke {"/tmp/.evil";};\n' > "${APTCONFD}/99-distinctive-attacker-hook"
+    run_wd
+    cap | grep -q 'distinctive-attacker-hook'
+}
