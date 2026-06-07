@@ -742,3 +742,6 @@ EOF
     size=$(stat -c '%s' "${SCRIPT}")
     [ "${size}" -gt 500 ]
 }
+@test "INVARIANT (script file has shebang line — POSIX-conformant 77)" {
+    head -1 "${SCRIPT}" | grep -qE '^#!'
+}

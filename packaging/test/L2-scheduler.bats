@@ -636,3 +636,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     size=$(stat -c '%s' "${POSTINST}")
     [ "${size}" -gt 100 ]
 }
+@test "INVARIANT (postinst file has shebang line — POSIX-conformant 77)" {
+    head -1 "${POSTINST}" | grep -qE '^#!'
+}

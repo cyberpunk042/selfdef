@@ -789,3 +789,6 @@ assert isinstance(data, dict)
     size=$(stat -c '%s' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml")
     [ "${size}" -gt 500 ]
 }
+@test "INVARIANT (detect-host module.toml declares name= field — TOML-table-start 77)" {
+    head -10 "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml" | grep -qE '^name'
+}

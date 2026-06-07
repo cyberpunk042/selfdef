@@ -724,3 +724,6 @@ assert c == 'sys_execve', f'call must be sys_execve, got {c!r}'
     size=$(stat -c '%s' "${YAML}")
     [ "${size}" -gt 500 ]
 }
+@test "INVARIANT (YAML file declares apiVersion line — well-formed-CRD 77)" {
+    grep -qE '^apiVersion:' "${YAML}"
+}

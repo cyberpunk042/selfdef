@@ -734,3 +734,9 @@ assert ch == 'install/check.sh'
     size=$(stat -c '%s' "${chk}")
     [ "${size}" -gt 50 ]
 }
+
+@test "INVARIANT (polarproxy install/uninstall.sh size > 50 bytes — substantial-uninstall-script 77-cycle)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/uninstall.sh"
+    size=$(stat -c '%s' "${uni}")
+    [ "${size}" -gt 50 ]
+}
