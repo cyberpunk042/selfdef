@@ -236,3 +236,20 @@ EOF
     [ -x "${INSTALL_DIR}/check.sh" ]
     [ -x "${INSTALL_DIR}/uninstall.sh" ]
 }
+
+@test "INVARIANT (no auto-uninstall: tetragon module NEVER emits package-remove commands on tetragon)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The tetragon installer wires kernel-attestation
+    # substrate (eBPF programs attached to kernel hooks) but
+    # MUST NEVER emit shell commands that uninstall the tetragon
+    # package itself (apt/dpkg/dnf/rpm/yum remove|purge|
+    # uninstall tetragon). Silent auto-removal of tetragon
+    # during install/check would leave consumer modules
+    # (agent-guard MS017 + perimeter MS047 + guardian MS044) in
+    # half-loaded eBPF-hook state — partial AI-safety
+    # enforcement is worse than none. Locks anti-package-removal
+    # contract on the Tetragon kernel-attestation substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+tetragon' "${f}"
+    done
+}
