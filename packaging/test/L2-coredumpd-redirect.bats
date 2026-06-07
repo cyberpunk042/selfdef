@@ -385,3 +385,24 @@ TOMLEOF
     drop_in="${DROPIN_DIR}/50-selfdef.conf"
     [ ! -f "${drop_in}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${drop_in}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. coredumpd-redirect installs systemd-coredump
+    # drop-ins gated by profile (redirect / disabled); a
+    # malformed module.toml would break the dependency-resolver
+    # at install-time + leave the coredump-redirect hardening
+    # wedged. Python's tomllib is the canonical parser. Locks
+    # anti-malformed-manifest on the coredumpd-redirect
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'coredumpd-redirect', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
