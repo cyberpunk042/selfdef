@@ -309,3 +309,14 @@ TOMLEOF
     grep -qE 'rfkill block wifi' "${RF_LOG}"
     ! [ -f "${MODPROBE_FILE}" ]
 }
+
+@test "INVARIANT (DRY_RUN does not fire rfkill or write the modprobe blacklist)" {
+    # Sister to many other installer module's DRY_RUN INVARIANT
+    # across the brain. The wireless-disable DRY_RUN path MUST
+    # be a no-op against live kernel state + live filesystem.
+    # Locks the dry-run side-effect-freedom contract.
+    write_config "mask"
+    DRY_RUN=1 run_wd
+    ! grep -qE 'rfkill block wifi' "${RF_LOG}"
+    ! [ -f "${MODPROBE_FILE}" ]
+}
