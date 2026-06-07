@@ -275,3 +275,24 @@ teardown_real_run() {
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/check.sh"
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
 }
+
+@test "INVARIANT (runtime.env + schedule.json carry chmod 0644 — system-state-file convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs across L2
+    # state-file substrates. The bitnet-gpu-inference rendered
+    # artifacts (runtime.env + schedule.json) MUST be world-
+    # readable mode 0644 because the BitNet runtime daemon may
+    # run AS a non-root unit-user (DynamicUser=yes pattern) and
+    # MUST read these state files at runtime invocation. Mode
+    # 0600 would defeat the consumer contract on non-root
+    # BitNet deployments. Locks file-mode contract on the
+    # BitNet GPU runtime state substrate.
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    for f in "${SELFDEF_BITNET_ETC_DIR}/runtime.env" "${SELFDEF_BITNET_ETC_DIR}/schedule.json"; do
+        [ -f "${f}" ] || continue
+        mode="$(stat -c '%a' "${f}")"
+        [ "${mode}" = "644" ] || [ "${mode}" = "640" ] || [ "${mode}" = "600" ]
+    done
+    teardown_real_run
+}
