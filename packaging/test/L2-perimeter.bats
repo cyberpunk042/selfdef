@@ -156,3 +156,17 @@ teardown() {
     run python3 -c "import yaml; d=yaml.safe_load(open('${YAML}')); print('OK' if d['metadata']['name'] else 'FAIL')"
     [ "${output}" = "OK" ]
 }
+
+@test "INVARIANT (YAML kind=TracingPolicy — Tetragon-recognized resource type)" {
+    # Sister to MS047 R11042 apiVersion INVARIANT already locked.
+    # The kind field is the SECOND mandatory Tetragon CRD
+    # discriminator (apiVersion: cilium.io/v1alpha1 + kind:
+    # TracingPolicy). A regression that emitted kind:
+    # ClusterTracingPolicy (the cluster-scoped variant) or
+    # any other kind would silently fail to apply at Tetragon
+    # operator startup — the perimeter policy would silently
+    # never load, defeating the entire MS047 SovereignOS
+    # perimeter substrate. Locks the resource-kind contract.
+    run python3 -c "import yaml; d=yaml.safe_load(open('${YAML}')); print(d['kind'])"
+    [ "${output}" = "TracingPolicy" ]
+}
