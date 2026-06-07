@@ -210,3 +210,13 @@ EOF
     grep -q 'require_signed_policies' "${INSTALL_DIR}/apply.sh"
     grep -q 'require_signed_policies' "${PROFILES_DIR}/default.toml"
 }
+
+@test "INVARIANT (module.toml provides tetragon-tracing + tetragon-policies — downstream consumer contracts)" {
+    # Sister to other module's provides-contract INVARIANTs.
+    # Tetragon is the substrate for agent-guard (MS017) +
+    # perimeter (MS047) + guardian (MS044). Lock that both
+    # tracing AND policies provides tokens are declared so
+    # downstream consumers can list them in depends_on.
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"tetragon-tracing"' "${MODULE_DIR}/module.toml"
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"tetragon-policies"' "${MODULE_DIR}/module.toml"
+}
