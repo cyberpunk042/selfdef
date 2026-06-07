@@ -287,3 +287,21 @@ TOMLEOF
     DRY_RUN=1 run_wd
     ! grep -qE 'systemctl (mask|disable|stop)' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (downgrade mask → stop does NOT auto-unmask — mask is sticky)" {
+    # Sister to apport-disable / at-disable / avahi-disable
+    # downgrade mask→stop-no-auto-unmask INVARIANTs across the
+    # brain. mask is operator-explicit hard-disable; downgrading
+    # the profile to stop does NOT silently undo the mask
+    # (operator must explicitly unmask via systemctl unmask).
+    # Locks the mask-stickiness contract on the rpcbind-
+    # neutralization substrate — prevents accidental re-
+    # exposure of legacy portmap via profile downgrade.
+    write_config "mask"
+    RPCBIND_PRESENT=1 run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    RPCBIND_PRESENT=1 run_wd
+    # No unmask command fires on downgrade.
+    ! grep -qE 'systemctl unmask rpcbind' "${SYSEOF_LOG}"
+}
