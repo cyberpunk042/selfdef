@@ -406,3 +406,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-logfile-integrity -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (current-behavior: state file persists across runs — operator can grep current state)" {
+    # Already locked at line 262; this is a defensive duplicate
+    # check that state survives at least 3 consecutive runs.
+    printf 'a\nb\n' > "${LOG1}"
+    for _ in 1 2 3; do
+        PATH="${BIN}:${PATH}" \
+        SELFDEF_LOGINT_PROFILE=report \
+        SELFDEF_LOGINT_STATE="${STATE}" \
+        SELFDEF_LOGINT_WATCH="${LOG1}" \
+            bash "${WD}"
+        [ -f "${STATE}" ]
+        [ -s "${STATE}" ]
+    done
+}
