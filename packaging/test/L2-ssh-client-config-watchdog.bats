@@ -278,3 +278,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (LocalCommand directive surveillance: also scanned — sister axis to ProxyCommand)" {
+    # Sister to ProxyCommand surveillance INVARIANTs already
+    # locked. LocalCommand is a less-known ssh client directive
+    # that runs an arbitrary command on the LOCAL host (not the
+    # remote) after the connection completes. Attacker who can
+    # plant a LocalCommand in user's ssh config gets per-
+    # connection local exec — sister vector to ProxyCommand
+    # on the ssh client config surveillance surface (T1546 —
+    # Event Triggered Execution via ssh-connection-completion).
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'Host *\n    PermitLocalCommand yes\n    LocalCommand /tmp/.evil-local-callback %%h\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
