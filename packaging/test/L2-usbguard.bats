@@ -359,3 +359,15 @@ EOF
     [ ! -f "${RULES_DST}" ]
     ! grep -qE 'systemctl (restart|reload) usbguard' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on usbguard installer surface
+    # across rules.conf + daemon-drop-in + restart phases.
+    printf '%s\n' 'allow id 1d6b:0002' > "${BASELINE_FILE}"
+    write_config "permissive"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"usbguard"')
+    [ "${count}" = "1" ]
+}
