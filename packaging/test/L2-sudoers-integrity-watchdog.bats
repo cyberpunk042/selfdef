@@ -455,3 +455,27 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: sudoers-integrity-watchdog NEVER deletes sudoers.d drop-ins — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # sudoers-integrity-watchdog DETECTS T1548.003 Abuse
+    # Elevation Control Mechanism / T1098 Account Manipulation
+    # via sudoers.d planted grants but MUST NEVER emit rm/
+    # unlink commands to auto-delete the planted file. The
+    # detected grant may be operator-legitimate (operator added
+    # a new sudoers.d drop-in for an automation account but
+    # forgot to re-baseline). Silent auto-delete on sudoers
+    # is a denial-of-service primitive (auto-delete the file +
+    # operator can't sudo + can't re-enable selfdef). Surveil-
+    # lance, never remediation. Locks anti-data-loss contract
+    # on the sudoers-integrity surveillance substrate.
+    write_sudo_inventory
+    cat > "${SUDOERS_D_DIR}/99-attacker" <<'EOF'
+evil ALL=(ALL) NOPASSWD: ALL
+EOF
+    run_wd
+    [ -f "${SUDOERS_D_DIR}/99-attacker" ]
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+    ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(SUDOERS_D_DIR|SUDOERS|FILE|file)' "${WD}"
+}
