@@ -389,3 +389,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -qE 'sed[[:space:]]+-i.*system\.conf' "${WD}"
     ! grep -qE 'find[[:space:]].*-delete' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # systemd-environment-watchdog runs ON the timer's scheduled
+    # fire — scans /etc/systemd/system.conf.d for DefaultEnvironment
+    # = LD_PRELOAD/PYTHONPATH/PERL5LIB/NODE_PATH injection,
+    # emits a verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the systemd-environment-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/systemd-environment-watchdog/systemd/selfdef-systemd-env.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
