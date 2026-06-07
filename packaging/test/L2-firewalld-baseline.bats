@@ -390,3 +390,12 @@ TOMLEOF
         || grep -q -- '--permanent --zone=selfdef --set-target=%%REJECT%%' "${FW_LOG}" \
         || grep -q -- 'set-target=REJECT' "${FW_LOG}"
 }
+
+@test "INVARIANT (firewall-cmd --reload fires after rule additions — semantic activation)" {
+    # Sister to brain-wide reload-after-config INVARIANTs.
+    # firewalld permanent rules don't activate until --reload.
+    # Without it the baseline rules sit dormant.
+    write_config "baseline"
+    run_wd
+    grep -qE 'firewall-cmd.*--reload' "${FW_LOG}"
+}
