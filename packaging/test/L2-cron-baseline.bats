@@ -409,3 +409,23 @@ TOMLEOF
         [ ! -f "${f}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${f}"
     done
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. cron-baseline installs cron.allow/cron.deny +
+    # at.allow/at.deny gates the resolver enforces; a malformed
+    # module.toml would break install-time gating + leave the
+    # cron-access-control wedged. Python's tomllib is the
+    # canonical parser. Locks anti-malformed-manifest on the
+    # cron-baseline substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/cron-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'cron-baseline', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
