@@ -345,3 +345,17 @@ INSTALL_DIR="${MODULE_DIR}/install"
         ! grep -qE '(apt-get|dpkg|dnf|rpm|yum|cargo|pip|pip3)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(wasmtime|wasmer|wasi-sdk)' "${f}"
     done
 }
+
+@test "INVARIANT (no auto-delete: wasm-aot-cache installer NEVER deletes operator-pre-existing AOT cache files — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # wasm-aot-cache writes its own AOT cache files; it MUST
+    # NEVER rm/find-delete operator-pre-existing /var/cache/
+    # selfdef/wasm-aot or wasmtime cache entries not owned by
+    # THIS module. Locks no-auto-delete on the wasm-aot-cache
+    # installer substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/var/cache/selfdef' "${f}"
+        ! grep -qE 'find[[:space:]]+/var/cache/selfdef.*-delete' "${f}"
+    done
+}
