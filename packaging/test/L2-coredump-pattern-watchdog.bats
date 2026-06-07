@@ -571,3 +571,24 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         grep -qE '^Nice=' "${s}"
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog service unit declares PrivateTmp= — /tmp namespace-isolation hardening contract)" {
+    # Sister to brain-wide systemd PrivateTmp= INVARIANT
+    # family. Watchdog .service units that run periodic
+    # sha256sum walks may create transient /tmp files. The
+    # PrivateTmp= directive (canonically =true) instructs
+    # systemd to give the unit its own /tmp mount namespace —
+    # an attacker who exploits the watchdog cannot reach
+    # /tmp files owned by other processes (e.g. ssh-agent
+    # sockets), and the watchdog's own /tmp residue is
+    # automatically cleaned at unit-stop. A regression
+    # dropping PrivateTmp= would share /tmp with the host,
+    # exposing the watchdog as a side-channel for any
+    # /tmp-based pivot. Locks the /tmp namespace-isolation
+    # discipline on the coredump-pattern-watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^PrivateTmp=' "${s}"
+    done
+}

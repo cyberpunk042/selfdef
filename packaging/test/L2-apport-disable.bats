@@ -654,3 +654,29 @@ chk = inst.get('check', '')
 assert chk == 'install/check.sh', f'install.check must be install/check.sh, got {chk!r}'
 "
 }
+
+@test "INVARIANT (apport-disable module.toml [install_paths] block present — SDD-026 install-path manifest contract)" {
+    # Sister to brain-wide module.toml [install_paths]
+    # INVARIANT family. Per MS011 Z-8 / SDD-026, every
+    # installer module MUST declare an [install_paths] block
+    # enumerating the on-disk surfaces it touches on apply.
+    # The selfdef dashboard's install-options surface +
+    # install-plan auditor read this block to surface what
+    # the module mutates BEFORE apply runs. A regression
+    # dropping the [install_paths] block would leave operators
+    # without a pre-apply manifest of writes, breaking
+    # operator-consent + the install-plan-dry-run contract.
+    # Locks the SDD-026 manifest discipline on the apport-disable
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/apport-disable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths')
+assert ip is not None, f'[install_paths] block must be present per SDD-026, got None'
+paths = ip.get('paths', [])
+assert isinstance(paths, list) and len(paths) > 0, f'install_paths.paths must be non-empty list, got {paths!r}'
+"
+}
