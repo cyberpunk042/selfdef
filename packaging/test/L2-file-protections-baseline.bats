@@ -237,3 +237,41 @@ run_wd() {
     ! grep -q 'profile=strict' "${DROPIN}"
     grep -q 'sysctl -w' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (all 4 protected_* sysctls fire on apply — full coverage check)" {
+    # Lock that every protected_* sysctl knob fires on apply, not
+    # just a subset. A regression that drops one knob from the
+    # apply loop would silently leave that attack vector open.
+    write_config "baseline"
+    run_wd
+    grep -q 'sysctl -w fs.protected_hardlinks=' "${SCTL_LOG}"
+    grep -q 'sysctl -w fs.protected_symlinks=' "${SCTL_LOG}"
+    grep -q 'sysctl -w fs.protected_fifos=' "${SCTL_LOG}"
+    grep -q 'sysctl -w fs.protected_regular=' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (strict profile has hardlinks/symlinks at strictly >= baseline values — profile-rank monotonic)" {
+    # Strict's hardening MUST be at-least-as-strict as baseline's
+    # on every knob. Locks profile-rank monotonicity: a regression
+    # that loosens any knob in strict would trip here.
+    write_config "baseline"
+    run_wd
+    baseline_hardlinks="$(grep -oE 'fs\.protected_hardlinks[[:space:]]*=[[:space:]]*[0-9]+' "${DROPIN}" | grep -oE '[0-9]+$')"
+    baseline_symlinks="$(grep -oE 'fs\.protected_symlinks[[:space:]]*=[[:space:]]*[0-9]+' "${DROPIN}" | grep -oE '[0-9]+$')"
+    write_config "strict"
+    run_wd
+    strict_hardlinks="$(grep -oE 'fs\.protected_hardlinks[[:space:]]*=[[:space:]]*[0-9]+' "${DROPIN}" | grep -oE '[0-9]+$')"
+    strict_symlinks="$(grep -oE 'fs\.protected_symlinks[[:space:]]*=[[:space:]]*[0-9]+' "${DROPIN}" | grep -oE '[0-9]+$')"
+    [ "${strict_hardlinks}" -ge "${baseline_hardlinks}" ]
+    [ "${strict_symlinks}" -ge "${baseline_symlinks}" ]
+}
+
+@test "INVARIANT (drop-in is sysctl-parseable: each non-comment line matches key=value shape)" {
+    # The drop-in is sourced by sysctl --system. Every non-comment
+    # non-blank line MUST match the key=value sysctl grammar.
+    # Sister to hardware-tune-cache shell-sourceable INVARIANT.
+    write_config "baseline"
+    run_wd
+    # Check every non-empty non-comment line matches sysctl grammar.
+    awk '/^[[:space:]]*#/ || /^[[:space:]]*$/ {next} /^[a-zA-Z_][a-zA-Z0-9_.]*[[:space:]]*=[[:space:]]*[0-9]+/ {next} {bad=1; print "malformed: " $0} END{exit bad?1:0}' "${DROPIN}"
+}
