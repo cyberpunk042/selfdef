@@ -369,3 +369,20 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"aslr-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: aslr-baseline NEVER emits package-remove commands)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The aslr-baseline installer writes a sysctl
+    # drop-in to lock kernel.randomize_va_space=2 but MUST
+    # NEVER emit shell commands that uninstall kernel-related
+    # packages (apt/dpkg/dnf/rpm/yum remove|purge|uninstall
+    # any kernel-* package). The ASLR setting is purely sysctl
+    # — no package management. Auto-removal would be
+    # categorically wrong: catastrophic at the kernel-package
+    # level. Locks anti-package-removal contract on the ASLR
+    # kernel-hardening substrate.
+    write_config "full"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)'
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${DROPIN}"
+}
