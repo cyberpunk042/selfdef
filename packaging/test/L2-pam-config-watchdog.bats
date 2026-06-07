@@ -376,3 +376,24 @@ EOF
     run_wd
     cap | grep -q 'very-distinctive-attacker'
 }
+
+@test "INVARIANT (rogue pam_*.so under /home — user-writable hijack on PAM auth-stack dlopen surface)" {
+    # Sister to many other watchdog's /home user-writable
+    # INVARIANT across the brain (krb5-plugins, gss-mech,
+    # openssl, nm-vpn). /home is the user-writable surface — an
+    # attacker with regular user account can drop a malicious
+    # PAM module .so into their home and have it dlopen()'d by
+    # every PAM-using service (sshd, sudo, su, login, screen
+    # lock). Locks axis-symmetry on /home for the PAM module
+    # surface (T1556 — Modify Authentication Process via PAM
+    # module hijack; pam_*.so runs AS the consuming process
+    # which means AS ROOT for system-auth services).
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${PAM_DIR}/99-evil-home-mod" <<'EOF'
+auth sufficient /home/user/.evil-pam.so
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
