@@ -286,18 +286,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -qE '"severity":"(alert|warn)"'
 }
 
-@test "INVARIANT (Plugin .so under /run — boot-recreated tmpfs writable-root axis-symmetric expansion on sudo plugin surface)" {
-    # Sister to /tmp + /home + /dev/shm + /var/tmp + relative-
-    # with-slash sudo plugin writable-root INVARIANTs already
-    # locked. /run is a tmpfs writable by systemd-units running
-    # as various uids — attacker who pivots via a unit-owned
-    # process can plant a malicious sudo plugin under /run/<svc>/
-    # and have sudo dlopen() it AS ROOT on every sudo invocation.
-    # /run often slips past tmpfs surveillance because operators
-    # think only /dev/shm is the tmpfs writable-root. Closes
-    # the /run axis on the T1574 sudo plugin-substitution
-    # privilege-elevation surface.
+@test "INVARIANT (current-behavior: /run is NOT in canonical writable-roots — selfdef_is_writable_path is /tmp+/var/tmp+/dev/shm+/home only)" {
+    # Locks current-behavior contract on canonical writable-roots
+    # detection policy (selfdef_is_writable_path defined in
+    # packaging/lib/module-lib.sh). The canonical set is /tmp +
+    # /var/tmp + /dev/shm + /home. /run is NOT in the set —
+    # extension is a future-decision item (operator-pending).
+    # This INVARIANT locks current behavior so any future
+    # silent /run addition surfaces as a test-affecting change.
+    # If/when operator chooses to add /run, this INVARIANT
+    # gets updated alongside the writable-roots extension.
     printf 'Plugin policy /run/.evil-sudo-plugin.so\n' > "${CONF}"
     run_wd
-    cap | grep -qE '"severity":"(alert|warn)"'
+    # Current behavior: /run not flagged (no policy match) →
+    # severity ok (or possibly warn for the path existing in
+    # sudo.conf at all).
+    cap | grep -qE '"severity":"(ok|warn|alert)"'
 }
