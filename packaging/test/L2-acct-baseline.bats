@@ -350,3 +350,20 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"acct-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (logrotate drop-in chmod 0644 — logrotate.d sourcing convention; world-readable required for logrotate to parse)" {
+    # Sister to brain-wide drop-in chmod 0644 INVARIANTs across
+    # L2 suites. The acct-baseline logrotate drop-in lives in
+    # /etc/logrotate.d/selfdef-acct-baseline and MUST be world-
+    # readable mode 0644 because logrotate is invoked by cron
+    # AS ROOT but the SELinux/AppArmor profile around logrotate
+    # may drop capabilities — mode 0600 would defeat the
+    # canonical logrotate.d sourcing semantics on hardened
+    # deployments. Locks file-mode contract on the acct-baseline
+    # logrotate.d drop-in substrate.
+    write_config "enabled"
+    run_wd
+    [ -f "${LOGROTATE_DST}" ]
+    mode="$(stat -c '%a' "${LOGROTATE_DST}")"
+    [ "${mode}" = "644" ]
+}
