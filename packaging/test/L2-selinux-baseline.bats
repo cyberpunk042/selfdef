@@ -840,3 +840,23 @@ k = (data.get('install') or {}).get('kind', '')
 assert k in {'script', 'debian-package', 'compose', 'ansible'}, f'install.kind must be canonical, got {k!r}'
 "
 }
+
+@test "INVARIANT (selinux-baseline module.toml [install] uninstall = \"install/uninstall.sh\" — install uninstall path canonical contract)" {
+    # Sister to brain-wide module.toml [install].uninstall
+    # INVARIANT family. Canonical relative path "install/
+    # uninstall.sh" — sister to apply/check canonical paths
+    # already locked in earlier cycles. A regression to
+    # absolute path would break in-tree test runner; non-
+    # existent path surfaces as "uninstall script not found"
+    # leaving orphaned files. Locks the canonical install/
+    # uninstall.sh path discipline on the selinux-baseline substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/selinux-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+un = (data.get('install') or {}).get('uninstall', '')
+assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninstall.sh, got {un!r}'
+"
+}

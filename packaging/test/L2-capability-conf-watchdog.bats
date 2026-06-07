@@ -728,3 +728,20 @@ seed_benign() {
         grep -qE '^After=' "${s}"
     done
 }
+
+@test "INVARIANT (capability-conf-watchdog service unit declares Documentation= — operator-doc-link canonical contract)" {
+    # Sister to brain-wide systemd Documentation= INVARIANT
+    # family. Watchdog .service units MUST declare a
+    # Documentation= directive pointing operators at the
+    # module's README (canonical: https://github.com/
+    # cyberpunk042/selfdef modules/<slug>-watchdog/README.md).
+    # A regression dropping Documentation= would leave
+    # operators triaging journald entries without a direct
+    # docs link. Locks the Documentation= operator-doc-link
+    # discipline on the capability-conf-watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/capability-conf-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^Documentation=' "${s}"
+    done
+}
