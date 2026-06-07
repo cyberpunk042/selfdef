@@ -258,3 +258,20 @@ seed_benign() {
     # Either alert (preferred — defense-in-depth) OR warn (acceptable — config changed).
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (relative-with-slash plugin path → alert): relative-path-resolves-against-PWD attacker primitive on the audit dispatcher" {
+    # Sister to the brain-wide relative-path INVARIANT family (autofs
+    # program: maps, request-key callout, binfmt interpreter,
+    # krb5 plugin, rsyslog omprog, syslog-ng program(), dnf-plugins
+    # action, sudo-conf plugin). A relative-path plugin in
+    # auditd-plugins.d is resolved by auditd/audisp against PWD-at-
+    # exec time — undefined behavior + attacker primitive. Locks
+    # detection of relative paths alongside the absolute-writable-
+    # root family on the auditd dispatcher-plugin surface.
+    seed_benign
+    run_wd
+    printf 'active = yes\npath = sub/dir/audisp\ntype = always\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
