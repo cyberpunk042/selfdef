@@ -283,3 +283,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (extend directive path under writable-root: /tmp/.evil → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546/
+    # T1059 snmpd-OID-trigger remote-exec — extend directive
+    # runs binary AS the snmpd user when matching OID queried.
+    # Beyond inline rev-shell payloads, attacker stages binary
+    # in /tmp + SNMP query fires it remotely. Closes writable-
+    # root-exec axis on snmpd extend surface.
+    printf 'extend evilcheck /tmp/.evil arg1 arg2\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
