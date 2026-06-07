@@ -378,3 +378,24 @@ run_wd() {
     drop_in="${CHRONY_DROPIN_DIR}/50-selfdef.conf"
     [ ! -f "${drop_in}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${drop_in}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. The chrony-baseline module.toml declares the install
+    # contract + requires (chronyd, systemctl, awk) that the
+    # dependency-resolver enforces at install-time. A malformed
+    # manifest would break the resolver + leave the chrony
+    # drop-in install wedged. Python's tomllib is the canonical
+    # parser — must parse to a dict with the canonical top-level
+    # keys (name, version, install). Locks anti-malformed-
+    # manifest on the chrony-baseline substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/chrony-baseline/module.toml"
+    python3 -c "
+import tomllib, sys
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'chrony-baseline', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
