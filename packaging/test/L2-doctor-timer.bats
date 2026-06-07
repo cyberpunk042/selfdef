@@ -182,3 +182,11 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     # long-uptime + offline-recovery coverage is never silent.
     grep -qE '^Persistent=true' "${TIMER}"
 }
+
+@test "INVARIANT (timer + service unit chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs.
+    [ -f "${TIMER}" ]
+    [ "$(stat -c '%a' "${TIMER}")" = "644" ]
+    [ -f "${SERVICE}" ]
+    [ "$(stat -c '%a' "${SERVICE}")" = "644" ]
+}
