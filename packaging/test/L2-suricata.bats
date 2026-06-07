@@ -807,3 +807,8 @@ assert ch == 'install/check.sh'
     uni="${BATS_TEST_DIRNAME}/../../modules/suricata/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (suricata install/check.sh is non-empty file — non-trivial-check-script 82)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/suricata/install/check.sh"
+    [ -s "${chk}" ]
+}

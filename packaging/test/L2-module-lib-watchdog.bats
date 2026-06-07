@@ -715,3 +715,6 @@ setup() {
 @test "INVARIANT (lib defines toml_get function — config-accessor canonical 81)" {
     declare -F toml_get >/dev/null
 }
+@test "INVARIANT (lib defines run helper — exec-wrapper canonical 82)" {
+    declare -F run >/dev/null
+}

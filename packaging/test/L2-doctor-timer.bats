@@ -637,3 +637,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer file declares cadence directive — non-vacuous-timer 81)" {
     grep -qE '^(OnBootSec|OnCalendar|OnUnitActiveSec)=' "${TIMER}"
 }
+@test "INVARIANT (.timer file uses [Install] header — INI-section-canonical 82)" {
+    grep -qE '^\[Install\]' "${TIMER}"
+}

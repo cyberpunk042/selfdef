@@ -927,3 +927,8 @@ assert isinstance(data, dict)
     uni="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (tensor-parallel-inference install/check.sh is non-empty file — non-trivial-check-script 82)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/install/check.sh"
+    [ -s "${chk}" ]
+}

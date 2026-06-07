@@ -472,3 +472,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst writes to guardian state dir — install-staging 81)" {
     grep -qE 'guardian' "${POSTINST}"
 }
+@test "INVARIANT (postinst is non-empty — non-trivial-install-script 82)" {
+    [ -s "${POSTINST}" ]
+}

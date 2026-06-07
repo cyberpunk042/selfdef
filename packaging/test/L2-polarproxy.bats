@@ -760,3 +760,8 @@ assert ch == 'install/check.sh'
     uni="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (polarproxy install/check.sh is non-empty file — non-trivial-check-script 82)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/check.sh"
+    [ -s "${chk}" ]
+}

@@ -757,3 +757,6 @@ EOF
 @test "INVARIANT (script declares HOSTNAME default fallback — operator-config-defaulting 81)" {
     grep -qE 'hostname.*\$\(hostname\)|HOSTNAME.*hostname' "${SCRIPT}"
 }
+@test "INVARIANT (script declares hostname env-var resolved with hostname binary — backend-canonical 82)" {
+    grep -qE 'hostname' "${SCRIPT}"
+}

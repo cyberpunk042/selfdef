@@ -891,3 +891,8 @@ assert isinstance(data, dict)
     uni="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (hardware-tune-cache install/check.sh is non-empty file — non-trivial-check-script 82)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/install/check.sh"
+    [ -s "${chk}" ]
+}

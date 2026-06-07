@@ -894,3 +894,7 @@ assert isinstance(data, dict)
     uni="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '^#!'
 }
+@test "INVARIANT (slm-cpu-loop install/check.sh is non-empty — non-trivial-check-script 82)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/check.sh"
+    [ -s "${chk}" ]
+}

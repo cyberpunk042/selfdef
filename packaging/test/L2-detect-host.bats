@@ -804,3 +804,6 @@ assert isinstance(data, dict)
 @test "INVARIANT (detect-host module.toml declares category field — module-taxonomy 81)" {
     grep -qE '^category' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
 }
+@test "INVARIANT (detect-host module.toml declares summary field — operator-doc-trail 82)" {
+    grep -qE '^summary' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+}

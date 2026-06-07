@@ -651,3 +651,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst writes to scheduler state dir — install-staging 81)" {
     grep -qE 'scheduler' "${POSTINST}"
 }
+@test "INVARIANT (postinst is non-empty — non-trivial-install-script 82)" {
+    [ -s "${POSTINST}" ]
+}
