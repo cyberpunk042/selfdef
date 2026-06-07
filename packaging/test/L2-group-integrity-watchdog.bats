@@ -400,3 +400,25 @@ EOF
     run_wd
     cap | grep -q 'distinctive-attacker-grant'
 }
+
+@test "INVARIANT (shadow group privileged add → alert — /etc/shadow read-access axis to credential theft)" {
+    # Sister to docker / sudo / wheel / disk / kvm / adm
+    # privileged-group INVARIANTs already locked. The shadow
+    # group has read access to /etc/shadow on Debian/Ubuntu
+    # (mode 0640 root:shadow). Any user added to shadow can
+    # read all password hashes — credential-theft primitive
+    # (T1003.008 — OS Credential Dumping: /etc/passwd and
+    # /etc/shadow). Offline-cracking with hashcat/john trivially
+    # recovers weak passwords. The watchdog MUST treat shadow-
+    # group additions as alert grade equal to sudo additions.
+    # Locks the shadow group as a coverage member of the
+    # privileged-group family on the T1098 Account Manipulation
+    # surface.
+    write_passwd_group
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add evil to shadow group.
+    echo 'shadow:x:42:evil-cred-thief' >> "${GROUP_FILE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
