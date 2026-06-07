@@ -291,3 +291,11 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (provider .so under /var/tmp — persistent writable-root axis-symmetric expansion on libcrypto provider dlopen surface)" {
+    # Sister to /dev/shm + /home provider .so writable-root.
+    # /var/tmp persistent + writable across reboots.
+    printf '[providers]\nmodule=/var/tmp/.evil-provider.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
