@@ -366,3 +366,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -qE 'sed[[:space:]]+-i.*syslog-ng' "${WD}"
     ! grep -qE 'find[[:space:]].*-delete' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # syslog-ng-exec-watchdog runs ON the timer's scheduled fire
+    # — scans /etc/syslog-ng/syslog-ng.conf + conf.d for
+    # program() destination injection patterns, emits a verdict,
+    # then exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the syslog-ng-
+    # exec-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/syslog-ng-exec-watchdog/systemd/selfdef-syslog-ng-exec.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
