@@ -331,3 +331,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # dhcpd-exec-watchdog runs ON the timer's scheduled fire —
+    # scans dhcpd.conf for `on commit { execute }` injection
+    # patterns, emits a verdict, then exits. Type=simple would
+    # break timer OnUnitActiveSec semantics. Locks oneshot-probe
+    # contract on the dhcpd-exec-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/dhcpd-exec-watchdog/systemd/selfdef-dhcpd-exec.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
