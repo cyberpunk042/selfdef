@@ -297,3 +297,51 @@ seed_trust_root() {
     cap | grep -q '"event":"trust_root_tampered"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (manifest reset cycle: alert→auto-trust→intact→alert on NEW tamper — locks the meta-watchdog cycle works on every tamper, not just the first)" {
+    # The meta-watchdog's auto-trust cycle (alert → manifest refresh
+    # → intact) must work on EVERY tamper, not just the first one.
+    # A regression that breaks the second-cycle detection would let
+    # a sophisticated attacker tamper TWICE within a baseline window.
+    seed_trust_root
+    run_wd
+    # First tamper.
+    printf 'file\t/etc/passwd\tEVIL999\n' > "${STATE}/account-baseline.tsv"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    # Second tamper after auto-trust cycle.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                              # intact
+    cap | grep -q '"event":"trust_root_intact"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'file\t/etc/passwd\tEVIL000\n' > "${STATE}/account-baseline.tsv"
+    run_wd                              # alert AGAIN (second tamper)
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"trust_root_tampered"'
+}
+
+@test "INVARIANT (added_sample carries the tampered baseline filename — operator forensics routing)" {
+    # When a baseline tamper fires, the sample MUST surface the
+    # filename so operator dashboard routes triage to the right
+    # baseline file. Sister contract: many other watchdogs' sample-
+    # naming pattern.
+    seed_trust_root
+    run_wd
+    printf 'file\t/etc/passwd\tEVIL999\n' > "${STATE}/account-baseline.tsv"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    # The 'account-baseline' name should surface in the JSON sample.
+    cap | grep -q 'account-baseline'
+}
+
+@test "INVARIANT (per-class counter accuracy: tracked counts ALL tracked files — locks operator dashboard visibility into trust-root size)" {
+    # The tracked field tells operator how many files are in the
+    # trust root. After seeding 2 baselines + 1 wrapper = 3 tracked.
+    # Lock the counter is accurate so operator can verify trust-root
+    # completeness.
+    seed_trust_root
+    run_wd
+    cap | grep -qE '"tracked":3'
+}
