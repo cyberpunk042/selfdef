@@ -230,3 +230,20 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -qE 'set[[:space:]]+-euo[[:space:]]+pipefail' "${INSTALL_DIR}/uninstall.sh" \
         || (grep -qE 'set[[:space:]]+-eu' "${INSTALL_DIR}/uninstall.sh" && grep -qE 'set[[:space:]]+-o[[:space:]]+pipefail' "${INSTALL_DIR}/uninstall.sh")
 }
+
+@test "INVARIANT (no auto-uninstall: bridge-l2 installer NEVER emits package-remove commands on nftables)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The bridge-l2 installer wires nftables FORWARD
+    # rules + bridge table inet selfdef_bridge but MUST NEVER
+    # emit shell commands that uninstall the nftables package
+    # itself (apt/dpkg/dnf/rpm/yum remove|purge|uninstall
+    # nftables|nft). Silent auto-removal of nftables would tear
+    # down the L2 bridge ruleset entirely + leave the network
+    # path in unfiltered state — every downstream filter (suricata
+    # NFQUEUE, ingress hooks, FORWARD chain) loses substrate.
+    # Locks anti-package-removal contract on the L2 bridge
+    # substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(nftables|nft)' "${f}"
+    done
+}
