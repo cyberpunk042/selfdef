@@ -165,3 +165,20 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     # decays silently).
     grep -qE '^OnUnitActiveSec=' "${TIMER}"
 }
+
+@test "INVARIANT (doctor-timer carries Persistent=true — missed-fires catch up after long downtime)" {
+    # Sister to many other selfdef timer-unit Persistent=true
+    # INVARIANTs across the brain. Without Persistent=true,
+    # systemd does NOT remember timer fires that were missed
+    # during host downtime — a host that's been offline for
+    # 24 hours misses ALL its scheduled health-check passes
+    # for that window AND on next boot only fires the NEXT
+    # scheduled fire (not the missed ones). With Persistent=
+    # true, systemd records the last successful fire and on
+    # boot fires immediately if the recurrent interval has
+    # elapsed since then. Locks the missed-fire-catch-up
+    # contract on the selfdef-doctor watchdog-of-watchdogs
+    # substrate — the foundational discipline that ensures
+    # long-uptime + offline-recovery coverage is never silent.
+    grep -qE '^Persistent=true' "${TIMER}"
+}
