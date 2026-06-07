@@ -408,3 +408,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # sudoers-defaults-watchdog runs ON the timer's scheduled
+    # fire — scans /etc/sudoers + sudoers.d for env_keep
+    # dangerous additions (LD_PRELOAD/PYTHONPATH/PERL5LIB family),
+    # emits a verdict, then exits. Type=simple would break
+    # timer OnUnitActiveSec semantics. Locks oneshot-probe
+    # contract on the sudoers-defaults-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/sudoers-defaults-watchdog/systemd/selfdef-sudoers-defaults.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
