@@ -309,3 +309,20 @@ seed_benign() {
     run_wd
     cap | grep -q 'distinctive-attacker-tty'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. selfdef-securetty tag must
+    # fire EXACTLY ONCE per scan regardless of how many tty-
+    # grant additions surface (multi-pts addition scenario).
+    # Multi-line output would break SDD-062 downstream JSON-
+    # line consumer. Locks consolidation discipline on T1078
+    # remote-tty-grant surveillance surface.
+    printf 'tty1\ntty2\nttyS0\n' > "${SECURETTY}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'tty1\ntty2\nttyS0\npts/0\npts/1\npts/2\n' > "${SECURETTY}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-securetty -- ')
+    [ "${main_count}" = "1" ]
+}
