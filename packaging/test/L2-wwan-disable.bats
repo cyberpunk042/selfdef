@@ -245,3 +245,34 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=rfkill'* ]]
 }
+
+@test "INVARIANT (emit_status: module=wwan-disable surfaces for operator dashboard)" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"wwan-disable"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
+
+@test "INVARIANT (rfkill re-arm on every apply: rfkill block wwan fires even when blacklist file unchanged)" {
+    # rfkill state may be cleared at boot or by operator (rfkill unblock).
+    # Each apply MUST re-fire rfkill block — live state is not file-backed.
+    write_config "mask"
+    run_wd
+    : > "${RF_LOG}"
+    run_wd
+    grep -q 'rfkill block wwan' "${RF_LOG}"
+}
+
+@test "INVARIANT (architectural triplet completion: rfkill + ModemManager-mask + modprobe-blacklist comprehensive disable)" {
+    # mask profile fires ALL three disable mechanisms simultaneously:
+    # 1. rfkill block (radio-layer)
+    # 2. systemctl mask ModemManager (userspace control plane)
+    # 3. modprobe blacklist (kernel module load gate)
+    # Triplet completeness lock against regression dropping any one mechanism.
+    write_config "mask"
+    run_wd
+    grep -q 'rfkill block wwan' "${RF_LOG}"
+    grep -q 'systemctl mask ModemManager.service' "${SYSEOF_LOG}"
+    [ -f "${MODPROBE_FILE}" ]
+    grep -qE '^blacklist cdc_mbim$' "${MODPROBE_FILE}"
+}
