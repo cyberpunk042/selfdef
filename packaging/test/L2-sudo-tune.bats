@@ -330,3 +330,17 @@ TOMLEOF
     mode="$(stat -c '%a' "${DST}")"
     [ "${mode}" = "440" ] || [ "${mode}" = "400" ] || [ "${mode}" = "600" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in written when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing the sudoers drop-in. A silent
+    # dry-run that committed would activate iolog + lecture +
+    # paranoid timeout AT PREVIEW TIME — could break operator
+    # workflow during testing of sudo behavior. Locks dry-run-
+    # preserves-state on the sudo-tune substrate.
+    write_config "audit-trail"
+    rm -f "${DST}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DST}" ]
+}
