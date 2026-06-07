@@ -344,3 +344,14 @@ TOMLEOF
     DRY_RUN=1 run_wd
     [ ! -f "${DST}" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on sudo-tune installer surface
+    # across validate + render + iolog-dir-prep phases.
+    write_config "audit-trail"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"sudo-tune"')
+    [ "${count}" = "1" ]
+}
