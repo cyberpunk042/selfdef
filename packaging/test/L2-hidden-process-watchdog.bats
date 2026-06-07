@@ -218,3 +218,39 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! cap | grep -q 'selfdef_hidden_process'
     ! cap | grep -q 'selfdef-hiddenproc'
 }
+
+@test "INVARIANT (stateless re-evaluation: rootkit-detection is per-run, no baseline-required)" {
+    # hidden-process-watchdog is stateless — every run re-computes the
+    # alive\visible difference. There's no baseline file. Lock that
+    # repeated runs produce consistent results on clean host.
+    run_wd
+    cap | grep -q '"event":"no_hidden_process"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"no_hidden_process"'
+}
+
+@test "INVARIANT (pids_alive ≤ pids_visible on clean host — sanity bound)" {
+    # On a clean host, alive (PIDs probed via stat) is a sample of the
+    # visible set; alive ⊆ visible implies alive count ≤ visible count.
+    PROBE_CAP=100 run_wd
+    line="$(cap)"
+    alive=$(printf '%s' "${line}" | grep -oE '"pids_alive":[0-9]+' | head -1 | grep -oE '[0-9]+')
+    visible=$(printf '%s' "${line}" | grep -oE '"pids_visible":[0-9]+' | head -1 | grep -oE '[0-9]+')
+    [ -n "${alive}" ]
+    [ -n "${visible}" ]
+    [ "${alive}" -le "${visible}" ]
+}
+
+@test "INVARIANT (event consistency: hidden=0 → event=no_hidden_process; hidden>0 would → event=hidden_process_detected)" {
+    # Lock the event-name contract: hidden=0 surfaces no_hidden_process;
+    # any hidden detection would surface a different event. The current
+    # clean-host case locks the hidden=0 mapping.
+    run_wd
+    line="$(cap)"
+    hidden=$(printf '%s' "${line}" | grep -oE '"hidden":[0-9]+' | head -1 | grep -oE '[0-9]+')
+    [ "${hidden}" = "0" ]
+    printf '%s' "${line}" | grep -q '"event":"no_hidden_process"'
+    # Inverse check: not the alert event when hidden=0.
+    ! printf '%s' "${line}" | grep -q '"event":"hidden_process_detected"'
+}
