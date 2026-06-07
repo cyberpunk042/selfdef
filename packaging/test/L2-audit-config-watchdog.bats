@@ -500,3 +500,16 @@ setup_baseline_state() {
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*auditctl[[:space:]]+-(R|w|a)'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*cp[[:space:]]+(-[a-z]+[[:space:]]+)?"?\$\{?BASELINE\}?"?[[:space:]]+/'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # audit-config-watchdog runs ON the timer's scheduled fire —
+    # verifies sha256 of /etc/audit/auditd.conf + audit.rules
+    # against pinned baseline, emits a verdict on tamper, then
+    # exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the audit-
+    # config-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/audit-config-watchdog/systemd/selfdef-audit-config.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
