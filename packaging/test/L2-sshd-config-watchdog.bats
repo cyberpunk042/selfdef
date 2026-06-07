@@ -396,3 +396,17 @@ EOF
     ! grep -qE 'sed[[:space:]]+-i.*sshd_config' "${WD}"
     ! grep -qE 'sed[[:space:]]+-i.*\$\{?SSHD_CONFIG' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # sshd-config-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/ssh/sshd_config + sshd_config.d for dangerous
+    # directives (PermitRootLogin yes / PermitEmptyPasswords yes
+    # / AuthorizedKeysCommand-under-writable-root), emits a
+    # verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the sshd-config-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/sshd-config-watchdog/systemd/selfdef-sshd-config.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
