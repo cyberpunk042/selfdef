@@ -763,3 +763,8 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ target, got {ps!r}'
 "
 }
+
+@test "INVARIANT (agent-guard README.md exists in module dir — operator-doc-trail contract)" {
+    readme="${BATS_TEST_DIRNAME}/../../modules/agent-guard/README.md"
+    [ -f "${readme}" ]
+}

@@ -822,3 +822,13 @@ assert 'install' in data, 'install missing'
         [ -x "${s}" ]
     done
 }
+
+@test "INVARIANT (rsyslog-exec-watchdog README.md exists in module dir — operator-doc-trail contract)" {
+    # Sister to brain-wide module-doc-trail INVARIANT family.
+    # Every watchdog module ships a README.md documenting its
+    # probe target + alert semantics + remediation. A
+    # regression that lost the README would leave operators
+    # without per-module ops docs.
+    readme="${BATS_TEST_DIRNAME}/../../modules/rsyslog-exec-watchdog/README.md"
+    [ -f "${readme}" ]
+}
