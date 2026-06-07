@@ -971,3 +971,12 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
     n=$(ls "${sd}" | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .service file size > 100 bytes — substantial-service-unit 75-cycle)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        size=$(stat -c '%s' "${s}")
+        [ "${size}" -gt 100 ]
+    done
+}

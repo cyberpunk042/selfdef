@@ -1102,3 +1102,9 @@ assert isinstance(data, dict), 'TOML root must be table'
     n=$(ls "${inst}" 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (apparmor-baseline install/apply.sh size > 100 bytes — substantial-apply-script 75-cycle)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/apparmor-baseline/install/apply.sh"
+    size=$(stat -c '%s' "${apply}")
+    [ "${size}" -gt 100 ]
+}

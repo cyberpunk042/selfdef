@@ -1020,3 +1020,12 @@ seed_benign() {
     n=$(ls "${sd}" | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (capability-conf-watchdog .service file size > 100 bytes — substantial-service-unit 75-cycle)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/capability-conf-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        size=$(stat -c '%s' "${s}")
+        [ "${size}" -gt 100 ]
+    done
+}

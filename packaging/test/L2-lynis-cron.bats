@@ -932,3 +932,9 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     n=$(ls "${inst}" 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (lynis-cron install/apply.sh size > 100 bytes — substantial-apply-script 75-cycle)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/lynis-cron/install/apply.sh"
+    size=$(stat -c '%s' "${apply}")
+    [ "${size}" -gt 100 ]
+}
