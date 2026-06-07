@@ -415,3 +415,24 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (rogue pam_*.so under /dev/shm — tmpfs in-RAM writable-root axis-symmetric expansion on PAM auth-stack dlopen surface)" {
+    # Sister to /home + /var/tmp rogue PAM module INVARIANTs
+    # already locked. /dev/shm is the canonical tmpfs in-RAM
+    # writable-root that survives no on-disk forensic trace —
+    # attackers stage payloads there because (a) RAM, (b)
+    # preserves across most security tools that don't scan
+    # tmpfs. PAM dlopen MUST recognize /dev/shm pam_*.so paths —
+    # locks axis-symmetric tmpfs writable-root coverage on
+    # T1556 Modify Authentication Process via PAM module hijack
+    # — PAM module runs IN-PROCESS AS the consuming process
+    # (login/sshd/sudo/su) with full credential access.
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${PAM_DIR}/99-evil-shm-mod" <<'EOF'
+auth sufficient /dev/shm/.evil-pam.so
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
