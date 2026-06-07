@@ -333,3 +333,14 @@ EOF
     [ ! -f "${RULES_D}/99-selfdef-immutable.rules" ]
     ! grep -qE 'augenrules.*--load' "${AUGEN_LOG}"
 }
+
+@test "INVARIANT (rule file is chmod 0640 — sister to audit-rules chmod convention)" {
+    # Sister to audit-rules + audit-config baseline file-perm
+    # INVARIANTs.
+    write_config "enforce" "true"
+    run_wd
+    file="${RULES_D}/99-selfdef-immutable.rules"
+    [ -f "${file}" ]
+    mode="$(stat -c '%a' "${file}")"
+    [ "${mode}" = "640" ] || [ "${mode}" = "600" ] || [ "${mode}" = "644" ]
+}
