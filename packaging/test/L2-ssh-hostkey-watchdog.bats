@@ -484,3 +484,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     grep -q 'ATTACKER_ED' "${KEYDIR}/ssh_host_ed25519_key.pub"
     ! grep -qE 'cp[[:space:]]+.*\$\{?BASELINE_DIR\}?/.*[[:space:]]+\$\{?KEYDIR' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # ssh-hostkey-watchdog runs ON the timer's scheduled fire —
+    # verifies sha256 of /etc/ssh/ssh_host_*_key against pinned
+    # baseline, emits a verdict on host-key rotation, then
+    # exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the ssh-
+    # hostkey-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/ssh-hostkey-watchdog/systemd/selfdef-ssh-hostkey.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
