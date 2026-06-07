@@ -364,3 +364,18 @@ EOF
     shebang_count=$(grep -cE '^#!/' "${SCRIPT}")
     [ "${shebang_count}" = "1" ]
 }
+
+@test "INVARIANT (script declares a SELFDEF_FRICTION_AUDIT_TIMEOUT_MS hard-cap watchdog — anti-runaway gate)" {
+    # Sister to brain-wide watchdog-discipline INVARIANT family.
+    # friction-audit's whole point is bounded runtime: an
+    # operator-friction probe that hangs is itself friction.
+    # The script forks a watchdog process gated by
+    # SELFDEF_FRICTION_AUDIT_TIMEOUT_MS that kill -TERMs the
+    # main pid if the budget expires + traps EXIT to reap the
+    # watchdog on normal exit. Locks anti-runaway gate on the
+    # friction-audit substrate (so a future refactor cannot
+    # silently drop the hard cap and reintroduce hang-risk).
+    grep -qE 'SELFDEF_FRICTION_AUDIT_TIMEOUT_MS' "${SCRIPT}"
+    grep -qE 'WATCHDOG_PID' "${SCRIPT}"
+    grep -qE 'trap.*kill.*WATCHDOG_PID.*EXIT' "${SCRIPT}"
+}
