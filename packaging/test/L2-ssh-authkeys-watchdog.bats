@@ -360,3 +360,20 @@ EOF
     run_wd
     grep -qP '^root\t' "${BASELINE}"
 }
+
+@test "INVARIANT (sk-ssh-ed25519 hardware-token key algorithm axis: also surfaces as alert — algorithm-agnostic detection includes FIDO2/security-key keys)" {
+    # Sister to ssh-ed25519 + ecdsa-sha2-nistp256 algorithm axes
+    # already locked. The sk-* algorithm family (sk-ssh-ed25519,
+    # sk-ecdsa-sha2-nistp256) represents FIDO2/hardware-token-
+    # backed SSH keys — a modern + increasingly common key type
+    # that attackers may legitimately attempt to plant if they
+    # can pivot to a system with a hardware key. The detection
+    # MUST be algorithm-agnostic — sk-* keys MUST also surface
+    # as alert when added to a user's authorized_keys.
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'sk-ssh-ed25519@openssh.com AAAAFHNrLXNzaC1lZDI1NTE5QHt= attacker-fido2\n' >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
