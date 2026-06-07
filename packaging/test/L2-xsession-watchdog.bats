@@ -349,3 +349,16 @@ seed_benign() {
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(HOOKD|XSESSION|FILE|file)'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # xsession-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/X11/Xsession + Xsession.d for injection
+    # patterns in session-init fragments, emits a verdict, then
+    # exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the xsession-
+    # watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/xsession-watchdog/systemd/selfdef-xsession.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
