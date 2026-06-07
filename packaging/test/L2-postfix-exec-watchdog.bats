@@ -315,3 +315,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: mailbox_command invoking binary from /var/tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. Beyond
+    # inline reverse-shell payloads, attackers may set a benign-
+    # looking mailbox_command that invokes a binary they've
+    # staged in /tmp / /var/tmp / /dev/shm. T1546 mail-triggered
+    # exec — mailbox_command runs AS recipient user / root on
+    # every delivered message, remotely-triggerable by sender —
+    # then runs the writable-root binary on every mail. Locks
+    # writable-root-exec axis on postfix mail-delivery surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'mailbox_command = /var/tmp/staged_payload\n' > "${MAIN}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
