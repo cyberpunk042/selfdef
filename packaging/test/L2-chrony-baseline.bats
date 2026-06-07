@@ -261,3 +261,41 @@ run_wd() {
     run_wd
     grep -q 'systemctl restart chronyd' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (NTS profile has STRICTLY MORE servers than pool — multi-source redundancy for authenticated time)" {
+    # NTS profile uses dedicated NTS-capable servers (cloudflare +
+    # nist) for redundancy; pool profile uses a single pool entry
+    # which itself resolves to multiple IPs. Both work but the
+    # explicit-server NTS profile must list at least 2 servers
+    # so a single-server outage doesn't lose authenticated time.
+    write_config "nts"
+    run_wd
+    server_count="$(grep -cE '^server ' "${CHRONY_DROPIN_DIR}/50-selfdef.conf")"
+    [ "${server_count}" -ge 2 ]
+}
+
+@test "INVARIANT (filename follows 50-selfdef-* convention — tracking + uninstall identification)" {
+    # Sister to many other modules' filename-convention INVARIANT.
+    # The chrony drop-in MUST follow the 50-selfdef.conf convention
+    # so the chrony-baseline-aware uninstall can find it.
+    write_config "pool"
+    run_wd
+    case "${CHRONY_DROPIN_DIR}/50-selfdef.conf" in
+        */50-selfdef*.conf) : ;;
+        *) fail "drop-in filename must follow 50-selfdef.conf pattern" ;;
+    esac
+    [ -f "${CHRONY_DROPIN_DIR}/50-selfdef.conf" ]
+}
+
+@test "INVARIANT (drop-in carries NO 'allow' clause — chrony should not act as a server for other hosts in either profile)" {
+    # 'allow' in chrony config makes the host serve time to other
+    # clients. A sovereign endpoint should NEVER act as a time
+    # server (an attacker doing that would create a time-poisoning
+    # primitive). Lock that NEITHER profile carries 'allow'.
+    write_config "pool"
+    run_wd
+    ! grep -qE '^allow' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    write_config "nts"
+    run_wd
+    ! grep -qE '^allow' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+}
