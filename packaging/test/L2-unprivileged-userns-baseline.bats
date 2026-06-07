@@ -360,3 +360,21 @@ EOF
     mode="$(stat -c '%a' "${DROPIN}")"
     [ "${mode}" = "644" ]
 }
+
+@test "INVARIANT (header-marker discipline: drop-in carries 'selfdef' self-identifying header — head-grep stale-cleanup discipline)" {
+    # Sister to brain-wide header-marker discipline INVARIANTs
+    # across L2 drop-in suites. The unprivileged-userns-baseline
+    # drop-in MUST carry a comment marker identifying it as
+    # selfdef-managed so a stale-cleanup head -2 grep at
+    # uninstall time can identify which files selfdef owns vs
+    # which is operator-original. Without a marker, a
+    # subsequent uninstaller could not tell apart operator
+    # baseline kernel.unprivileged_userns_clone settings from
+    # selfdef-injected ones — risking accidental rollback of
+    # operator changes. Locks marker-discipline on the
+    # unprivileged-userns sysctl.d substrate.
+    write_config "deny" "true"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE '^#.*(selfdef|unprivileged-userns|managed)' "${DROPIN}"
+}
