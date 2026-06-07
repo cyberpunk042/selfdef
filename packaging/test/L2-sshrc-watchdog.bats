@@ -348,3 +348,15 @@ seed_benign() {
     ! grep -qE 'find[[:space:]].*-delete' "${WD}"
     ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(SSHRC|FILE|file)' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # sshrc-watchdog runs ON the timer's scheduled fire — scans
+    # /etc/ssh/sshrc + every user's ~/.ssh/rc for injection
+    # patterns, emits a verdict, then exits. Type=simple would
+    # break timer OnUnitActiveSec semantics. Locks oneshot-probe
+    # contract on the sshrc-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/sshrc-watchdog/systemd/selfdef-sshrc.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
