@@ -290,3 +290,22 @@ TOMLEOF
     [ -f "${MODPROBE_FILE}" ]
     grep -q 'managed-by: selfdef wireless-disable' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (asymmetric profile content: rfkill does NOT install modprobe blacklist — blacklist is mask-only)" {
+    # Sister to many other installer module's asymmetric-profile
+    # INVARIANT across the brain (ssh-hardening AllowGroups,
+    # selinux-baseline autorelabel, tmpfs-baseline /tmp-only,
+    # coredump-suid-restrict limits.d). The rfkill profile is the
+    # soft kill (live + cheap to reverse: rfkill unblock wifi);
+    # the mask profile is the hard kill (persistent modprobe
+    # blacklist survives reboots + driver auto-load events). If
+    # rfkill silently installed the modprobe blacklist, it would
+    # over-reach (operator who chose rfkill to keep mask as a
+    # later option would lose the asymmetry). Locks the boundary:
+    # rfkill = live block only, mask = live block + persistent
+    # driver blacklist.
+    write_config "rfkill"
+    run_wd
+    grep -qE 'rfkill block wifi' "${RF_LOG}"
+    ! [ -f "${MODPROBE_FILE}" ]
+}
