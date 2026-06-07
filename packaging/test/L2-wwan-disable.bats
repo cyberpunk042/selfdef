@@ -300,3 +300,19 @@ TOMLEOF
     [ -f "${MODPROBE_FILE}" ]
     grep -q 'managed-by: selfdef wwan-disable' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (asymmetric profile content: rfkill does NOT install modprobe blacklist — blacklist is mask-only)" {
+    # Sister to wireless-disable asymmetric-content INVARIANT just
+    # locked (rfkill = soft kill; mask = hard kill). The rfkill
+    # profile fires rfkill block wwan + ModemManager mask (the
+    # always-included architectural complement per the prior
+    # INVARIANT) but does NOT install the persistent modprobe
+    # blacklist. The mask profile is the only one that adds the
+    # persistent driver blacklist. Locks the soft/hard boundary
+    # on the WWAN radio neutralization axis (carrier OTA + Stingray
+    # + baseband CVE surface).
+    write_config "rfkill"
+    run_wd
+    grep -q 'rfkill block wwan' "${RF_LOG}"
+    ! [ -f "${MODPROBE_FILE}" ]
+}
