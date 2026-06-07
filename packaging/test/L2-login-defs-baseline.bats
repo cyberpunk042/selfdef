@@ -347,3 +347,22 @@ TOMLEOF
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(passwd|libpam-modules|shadow-utils|shadow)'
     [ ! -f "${DROPIN}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${DROPIN}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. login-defs-baseline manifest declares install +
+    # profile gating (default / strict) the resolver enforces;
+    # malformed manifest wedges the /etc/login.defs hardening.
+    # Python's tomllib is the canonical parser. Locks anti-
+    # malformed-manifest on the login-defs-baseline substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/login-defs-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'login-defs-baseline', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
