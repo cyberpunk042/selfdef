@@ -263,3 +263,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-preload'
 }
+
+@test "INVARIANT (LD_PRELOAD under /dev/shm — tmpfs writable-root axis-symmetric expansion)" {
+    # Sister to /home + /var/tmp LD_PRELOAD writable-root
+    # INVARIANTs already locked. /dev/shm is a tmpfs writable
+    # by ALL users without privilege, lives in RAM (boot-wiped),
+    # and slips past disk-monitoring tools — high-velocity drop
+    # surface for T1574.006 Dynamic Linker Hijacking. Closes
+    # the /dev/shm axis on the LD_PRELOAD writable-root
+    # coverage symmetric to /var/tmp + /home.
+    printf '/dev/shm/.evil-preload.so\n' > "${PRELOAD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
