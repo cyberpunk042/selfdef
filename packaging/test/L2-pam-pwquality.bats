@@ -324,3 +324,20 @@ TOMLEOF
     [ -f "${DST}" ]
     [ "$(stat -c '%a' "${DST}")" = "644" ]
 }
+
+@test "INVARIANT (no auto-uninstall: pam-pwquality NEVER emits package-remove commands on libpwquality)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The pam-pwquality installer wires pwquality.
+    # conf drop-in but MUST NEVER emit shell commands that
+    # uninstall the libpwquality / libpam-pwquality packages
+    # themselves (apt/dpkg/dnf/rpm/yum remove|purge|uninstall
+    # libpwquality|libpam-pwquality). Silent auto-removal would
+    # tear down the password-quality module entirely + remove
+    # the pam_pwquality module the installer just wired. T1556
+    # self-defeat. Locks anti-package-removal contract on the
+    # pam-pwquality substrate.
+    write_config "strict"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(libpwquality|libpam-pwquality|cracklib)'
+    [ ! -f "${DST}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${DST}"
+}
