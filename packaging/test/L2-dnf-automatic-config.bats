@@ -298,3 +298,10 @@ TOMLEOF
     [ ! -f "${DNF_AUTO_CONF}" ]
     ! grep -qE 'systemctl (enable|start) dnf-automatic' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (automatic.conf chmod 0644 — system-config convention)" {
+    write_config "security-only"
+    run_wd
+    [ -f "${DNF_AUTO_CONF}" ]
+    [ "$(stat -c '%a' "${DNF_AUTO_CONF}")" = "644" ]
+}
