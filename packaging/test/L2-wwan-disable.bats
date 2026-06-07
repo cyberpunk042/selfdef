@@ -329,3 +329,14 @@ TOMLEOF
     ! grep -qE 'systemctl mask' "${SYSEOF_LOG}"
     ! [ -f "${MODPROBE_FILE}" ]
 }
+
+@test "INVARIANT (modprobe blacklist file mode 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs (wireless-disable
+    # / bluetooth-disable / many others). The wwan modprobe
+    # blacklist must be world-readable (modprobe reads at boot)
+    # and root-write-only to prevent silent unblock.
+    write_config "mask"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    [ "$(stat -c '%a' "${MODPROBE_FILE}")" = "644" ]
+}
