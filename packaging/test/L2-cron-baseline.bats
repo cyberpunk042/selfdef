@@ -390,3 +390,22 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"cron-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: cron-baseline NEVER emits package-remove commands on cron/at)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The cron-baseline installer writes cron.allow/
+    # cron.deny + at.allow/at.deny but MUST NEVER emit shell
+    # commands that uninstall the cron or at packages
+    # themselves (apt/dpkg/dnf/rpm/yum remove|purge|uninstall
+    # cron|at|cronie|anacron). Silent auto-removal would tear
+    # down the scheduled-task substrate entirely — every
+    # downstream scheduled watchdog loses its scheduler.
+    # Locks anti-package-removal contract on the cron-baseline
+    # substrate.
+    write_config "root-only"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(cron|at|cronie|anacron)'
+    for f in "${CRON_ALLOW}" "${AT_ALLOW}"; do
+        [ ! -f "${f}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${f}"
+    done
+}
