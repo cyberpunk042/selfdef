@@ -155,3 +155,26 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # purge leaves stale state for re-install operator confusion).
     grep -q '/var/cache/selfdef' "${POSTRM}"
 }
+
+@test "INVARIANT (unit declares SystemCallArchitectures + ProtectControlGroups + RestrictAddressFamilies — extended Ring-0 hardening axes)" {
+    # Sister to the broader hardening directive family already locked
+    # (NoNewPrivileges + ProtectKernel* + LockPersonality +
+    # RestrictNamespaces + RestrictRealtime + RestrictSUIDSGID +
+    # MemoryDenyWriteExecute). Locks three additional extended
+    # hardening axes:
+    #   - SystemCallArchitectures=native: blocks the kernel's
+    #     compat syscall layer (32-bit syscalls on 64-bit kernel)
+    #     which has historically been a CVE source.
+    #   - ProtectControlGroups=true: blocks the unit from modifying
+    #     /sys/fs/cgroup (otherwise an attacker who gains Ring-0
+    #     access could escape cgroup-based resource limits).
+    #   - RestrictAddressFamilies: declares the explicit network
+    #     address families the unit may use (AF_UNIX + AF_INET +
+    #     AF_INET6), blocking the kernel's AF_RAW + AF_PACKET +
+    #     AF_NETLINK + 30+ other esoteric protocol families.
+    # The Ring 0 hardening discipline requires the full extended
+    # hardening set, not just the core 4-5 directives.
+    grep -qE '^SystemCallArchitectures=' "${UNIT}"
+    grep -qE '^ProtectControlGroups=true' "${UNIT}"
+    grep -qE '^RestrictAddressFamilies=' "${UNIT}"
+}
