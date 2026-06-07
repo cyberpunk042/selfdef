@@ -352,3 +352,12 @@ EOF
     [ ! -f "${SYSCTL_DIR}/50-selfdef-kernel-lockdown-balanced.conf" ]
     ! grep -qE 'sysctl --system' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (drop-in chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs.
+    write_config "balanced"
+    run_wd
+    file="${SYSCTL_DIR}/50-selfdef-kernel-lockdown-balanced.conf"
+    [ -f "${file}" ]
+    [ "$(stat -c '%a' "${file}")" = "644" ]
+}
