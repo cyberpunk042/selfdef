@@ -334,3 +334,11 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs.
+    printf 'create dns_resolver * * /tmp/.evil1\ncreate cifs.spnego * * /var/tmp/.evil2\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-request-key -- ')
+    [ "${main_count}" = "1" ]
+}
