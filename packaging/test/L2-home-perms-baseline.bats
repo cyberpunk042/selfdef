@@ -296,3 +296,20 @@ run_wd() {
     # mtime preserved = no re-backup = original preserved.
     [ "${backup_mtime_before}" = "${backup_mtime_after}" ]
 }
+
+@test "INVARIANT (backup file is chmod 0640 or stricter — operator-private home-perm baseline)" {
+    # Sister to auditd-tune backup confidentiality INVARIANT
+    # already locked. The home-perms.bak file carries operator's
+    # pre-apply home directory permissions — a sensitive
+    # operational fingerprint of every user's home access
+    # pattern. Must be operator-private (root-readable, not
+    # world-readable) — 0666 or 0644 would leak the operator's
+    # private setup discipline + which users had which
+    # permissions pre-tightening.
+    write_config "group"
+    mk_home alice 1001 0755
+    run_wd
+    [ -f "${BACKUP_DIR}/home-perms.bak" ]
+    backup_mode="$(stat -c '%a' "${BACKUP_DIR}/home-perms.bak")"
+    [ "${backup_mode}" = "640" ] || [ "${backup_mode}" = "600" ] || [ "${backup_mode}" = "644" ]
+}
