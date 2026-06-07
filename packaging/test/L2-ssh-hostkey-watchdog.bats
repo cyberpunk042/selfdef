@@ -381,3 +381,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -qE '"removed":[1-9]'
     cap | grep -qE '"severity":"(warn|alert)"'
 }
+
+@test "INVARIANT (ECDSA fingerprint swap also alerts — third-algorithm axis sister to ED25519 + RSA)" {
+    # Sister to ED25519 + RSA fingerprint-swap axes already
+    # locked. ECDSA host keys (ssh_host_ecdsa_key) are the
+    # third canonical algorithm SSH ships by default. Lock
+    # axis-symmetry: an ECDSA host-key fingerprint swap MUST
+    # also alert — closes the algorithm-agnostic detection
+    # contract on the host-identity surveillance surface
+    # (T1556 — Modify Authentication Process; host-key swap
+    # makes the host indistinguishable from attacker MITM).
+    mk_key ed25519 "ssh-ed25519 ORIGINAL_ED root@host"
+    mk_key rsa     "ssh-rsa     ORIGINAL_RSA root@host"
+    mk_key ecdsa   "ecdsa-sha2-nistp256 ORIGINAL_ECDSA root@host"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    mk_key ecdsa   "ecdsa-sha2-nistp256 SWAPPED_BY_ATTACKER root@host"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
