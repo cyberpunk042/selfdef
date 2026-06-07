@@ -411,3 +411,21 @@ run_wd() {
         || grep -qE 'chain output' "${NFT_DROPIN}"
     grep -qE 'policy drop' "${NFT_DROPIN}"
 }
+
+@test "INVARIANT (no auto-uninstall: nftables-baseline NEVER emits package-remove commands on nftables)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The nftables-baseline installer writes the
+    # selfdef-baseline drop-in but MUST NEVER emit shell
+    # commands that uninstall the nftables package itself
+    # (apt/dpkg/dnf/rpm/yum remove|purge|uninstall nftables|
+    # nft). Silent auto-removal would tear down the host
+    # firewall substrate entirely — every downstream defense
+    # (bridge-l2, vpn-bridge, suricata NFQUEUE, polarproxy NAT)
+    # loses substrate. T1562.001 self-defeat. Locks anti-
+    # package-removal contract on the nftables-baseline
+    # substrate.
+    write_config "baseline"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(nftables|nft)'
+    [ ! -f "${NFT_DROPIN}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${NFT_DROPIN}"
+}
