@@ -293,3 +293,12 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (execute() under /var/tmp → alert: writable-root expansion on dhcpd exec surface)" {
+    # Sister to /home dhcpd execute() axis. /var/tmp persistent
+    # + writable. Closes axis-symmetric writable-root coverage
+    # on T1546 DHCP-lease-event-trigger root-exec persistence.
+    printf 'on commit { execute("/var/tmp/.evil-dhcpd-exec"); }\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
