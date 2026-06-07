@@ -337,3 +337,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: xdg-autostart-watchdog NEVER deletes .desktop entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # xdg-autostart-watchdog DETECTS T1547.013 XDG Autostart
+    # per-graphical-login persistence but MUST NEVER emit rm/
+    # unlink commands to auto-clean the .desktop file. The
+    # detected entry may be operator-legitimate (custom session
+    # startup tool, screen-lock helper, notification daemon).
+    # Silent auto-delete would destroy operator baseline state
+    # AND could break operator's daily desktop workflow.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the xdg-autostart surveillance substrate.
+    printf '[Desktop Entry]\nType=Application\nExec=/tmp/.evil\n' > "${AUTOD}/evil.desktop"
+    run_wd
+    [ -f "${AUTOD}/evil.desktop" ]
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(AUTOD|FILE|file)'
+}
