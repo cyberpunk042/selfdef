@@ -449,3 +449,22 @@ seed_trust_root() {
     [ -f "${svc}" ]
     grep -qE '^Type=oneshot' "${svc}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. selfdef-self-integrity manifest declares install + profile gating
+    # the resolver enforces; malformed manifest wedges the
+    # selfdef-self-integrity scanner baseline. Python's tomllib is the
+    # canonical parser. Locks anti-malformed-manifest on the
+    # selfdef-self-integrity substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert data['name'] == 'selfdef-self-integrity', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}

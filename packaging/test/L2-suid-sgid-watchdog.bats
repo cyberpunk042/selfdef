@@ -419,3 +419,22 @@ mk_suid() { printf 'ELF-%s' "$1" > "${ROOT}/$1"; chmod 4755 "${ROOT}/$1"; }
     [ -f "${svc}" ]
     grep -qE '^Type=oneshot' "${svc}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. suid-sgid-watchdog manifest declares install + profile gating
+    # the resolver enforces; malformed manifest wedges the
+    # suid-sgid-watchdog scanner baseline. Python's tomllib is the
+    # canonical parser. Locks anti-malformed-manifest on the
+    # suid-sgid-watchdog substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/suid-sgid-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert data['name'] == 'suid-sgid-watchdog', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
