@@ -318,3 +318,15 @@ TOMLEOF
     run_wd
     grep -qE '^Persistent=true' "${TIMER_DST}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on secure-boot-status installer
+    # surface across the 4 installed artifacts (script + service
+    # + timer + drop-in).
+    write_config "monitor"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"secure-boot-status"')
+    [ "${count}" = "1" ]
+}
