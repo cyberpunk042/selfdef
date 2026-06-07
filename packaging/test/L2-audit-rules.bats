@@ -367,3 +367,14 @@ TOMLEOF
     mode="$(stat -c '%a' "${base_file}")"
     [ "${mode}" = "640" ] || [ "${mode}" = "600" ] || [ "${mode}" = "644" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on audit-rules installer surface
+    # across rule-files + augenrules-reload phases.
+    write_config "base"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"audit-rules"')
+    [ "${count}" = "1" ]
+}
