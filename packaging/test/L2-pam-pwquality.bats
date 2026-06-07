@@ -416,3 +416,18 @@ v = data.get('conflicts', [])
 assert isinstance(v, list), f'conflicts must be list, got {type(v).__name__}'
 "
 }
+
+@test "INVARIANT (module.toml provides field is a TOML list — anti-string-malformation contract on provides)" {
+    # Sister to brain-wide module.toml manifest-completeness +
+    # list-vs-string INVARIANTs. Locks list discipline on
+    # provides.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-pwquality/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('provides', [])
+assert isinstance(v, list), f'provides must be list, got {type(v).__name__}'
+"
+}
