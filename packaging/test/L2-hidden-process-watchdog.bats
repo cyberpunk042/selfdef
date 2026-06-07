@@ -266,3 +266,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-hidden-process -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_HIDDENPROC_PROFILE — operator dashboard distinguishes report from enforce)" {
+    # Sister to many other watchdog's profile-echo INVARIANT
+    # across the brain. The operator's profile choice (report
+    # vs enforce) MUST surface in the JSON sample so the
+    # operator dashboard distinguishes log-only mode from
+    # systemd-failure-recorded mode. Locks the profile-echo
+    # contract on the rootkit-hidden-process surveillance
+    # surface (T1014 — Rootkit hiding processes from /proc
+    # enumeration).
+    PROFILE=enforce run_wd
+    cap | grep -q '"profile":"enforce"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
