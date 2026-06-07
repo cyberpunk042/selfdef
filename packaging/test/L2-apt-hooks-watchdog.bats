@@ -402,3 +402,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*apt\.conf'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # apt-hooks-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/apt/apt.conf.d for DPkg::Pre-Install-Pkgs /
+    # Post-Invoke / Pre-Invoke injection patterns, emits a
+    # verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the apt-hooks-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/systemd/selfdef-apt-hooks.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
