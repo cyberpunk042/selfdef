@@ -309,3 +309,16 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (plugin path under /var/tmp — writable-root axis-symmetric expansion on auditd dispatcher)" {
+    # Sister to /tmp + /var/tmp + /dev/shm + /home auditd plugin
+    # writable-root INVARIANTs. /var/tmp persistent + writable.
+    # Closes /var/tmp axis on T1562.001 SIEM-evasion vector at
+    # the source via dispatcher plugin.
+    seed_benign
+    run_wd
+    printf 'active = yes\npath = /var/tmp/.audisp\ntype = always\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
