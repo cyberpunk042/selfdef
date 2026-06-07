@@ -301,3 +301,20 @@ TOMLEOF
     run_wd
     grep -qE '^OnUnitActiveSec=' "${SYSTEMD_DIR}/selfdef-entropy.timer"
 }
+
+@test "INVARIANT (timer unit carries Persistent=true — missed-fires catch up after long downtime)" {
+    # Sister to doctor-timer + many other selfdef timer-unit
+    # Persistent=true INVARIANTs across the brain. Without
+    # Persistent=true, systemd does NOT remember timer fires
+    # missed during host downtime. A host offline for 24+ hours
+    # misses every kernel-RNG entropy probe for that window AND
+    # on next boot only fires the NEXT scheduled fire (not the
+    # missed ones). With Persistent=true, systemd fires
+    # immediately on boot if the recurrent interval has elapsed
+    # since last successful fire. Locks the missed-fire-catch-
+    # up contract on the kernel-RNG starvation surveillance
+    # substrate.
+    write_config "report"
+    run_wd
+    grep -qE '^Persistent=true' "${SYSTEMD_DIR}/selfdef-entropy.timer"
+}
