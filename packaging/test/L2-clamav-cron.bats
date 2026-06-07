@@ -433,3 +433,23 @@ v = data.get('depends_on', [])
 assert isinstance(v, list), f'depends_on must be list, got {type(v).__name__}'
 "
 }
+
+@test "INVARIANT (module.toml conflicts field is a TOML list — anti-string-malformation contract on conflicts)" {
+    # Sister to brain-wide module.toml manifest-completeness +
+    # depends_on-list INVARIANTs already locked. The conflicts
+    # field MUST be a TOML list — the resolver iterates
+    # conflicts to detect mutually-exclusive module pairs at
+    # install-time. A scalar/string would silently parse as a
+    # single-element list, masking real conflicts. Locks list-
+    # vs-string discipline on the conflicts field of the
+    # clamav-cron substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/clamav-cron/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('conflicts', [])
+assert isinstance(v, list), f'conflicts must be list, got {type(v).__name__}'
+"
+}
