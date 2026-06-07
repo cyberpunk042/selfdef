@@ -316,3 +316,16 @@ EOF
     run_wd
     cap | grep -qE 'distinctive-attacker-ca-hook|"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: ca-certificates hook invoking binary from /var/tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # ca-update-trigger root-exec — ca-certificates hooks fire
+    # AS ROOT on every update-ca-certificates run (operator-
+    # routine, runs on every package install touching CA store).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/var/tmp/staged_payload\n' > "${HOOKD}/jks-keystore"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
