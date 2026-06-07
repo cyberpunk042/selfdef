@@ -321,3 +321,19 @@ Changed entries: 2"
     cap | grep -q '"severity":"alert"'
 }
 
+@test "INVARIANT (rc=6 removed+changed → alert; closes the rc-bitmask combinatorial slot)" {
+    # Sister to rc=3 (added+removed) + rc=5 (added+changed) +
+    # rc=7 (all 3) and individual-bit INVARIANTs already locked.
+    # Closes the remaining rc-bitmask combinatorial slot: rc=6
+    # (2+4 = removed bit + changed bit). Severity MUST be alert
+    # — both removed AND changed bits are alert-grade tamper
+    # signals. The "attacker removed monitoring files +
+    # tampered config" pattern.
+    mk_aide 6 "Added entries: 0
+Removed entries: 3
+Changed entries: 2"
+    run_wd
+    cap | grep -q '"event":"diff_changed_or_removed"'
+    cap | grep -q '"severity":"alert"'
+}
+
