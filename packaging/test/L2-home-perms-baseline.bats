@@ -399,3 +399,21 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: home-perms-baseline installer NEVER deletes /home dirs — chmod-only operations)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # home-perms-baseline operates by chmod only — tightens
+    # /home/* perms to profile target (0750 / 0700) + backs up
+    # original perms; it MUST NEVER rm/rmdir/find-delete /home
+    # entries. Locks no-auto-delete on the home-perms-baseline
+    # installer substrate (sister to the existing no-auto-delete
+    # test which only covers the watchdog runtime path; this
+    # locks installer scripts too).
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/home-perms-baseline/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/home' "${f}"
+        ! grep -qE '(^|[^a-z])rmdir[[:space:]]+/home' "${f}"
+        ! grep -qE 'find[[:space:]]+/home.*-delete' "${f}"
+    done
+}
