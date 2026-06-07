@@ -438,3 +438,22 @@ EOF
     run_wd
     ! [ -f "${PAM_D}/clean-pam.selfdef-nullok-backup" ]
 }
+
+@test "INVARIANT (no auto-uninstall: nullok-disable NEVER emits package-remove commands on libpam-modules)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The nullok-disable installer modifies PAM
+    # config files in-place but MUST NEVER emit shell commands
+    # that uninstall the libpam-modules / pam packages
+    # themselves (apt/dpkg/dnf/rpm/yum remove|purge|uninstall
+    # libpam-modules|pam). Silent auto-removal would tear down
+    # the PAM authentication substrate entirely — every
+    # downstream auth path (login, sudo, sshd, polkit) would
+    # break. T1556 self-defeat. Locks anti-package-removal
+    # contract on the nullok-disable substrate.
+    cat > "${PAM_D}/sshd" <<'EOF'
+auth sufficient pam_unix.so nullok
+EOF
+    write_config "enforce"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(libpam-modules|pam|libpam0g)'
+}
