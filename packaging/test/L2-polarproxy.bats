@@ -145,3 +145,19 @@ INSTALL_DIR="${MODULE_DIR}/install"
 @test "polarproxy.service template WantedBy=multi-user.target (boots into multi-user)" {
     grep -qE '^WantedBy=multi-user\.target' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
 }
+
+@test "INVARIANT (polarproxy.service template After=network-online.target + Wants=network-online.target — startup-ordering contract)" {
+    # Sister to brain-wide systemd-After+Wants ordering
+    # INVARIANTs. PolarProxy is a TLS MITM that listens on a
+    # TCP port and forwards to upstream HTTPS targets — both
+    # endpoints require the network stack ready. After=
+    # network-online.target alone is ordering-only (waits if
+    # the target is in the boot transaction); Wants=
+    # network-online.target is what pulls the target INTO the
+    # boot transaction. Both directives are required together
+    # OR the unit silently boots before networking is ready
+    # on cold-boot and fails its first 5+ restart attempts.
+    # Locks startup-ordering contract on the TLS-MITM substrate.
+    grep -qE '^After=.*network-online\.target' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+    grep -qE '^Wants=.*network-online\.target' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
