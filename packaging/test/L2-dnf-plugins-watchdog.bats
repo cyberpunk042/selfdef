@@ -317,3 +317,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (action under /dev/shm — tmpfs writable-root axis-symmetric expansion)" {
+    # Sister to /tmp + /home + /var/tmp dnf-plugins action
+    # writable-root INVARIANTs. /dev/shm tmpfs writable by ALL.
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '*:in:/dev/shm/.evil-action\n' > "${ACTION}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
