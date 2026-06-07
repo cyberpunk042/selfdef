@@ -228,3 +228,17 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     # discipline on the doctor service substrate.
     grep -q "^SystemCallArchitectures=native$" "${SERVICE}"
 }
+
+@test "INVARIANT (.timer Description references the doctor's hourly-cadence purpose — operator-audit-trail on timer unit)" {
+    # Sister to brain-wide systemd Documentation/Description
+    # INVARIANT family. The doctor.timer Description string is
+    # what operators see in `systemctl list-timers` output;
+    # naming it after the hourly-health-check purpose lets an
+    # operator triage timer-firing log entries without opening
+    # the unit file. Locks the operator-audit-trail discipline
+    # on the doctor.timer substrate (sister to the .service's
+    # Description/Documentation INVARIANT already locked
+    # earlier in this suite).
+    grep -qE '^Description=' "${TIMER}"
+    grep -qiE 'selfdef|doctor|health' "${TIMER}"
+}
