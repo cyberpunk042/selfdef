@@ -305,3 +305,16 @@ TOMLEOF
     run_wd
     grep -qE '^OnUnitActiveSec=' "${TIMER_DST}"
 }
+
+@test "INVARIANT (timer unit carries Persistent=true — missed-fires catch up after long downtime)" {
+    # Sister to doctor-timer + entropy-baseline + mta-loopback-
+    # detect Persistent=true INVARIANTs. Without it, host
+    # offline for 24+ hours misses every secure-boot probe in
+    # that window. With Persistent=true, systemd fires immediately
+    # on boot if interval has elapsed since last successful fire.
+    # Locks missed-fire-catch-up contract on secure-boot
+    # surveillance substrate.
+    write_config "monitor"
+    run_wd
+    grep -qE '^Persistent=true' "${TIMER_DST}"
+}
