@@ -210,3 +210,19 @@ teardown() {
     [ -n "${output}" ]
     [ "${output}" != "None" ]
 }
+
+@test "INVARIANT (YAML file chmod 0644 — Tetragon-readable CRD manifest contract)" {
+    # Sister to brain-wide file-mode 0644 INVARIANTs across L2
+    # policy/config surfaces. The sovereign-perimeter Tetragon
+    # TracingPolicy YAML at /etc/selfdef/tetragon-policies/
+    # sovereign-perimeter.yaml MUST be mode 0644 (world-readable
+    # + root-write-only) because the Tetragon agent reads the
+    # policy AS its configured user (often non-root via
+    # DynamicUser) AND the policy is non-secret kernel-
+    # attestation config. Mode 0600 would defeat policy
+    # loading on non-root Tetragon deployments. Locks file-
+    # mode contract on the MS047 SovereignOS perimeter
+    # substrate.
+    mode="$(stat -c '%a' "${YAML}")"
+    [ "${mode}" = "644" ] || [ "${mode}" = "640" ]
+}
