@@ -343,3 +343,22 @@ TOMLEOF
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+systemd-resolved'
     [ ! -f "${DST}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${DST}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. loopback-only-dns manifest declares install +
+    # profile gating the resolver enforces; malformed manifest
+    # wedges the resolved DNSStubListener loopback baseline.
+    # Python's tomllib is the canonical parser. Locks anti-
+    # malformed-manifest on the loopback-only-dns substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/loopback-only-dns/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'loopback-only-dns', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
