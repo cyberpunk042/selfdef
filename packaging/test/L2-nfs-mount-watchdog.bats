@@ -328,3 +328,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"severity":"ok"'
     cap | grep -qE '"network_mounts":1[0-9]'
 }
+
+@test "INVARIANT (DELTA detect — distinctive-attacker-named mount path surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When a distinctive-named
+    # network mount surfaces as missing nosuid/nodev, the path
+    # MUST surface in the JSON sample so operator dashboard
+    # routes triage to the right path. Locks the operator-
+    # visibility contract on the network-mount nosuid/nodev
+    # surveillance surface (T1078 — Valid Accounts via NFS
+    # uid-mapping; nosuid prevents setuid binaries planted on
+    # mount from elevating priv on host).
+    mk_findmnt
+    write_mounts $'nfs4\t/mnt/distinctive-attacker-share\trelatime'
+    run_wd
+    cap | grep -q 'distinctive-attacker-share'
+}
