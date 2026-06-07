@@ -332,3 +332,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (env_keep += LD_AUDIT → alert: dynamic-loader audit env-pass-through axis sister to LD_PRELOAD + LD_LIBRARY_PATH)" {
+    # Sister to LD_PRELOAD + LD_LIBRARY_PATH env-pass-through
+    # INVARIANTs already locked. LD_AUDIT is the third canonical
+    # dynamic-loader env-var attackers leverage — it loads an
+    # auditing library that gets called for every symbol
+    # resolution, providing intercept-and-modify capability
+    # equivalent to LD_PRELOAD. If sudo passes LD_AUDIT through
+    # to privileged subprocess, attacker plants their .so as
+    # the audit library and intercepts every symbol resolution.
+    # T1574.006 — Dynamic Linker Hijacking via LD_AUDIT.
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%sDefaults env_keep += "LD_AUDIT"\n' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
