@@ -291,3 +291,16 @@ Warning: rootkit-D found"
     run_wd
     cap | grep -q '"tag":"selfdef-rkhunter"'
 }
+
+@test "INVARIANT (no auto-uninstall: rkhunter-cron watchdog NEVER emits package-remove commands on rkhunter)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The rkhunter-cron watchdog invokes the
+    # rkhunter rootkit-scanner but MUST NEVER emit shell
+    # commands that uninstall the rkhunter package itself
+    # (apt/dpkg/dnf/rpm/yum remove|purge|uninstall rkhunter).
+    # Silent auto-removal would tear down the rootkit-scanner
+    # substrate — T1562.001 Impair Defenses self-defeat by
+    # the very module meant to detect rootkits. Locks anti-
+    # package-removal contract on the rkhunter-cron substrate.
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+rkhunter' "${WD}"
+}
