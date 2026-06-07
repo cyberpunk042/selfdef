@@ -170,3 +170,18 @@ teardown() {
     run python3 -c "import yaml; d=yaml.safe_load(open('${YAML}')); print(d['kind'])"
     [ "${output}" = "TracingPolicy" ]
 }
+
+@test "INVARIANT (YAML spec.kprobes is non-empty list — perimeter MUST attach probes, not be a vacuous-passing manifest)" {
+    # Sister to apiVersion + kind contract INVARIANTs already
+    # locked. A Tetragon TracingPolicy with no kprobes attached
+    # is syntactically valid YAML but semantically vacuous —
+    # operator applying the policy would see status=ok but
+    # ZERO kernel-attestation probes would actually attach.
+    # Locks against the vacuous-passing regression where the
+    # YAML schema validates but the perimeter substrate is
+    # empty. MUST have ≥1 kprobe (or tracepoint/uprobe) so the
+    # MS047 SovereignOS perimeter actually monitors kernel
+    # events.
+    run python3 -c "import yaml; d=yaml.safe_load(open('${YAML}')); ks=d.get('spec',{}).get('kprobes',[]); tps=d.get('spec',{}).get('tracepoints',[]); ups=d.get('spec',{}).get('uprobes',[]); print(len(ks)+len(tps)+len(ups))"
+    [ "${output}" -ge 1 ]
+}
