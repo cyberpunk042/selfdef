@@ -287,3 +287,18 @@ TOMLEOF
     grep -q 'SELFDEF_BOOTLOADER_PROFILE=enforce' "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf"
     ! grep -q 'SELFDEF_BOOTLOADER_PROFILE=report' "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf"
 }
+
+@test "INVARIANT (libexec falls through to ok/no_grub when no grub.cfg present — anti-false-alert on non-GRUB hosts)" {
+    # Sister to many other watchdog's no-target-found fall-through
+    # INVARIANTs across the brain. When the libexec runs on a non-
+    # GRUB host (sd-boot / EFISTUB-only / U-Boot / chromebook
+    # custom), it MUST emit ok/no_grub instead of false-firing
+    # alert — operator dashboards would be flooded with bogus
+    # alerts otherwise on every non-GRUB workstation. Current-
+    # behavior lock: sd-boot coverage is a future-decision; today
+    # the script is GRUB-only with safe ok fallthrough on absent.
+    # Closes the no-target fall-through invariant.
+    write_config "report"
+    run_wd
+    grep -qE '"event":"no_grub"|exit 0' "${LIBEXEC_DIR}/bootloader-password-detect.sh"
+}
