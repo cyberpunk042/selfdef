@@ -233,3 +233,19 @@ Warning: Suspicious file /dev/.hidden"
     PROFILE=report run_wd
     cap | grep -q '"profile":"report"'
 }
+
+@test "INVARIANT (sample names distinctive rootkit-warning in JSON for operator-triage routing — DELTA-detect sample-naming axis)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain (clamav-cron FOUND-file,
+    # aide-bridge sample, lynis-cron warning ID). When rkhunter
+    # fires a distinctively-named rootkit warning, the warning
+    # name MUST surface in the JSON sample so operator
+    # dashboard routes triage to the right finding — operators
+    # MUST be able to tell WHICH rootkit-signature warning
+    # fired without re-running the scan or scrolling the full
+    # report.
+    mk_rk 1 "Warning: Distinctive-Attacker-Rootkit-Sig found
+[ Warning ] Test result from operator-relevant test"
+    run_wd
+    cap | grep -q 'Distinctive-Attacker-Rootkit-Sig'
+}
