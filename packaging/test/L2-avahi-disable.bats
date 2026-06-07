@@ -293,3 +293,23 @@ run_wd() {
         [ "${d}" -lt "${m}" ]
     done
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # avahi-disable TOML; parser must tolerate without altering the
+    # profile-gated behavior. mask-with-noise still fires the full
+    # mask sequence on BOTH avahi-daemon.service + avahi-daemon.
+    # socket (mDNS broadcast surveillance / mDNS-spoof / DNS-rebind
+    # / local-network-reconnaissance neutralization).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "avahi mDNS = local-network surveillance broadcast"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q 'systemctl mask avahi-daemon.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask avahi-daemon.socket' "${SYSEOF_LOG}"
+}
