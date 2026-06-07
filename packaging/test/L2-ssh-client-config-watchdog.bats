@@ -369,3 +369,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -qE 'sed[[:space:]]+-i.*/d' "${WD}"
     ! grep -qE 'find[[:space:]].*-delete' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # ssh-client-config-watchdog runs ON the timer's scheduled
+    # fire — scans /etc/ssh/ssh_config + ssh_config.d for
+    # ProxyCommand + LocalCommand injection patterns, emits a
+    # verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the ssh-client-config-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/ssh-client-config-watchdog/systemd/selfdef-ssh-client-config.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
