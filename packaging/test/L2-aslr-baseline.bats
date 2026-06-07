@@ -333,3 +333,20 @@ TOMLEOF
     [ -f "${DROPIN}" ]
     grep -qE '^kernel\.randomize_va_space[[:space:]]*=[[:space:]]*[012]$' "${DROPIN}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in render AND NO sysctl -w fired)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain (acct-baseline / apparmor-baseline / apport-
+    # disable / many others). Operator's exploratory --dry-run
+    # MUST preview without touching /etc/sysctl.d/ AND without
+    # flipping the live kernel.randomize_va_space value. Without
+    # strict DRY_RUN gating, a previewed dry-run would silently
+    # commit ASLR drift on a host where operator was investigating
+    # the baseline. Locks the dry-run-preserves-state contract on
+    # the memory-layout-randomization defense substrate.
+    write_config "full"
+    : > "${SCTL_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DROPIN}" ]
+    ! grep -q 'sysctl -w kernel.randomize_va_space' "${SCTL_LOG}"
+}
