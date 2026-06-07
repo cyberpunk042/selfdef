@@ -271,3 +271,20 @@ TOMLEOF
     [ -f "${SYSCTL_DROPIN}" ]
     [ -f "${LIMITS_DROPIN}" ]
 }
+
+@test "INVARIANT (asymmetric profile content: suid-only does NOT install limits.d — limits is all-off-only)" {
+    # Sister to many other installer module's asymmetric-profile
+    # INVARIANT across the brain (ssh-hardening AllowGroups,
+    # selinux-baseline autorelabel, tmpfs-baseline /tmp-only). The
+    # suid-only profile narrows to the suid-only-coredump axis (the
+    # priv-elevated-process leak vector); the all-off profile widens
+    # to ALL coredumps via the limits.d PAM-evaluated hard core 0
+    # directive. If suid-only silently installed limits.d, it would
+    # over-reach (operator's debugging of non-suid processes would
+    # break unexpectedly). Locks the boundary: suid-only sysctl-
+    # only, all-off both.
+    write_config "suid-only"
+    run_wd
+    [ -f "${SYSCTL_DROPIN}" ]
+    ! [ -f "${LIMITS_DROPIN}" ]
+}
