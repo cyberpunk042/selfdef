@@ -782,3 +782,8 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
 @test "INVARIANT (wasm-aot-cache install/apply.sh exists as file — apply-script existence contract)" {
     [ -f "${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install/apply.sh" ]
 }
+
+@test "INVARIANT (wasm-aot-cache install/apply.sh is executable (mode includes +x) — script-runnable contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install/apply.sh"
+    [ -x "${apply}" ]
+}

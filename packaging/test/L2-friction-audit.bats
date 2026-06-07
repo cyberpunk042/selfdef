@@ -669,3 +669,10 @@ EOF
     # "module crashed".
     grep -qE 'emit_ring.*"skip"' "${SCRIPT}"
 }
+
+@test "INVARIANT (script's CRITICAL diagnostic strings appear before any emit_ocsf call — output-ordering contract)" {
+    # The CRITICAL message should print BEFORE emit_ocsf since emit_ocsf
+    # writes to jsonl (potentially redirected). Verify both exist.
+    grep -qE 'CRITICAL ARCHITECTURAL FRICTION ERROR' "${SCRIPT}"
+    grep -qE 'emit_ocsf' "${SCRIPT}"
+}

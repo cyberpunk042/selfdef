@@ -709,3 +709,8 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
     [ -f "${readme}" ]
 }
 
+
+@test "INVARIANT (bridge-l2 install/apply.sh is executable (mode includes +x) — script-runnable contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install/apply.sh"
+    [ -x "${apply}" ]
+}

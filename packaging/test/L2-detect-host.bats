@@ -682,3 +682,15 @@ p = data.get('provides', [])
 assert 'event-bus' in p, f'must provide event-bus, got {p!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml provides field includes finding-store — substrate-provider contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+p = data.get('provides', [])
+assert 'finding-store' in p, f'must provide finding-store, got {p!r}'
+"
+}

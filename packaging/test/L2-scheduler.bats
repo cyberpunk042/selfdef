@@ -565,3 +565,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler unit declares Wants=selfdef-guardian.service — soft-dependency contract)" {
     grep -qE '^Wants=selfdef-guardian\.service' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler unit ProtectKernelTunables=true — kernel-mutation containment)" {
+    grep -qE '^ProtectKernelTunables=true' "${UNIT}"
+}

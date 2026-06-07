@@ -381,3 +381,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian unit Wants=tetragon.service — soft-dependency contract: starts even without tetragon)" {
     grep -qE '^Wants=tetragon\.service' "${UNIT}"
 }
+
+@test "INVARIANT (guardian unit ProtectKernelTunables=true — kernel-mutation containment)" {
+    grep -qE '^ProtectKernelTunables=true' "${UNIT}"
+}

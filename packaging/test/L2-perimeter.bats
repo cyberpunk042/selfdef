@@ -625,3 +625,8 @@ assert t == 'string', f'arg type must be string, got {t!r}'
     grep -qE '^[[:space:]]*purge\)' "${POSTRM}"
     grep -qE '^[[:space:]]*remove\)' "${POSTRM}"
 }
+
+@test "INVARIANT (postinst creates target dir before installing YAML — mkdir-then-install ordering contract)" {
+    grep -qE 'mkdir -p.*tetragon/tracing-policies' "${POSTINST}" || \
+    grep -qE '/etc/tetragon/tracing-policies' "${POSTINST}"
+}

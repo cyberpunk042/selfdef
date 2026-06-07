@@ -550,3 +550,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (cargo-deb maintainer-scripts manifest references postinst — Debian-package-lifecycle wiring contract)" {
     grep -qE 'maintainer-scripts|postinst' "${DAEMON_CARGO}"
 }
+
+@test "INVARIANT (.service [Unit] section comment block reference selfdef-doctor purpose — derivation-source audit-trail)" {
+    head -10 "${SERVICE}" | grep -qE 'doctor|health|periodic'
+}
