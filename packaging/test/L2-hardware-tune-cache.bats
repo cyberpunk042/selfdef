@@ -272,3 +272,9 @@ teardown_real_run() {
     grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"hardware-tune-env"' "${MODULE_DIR}/module.toml" \
         || grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"hardware-tune-cache"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (apply.sh uses set -euo pipefail — anti-half-installed-state contract)" {
+    # Sister to brain-wide installer-script-hygiene INVARIANTs.
+    grep -qE 'set[[:space:]]+-euo[[:space:]]+pipefail' "${INSTALL_DIR}/apply.sh" \
+        || (grep -qE 'set[[:space:]]+-eu' "${INSTALL_DIR}/apply.sh" && grep -qE 'set[[:space:]]+-o[[:space:]]+pipefail' "${INSTALL_DIR}/apply.sh")
+}
