@@ -367,3 +367,20 @@ run_wd() {
     [ -f "${NFT_DROPIN}" ]
     [ "$(stat -c '%a' "${NFT_DROPIN}")" = "644" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in render AND NO nft -f load fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/nftables.d/50-selfdef.conf AND
+    # without firing nft -f load. A silent dry-run that committed
+    # would re-apply the firewall ruleset AT PREVIEW TIME — could
+    # lock out the operator's admin SSH source IP if egress profile
+    # has changed since last apply. Locks dry-run-preserves-state
+    # on the host-firewall ruleset substrate.
+    write_config "baseline"
+    rm -f "${NFT_DROPIN}"
+    : > "${NFT_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${NFT_DROPIN}" ]
+    ! grep -qE "nft -f ${NFT_DROPIN}" "${NFT_LOG}"
+}
