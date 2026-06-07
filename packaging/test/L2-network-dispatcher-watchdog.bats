@@ -308,3 +308,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: network-dispatcher script invoking binary from /dev/shm → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. Beyond
+    # inline reverse-shell payloads, attackers stage benign-
+    # looking network-dispatcher scripts that invoke a binary
+    # in writable-root (T1546 network-event-trigger root-exec —
+    # runs AS ROOT on every network state change; recurring
+    # trigger fires multiple times per network blip). /dev/shm
+    # is the tmpfs in-RAM writable-root that survives no on-
+    # disk forensic trace.
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/dev/shm/staged_payload\n' > "${DISPD}/99-evil"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
