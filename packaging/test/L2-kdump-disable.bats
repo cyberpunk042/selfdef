@@ -331,3 +331,19 @@ TOMLEOF
         || grep -qE 'systemctl mask kexec' "${SYSEOF_LOG}" \
         || grep -qE 'systemctl mask kdump-tools' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on kdump-disable surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The kdump-disable installer MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the kdump neutralization status alert. Locks
+    # parser contract on the kdump-disable installer JSON
+    # surface (consistency-with-watchdog-family discipline).
+    write_config "mask"
+    output="$(KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd 2>&1)"
+    bad=$(printf '%s\n' "${output}" | grep -oE '"severity":"[^"]+"' | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
