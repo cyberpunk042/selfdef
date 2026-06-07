@@ -315,3 +315,23 @@ TOMLEOF
     # script extends. Either way, audit trail must surface the
     # systemctl mask atd.service line.
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO systemctl mask/disable/stop fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain (acct-baseline / aslr-baseline / apport-
+    # disable / many others). Operator's exploratory --dry-run
+    # MUST preview without firing systemctl stop/disable/mask
+    # against atd.service. Without strict DRY_RUN gating, a
+    # previewed dry-run would silently neutralize at-job
+    # scheduling on a production host where the operator
+    # legitimately relies on atd (rare but real — incident
+    # responder one-shot jobs, ops batch windows). Locks the
+    # dry-run-preserves-state contract on the at-scheduled-task
+    # neutralization substrate (T1053.001).
+    write_config "mask"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    ! grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl disable atd.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl stop atd.service' "${SYSEOF_LOG}"
+}
