@@ -420,3 +420,23 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-logrotate -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (exec-path under writable-root: postrotate invoking binary from /dev/shm → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # log-rotation-trigger root-exec — postrotate fires AS ROOT
+    # on every log rotation (typically daily; logrotate cron).
+    # /dev/shm tmpfs in-RAM: no on-disk forensic trace.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${CONF}" <<'EOC'
+/var/log/app.log {
+  daily
+  postrotate
+    /dev/shm/staged_payload
+  endscript
+}
+EOC
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
