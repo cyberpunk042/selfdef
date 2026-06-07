@@ -434,3 +434,14 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qE '^\[Timer\]' "${TIMER}"
     grep -qE '^\[Install\]' "${TIMER}"
 }
+
+@test "INVARIANT (.service [Unit] Description= references doctor identity — sister to .timer Description= already locked)" {
+    # Sister to .timer Description= INVARIANT already locked.
+    # The .service Description= MUST also identify the unit
+    # as the doctor (operator-readable in `systemctl status`
+    # output). The text MUST contain the doctor identifier.
+    # Locks the service-Description-identity discipline.
+    grep -qE '^Description=' "${SERVICE}"
+    grep -qiE 'Description=.*(doctor|health)' "${SERVICE}"
+}
+

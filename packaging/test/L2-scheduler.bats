@@ -480,3 +480,13 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     [ -f "${DAEMON_CARGO}" ]
     grep -qE 'selfdef-scheduler\.service' "${DAEMON_CARGO}"
 }
+
+@test "INVARIANT (postinst runs systemctl daemon-reload after install — systemd-cache-refresh contract)" {
+    # Sister to brain-wide daemon-reload INVARIANT family.
+    # postinst installs scheduler.service + must signal
+    # systemd to re-scan via daemon-reload. Without this,
+    # systemctl enable would race against systemd's internal
+    # unit-graph state. Locks the daemon-reload-after-install
+    # discipline.
+    grep -qE 'systemctl daemon-reload' "${POSTINST}"
+}

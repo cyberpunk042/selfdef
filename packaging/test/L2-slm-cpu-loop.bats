@@ -607,3 +607,18 @@ ph = (data.get('metadata') or {}).get('phase', '')
 assert ph == 'main', f'[metadata].phase must be main, got {ph!r}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop install scripts exist + are executable — apply/check/uninstall canonical-file-mode contract)" {
+    # Sister to brain-wide install-script INVARIANT family.
+    # The three canonical install scripts (apply.sh /
+    # check.sh / uninstall.sh) MUST exist + be executable
+    # (chmod +x) so the selfdefctl install-runner can
+    # bash-exec them without prefixing `bash`. A regression
+    # that dropped +x would surface as "permission denied"
+    # at apply time. Locks the script-mode discipline on the
+    # slm-cpu-loop install-scripts substrate.
+    inst_dir="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install"
+    [ -x "${inst_dir}/apply.sh" ]
+    [ -x "${inst_dir}/check.sh" ]
+    [ -x "${inst_dir}/uninstall.sh" ]
+}

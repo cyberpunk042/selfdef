@@ -481,3 +481,23 @@ for r in req:
     assert 'kind' in r and 'value' in r, f'each requires must have kind+value, got {r!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml summary field present + non-empty — operator-dashboard one-line description contract)" {
+    # Sister to brain-wide module.toml summary INVARIANT
+    # family. The summary field surfaces in the selfdef
+    # dashboard's `selfdefctl modules list` one-line view.
+    # A regression that emptied or dropped summary would
+    # leave detect-host as "(no description)" in operator-
+    # facing surfaces. Locks the summary-non-empty
+    # discipline on the detect-host substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+s = data.get('summary', '')
+assert s, f'summary must be non-empty, got {s!r}'
+assert len(s) > 10, f'summary should be a real description (>10 chars), got {s!r}'
+"
+}

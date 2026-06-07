@@ -304,3 +304,15 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     [ -f "${DAEMON_CARGO}" ]
     grep -qE 'selfdef-guardian\.service' "${DAEMON_CARGO}"
 }
+
+@test "INVARIANT (postinst runs systemctl daemon-reload after install — systemd-cache-refresh contract)" {
+    # Sister to brain-wide daemon-reload INVARIANT family.
+    # The postinst installs the guardian.service unit file +
+    # then MUST signal systemd to re-scan /etc/systemd/system/
+    # via `systemctl daemon-reload`. Without daemon-reload,
+    # systemctl enable + start would race against systemd's
+    # internal unit-graph state, surfacing as "Unit not
+    # found" on the first enable call. Locks the
+    # daemon-reload-after-install discipline.
+    grep -qE 'systemctl daemon-reload' "${POSTINST}"
+}

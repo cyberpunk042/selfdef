@@ -582,3 +582,16 @@ EOF
     # emit_ring substrate.
     grep -qE 'mkdir -p.*RING' "${SCRIPT}"
 }
+
+@test "INVARIANT (script declares SELFDEF_FRICTION_AUDIT_OCSF_PATH override variable — operator-configurable canonical-OCSF-jsonl location)" {
+    # Sister to brain-wide operator-config-env-var INVARIANT
+    # family. The OCSF jsonl location is operator-configurable
+    # — test/CI hosts must redirect to a tmpdir; production
+    # writes to /var/log/selfdef/. The
+    # SELFDEF_FRICTION_AUDIT_OCSF_PATH env var lets operators
+    # override the default per-host. A regression that hard-
+    # coded the path would break CI runners (no /var/log
+    # write permissions). Locks the override-env-var canonical
+    # discipline on the friction-audit OCSF-path substrate.
+    grep -qE 'SELFDEF_FRICTION_AUDIT_OCSF_PATH' "${SCRIPT}"
+}

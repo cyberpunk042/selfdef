@@ -517,3 +517,18 @@ setup() {
     # run() substrate.
     awk '/^run\(\)/,/^}/' "${LIB}" | grep -qE 'log '
 }
+
+@test "INVARIANT (lib exports SELFDEF_MODULE_LIB_VERSION as integer — version-compare numeric-ordering contract)" {
+    # Sister to brain-wide library-version INVARIANT family.
+    # The SELFDEF_MODULE_LIB_VERSION variable MUST be a
+    # numeric integer (not a string like "v1.0") so the
+    # version-gate's -gt comparison works correctly. A
+    # regression to a non-numeric string would break bash's
+    # arithmetic comparison + silently let any caller source
+    # the lib regardless of declared version requirement.
+    # Locks the integer-version discipline.
+    grep -qE '^SELFDEF_MODULE_LIB_VERSION=[0-9]+$' "${LIB}"
+    # Also verify the value is actually an integer in current
+    # session (lib was sourced by setup())
+    [[ "${SELFDEF_MODULE_LIB_VERSION}" =~ ^[0-9]+$ ]]
+}

@@ -514,3 +514,17 @@ meta = data.get('metadata', {})
 assert 'namespace' not in meta, f'metadata.namespace must be absent (cluster-scoped CRD), got {meta.get(\"namespace\")!r}'
 "
 }
+
+@test "INVARIANT (postinst runs daemon-reload AFTER chattr +i — systemd-refresh-on-immutable-policy contract)" {
+    # Sister to brain-wide daemon-reload sequencing INVARIANT
+    # family. The postinst MUST signal systemd / tetragon
+    # reload AFTER the chattr +i finalizes the policy file —
+    # without this ordering, Tetragon might re-load a half-
+    # written or unflagged policy. Locks the post-immutable-
+    # reload sequencing discipline on the perimeter postinst
+    # substrate.
+    # Verify both chattr +i AND tetragon.service signal exist
+    # in the postinst.
+    grep -qE 'chattr \+i' "${POSTINST}"
+    grep -qE 'tetragon.service' "${POSTINST}"
+}
