@@ -221,3 +221,38 @@ seed_benign() {
     cap | grep -q 'passwd'
     cap | grep -q 'evil_backdoor'
 }
+
+@test "INVARIANT (known-source acceptance: ldap is NOT flagged — enterprise LDAP-integrated host)" {
+    # ldap is a canonical legit enterprise-NSS provider via libnss-ldapd.
+    # Locks that the KNOWN_NSS allow-list includes it.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'passwd: files ldap\ngroup: files ldap\nshadow: files ldap\nhosts: files dns\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"event":"nsswitch_rogue_source"'
+}
+
+@test "INVARIANT (rogue on hosts db — DNS-resolver hijack — also alerts)" {
+    # hosts db is the DNS-resolver provider chain. A rogue source on
+    # hosts db is a name-resolution hijack (T1556/T1574).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'passwd: files\ngroup: files\nshadow: files\nhosts: files dns evil_dns_hijack\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"nsswitch_rogue_source"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (rogue on shadow db — credential-store hijack — also alerts)" {
+    # shadow db backs the password hash store. A rogue source on shadow
+    # backdoors the credential verification path.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'passwd: files\ngroup: files\nshadow: files evil_cred_hijack\nhosts: files dns\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"nsswitch_rogue_source"'
+    cap | grep -q '"severity":"alert"'
+}
