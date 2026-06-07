@@ -183,3 +183,47 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=report run_wd
     cap | grep -q '"profile":"report"'
 }
+
+@test "INVARIANT (stateless re-evaluation: orphan-found alert STAYS visible on every run until operator fixes)" {
+    # unowned-files-watchdog is stateless (no baseline-refresh required) —
+    # re-evaluates live filesystem on every run. An orphan that stays
+    # unowned across runs MUST re-fire every run, not decay to ok.
+    for i in $(seq 1 55); do
+        printf 'x' > "${ROOT}/orphan${i}"
+        chown 99999:99999 "${ROOT}/orphan${i}"
+    done
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"bulk_unowned"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-root scan: orphan in ANY watched root → flagged)" {
+    # Operator may watch multiple roots (e.g. /etc + /home + /opt).
+    # Lock multi-root axis.
+    ROOT2="${TMP}/scan2"; mkdir -p "${ROOT2}"
+    printf 'x' > "${ROOT}/owned"
+    printf 'x' > "${ROOT2}/orphan-in-second-root"
+    chown 99999:99999 "${ROOT2}/orphan-in-second-root"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_UNOWNED_PROFILE="report" \
+    SELFDEF_UNOWNED_ROOTS="${ROOT} ${ROOT2}" \
+    bash "${WD}"
+    cap | grep -q '"event":"unowned_found"'
+    cap | grep -q 'orphan-in-second-root'
+}
+
+@test "INVARIANT (boundary 51: at exact 51 orphans severity escalates from warn to alert)" {
+    # The ladder transition is exactly at 51 (50 = warn ceiling, 51 = alert).
+    # Single-notch boundary lock.
+    for i in $(seq 1 51); do
+        printf 'x' > "${ROOT}/orphan${i}"
+        chown 99999:99999 "${ROOT}/orphan${i}"
+    done
+    run_wd
+    cap | grep -q '"event":"bulk_unowned"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"unowned_count":5[1-9]|"unowned_count":[6-9][0-9]|"unowned_count":1[0-9][0-9]'
+}
