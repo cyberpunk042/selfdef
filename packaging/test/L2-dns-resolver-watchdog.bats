@@ -484,3 +484,20 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-dns-resolver -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (baseline re-establish on operator out-of-band deletion: missing baseline re-creates cleanly + emits baseline_initial)" {
+    # Sister to brain-wide baseline-re-establish INVARIANTs.
+    # State-resilience on T1071.004 DNS resolver MITM
+    # surveillance.
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 1.1.1.1
+nameserver 1.0.0.1
+EOF
+    run_wd                                              # establishes baseline
+    [ -f "${BASELINE}" ]
+    rm -f "${BASELINE}"                                  # operator wipe
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # must re-establish
+    [ -f "${BASELINE}" ]
+    cap | grep -qE '"event":"baseline_initial"'
+}
