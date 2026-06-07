@@ -387,3 +387,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive_attacker_mod'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. The selfdef-kernel-module
+    # logger tag must fire EXACTLY ONCE per scan regardless of
+    # how many kmod add/remove events surface. Multi-line
+    # output would break the SDD-062 downstream JSON-line
+    # consumer (Sigma correlator) which expects one structured
+    # record per scan. Locks the consolidation discipline on
+    # the kernel-module surveillance surface (T1547.006).
+    write_modules_proc ext4 xt_owner xt_conntrack overlay
+    stage_ko ext4 xt_owner xt_conntrack overlay
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-kernel-modules -- ')
+    [ "${main_count}" = "1" ]
+}
