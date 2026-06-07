@@ -295,3 +295,49 @@ EOF
     # but the field must be in the JSON so dashboards can graph it).
     [[ "${output}" == *"denials="* ]]
 }
+
+@test "INVARIANT (emit_status JSON: status=ok + module surfaced for operator dashboard)" {
+    write_config "audit"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"selinux-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+}
+
+@test "INVARIANT (refuse-to-brick precedence over profile-key — enforcing-from-disabled w/o ack dies even after audit ran)" {
+    # Operator runs audit profile first (no mutation), then flips to
+    # enforcing but FORGETS acknowledge_relabel. apply MUST refuse AND
+    # leave the prior SELINUX=disabled config unchanged.
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=disabled
+SELINUXTYPE=targeted
+EOF
+    write_config "audit"
+    LIVE_MODE=Disabled run_wd
+    grep -qE '^SELINUX=disabled$' "${SELINUX_CONFIG}"
+    # Now operator sets enforcing w/o ack.
+    write_config "enforcing" "false"
+    LIVE_MODE=Disabled run env PATH="${BIN}:${PATH}" \
+        LIVE_MODE=Disabled \
+        SELFDEF_SELINUX_CONFIG="${CONF}" \
+        SELFDEF_SELINUX_CONFIG_FILE="${SELINUX_CONFIG}" \
+        SELFDEF_AUTORELABEL_FILE="${AUTORELABEL_FILE}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    # Prior disabled config preserved — no silent escalation.
+    grep -qE '^SELINUX=disabled$' "${SELINUX_CONFIG}"
+    ! [ -f "${AUTORELABEL_FILE}" ]
+}
+
+@test "INVARIANT (permissive profile does NOT trigger autorelabel — only enforcing-from-disabled does)" {
+    # permissive is the always-safe profile; it must NEVER touch
+    # /.autorelabel. Locks that the relabel path is gated to enforcing
+    # only, not just any config change.
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=disabled
+SELINUXTYPE=targeted
+EOF
+    write_config "permissive"
+    LIVE_MODE=Disabled run_wd
+    grep -qE '^SELINUX=permissive$' "${SELINUX_CONFIG}"
+    ! [ -f "${AUTORELABEL_FILE}" ]
+}
