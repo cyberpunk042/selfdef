@@ -261,3 +261,20 @@ teardown() {
     grep -qE '^[[:space:]]*purge\)' "${POSTRM}"
     grep -qE '^[[:space:]]*remove\)' "${POSTRM}"
 }
+
+@test "INVARIANT (postrm chattr -i is defensive: 2>/dev/null || true — anti-fail-loud-on-already-mutable contract)" {
+    # Sister to brain-wide defensive-cleanup INVARIANT family.
+    # The postrm chattr -i call MUST tolerate an already-mutable
+    # state: if a prior operator manually `chattr -i`'d the
+    # perimeter YAML before purge, the postrm's chattr -i would
+    # fail with "Operation not permitted" / "Inappropriate ioctl"
+    # without the 2>/dev/null || true guard — and a non-zero
+    # postrm exit aborts the dpkg purge mid-way, leaving the
+    # system in a half-purged state that future apt operations
+    # can't resolve. Locks the defensive-cleanup pattern on the
+    # perimeter postrm chattr substrate (per Debian Policy
+    # 6.5.5: postrm must idempotently succeed across all
+    # interrupted-state recoveries).
+    grep -qE 'chattr -i /etc/tetragon/tracing-policies/sovereign-perimeter.yaml[[:space:]]*[\\]?[[:space:]]*2>' "${POSTRM}"
+    grep -qE '\|\|[[:space:]]*true' "${POSTRM}"
+}
