@@ -308,3 +308,14 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: pm-utils hook invoking binary from /var/tmp → alert)" {
+    # Sister to /tmp pm-utils-hook writable-root-exec. /var/tmp
+    # persistent.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/var/tmp/staged_payload\n' > "${HOOKD}/00logging"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
