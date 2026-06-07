@@ -271,3 +271,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named musl ld-path entry surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When attacker adds a new
+    # distinctively-named writable directory to musl ld.so's
+    # search path, the path MUST surface in the JSON sample so
+    # operator dashboard routes triage to the right code-load
+    # surface (T1574 dynamic-loader hijack).
+    printf '/lib\n/usr/lib\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/lib\n/usr/lib\n/tmp/distinctive-attacker-libs\n' > "${CONF}"
+    run_wd
+    cap | grep -q 'distinctive-attacker-libs'
+}
