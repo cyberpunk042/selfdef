@@ -340,3 +340,16 @@ seed_benign() {
     ! grep -qE 'find[[:space:]].*-delete' "${WD}"
     ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(HOOKD|HOOK|FILE|file)' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # systemd-power-hooks-watchdog runs ON the timer's scheduled
+    # fire — scans /lib/systemd/system-sleep + system-shutdown
+    # for injection patterns, emits a verdict, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the systemd-power-hooks-
+    # watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/systemd-power-hooks-watchdog/systemd/selfdef-systemd-power-hooks.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
