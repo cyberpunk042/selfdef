@@ -514,3 +514,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # listening-ports-watchdog runs ON the timer's scheduled
+    # fire — diffs ss -tlnp output against baseline, emits a
+    # verdict on new-listener deltas, then exits. Type=simple
+    # would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the listening-ports-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/listening-ports-watchdog/systemd/selfdef-listening-ports.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
