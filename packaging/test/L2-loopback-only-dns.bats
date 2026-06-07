@@ -263,3 +263,23 @@ run_wd() {
     run_wd
     ! grep -qE '^DNSStubListenerExtra=' "${DST}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # loopback-only-dns TOML; parser must tolerate without
+    # altering the profile-gated behavior. loopback-with-noise
+    # still installs the DNSStubListener=127.0.0.1 binding (the
+    # actual neutralization of the public-stub-attack-surface
+    # that DNS rebind / DNS-tunnel / cache-poisoning exploits).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "loopback"
+operator_note = "loopback-only stub = no public DNS exposure"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${DST}" ]
+    grep -qE '^DNSStubListener=yes' "${DST}" || grep -qE 'DNSStubListenerAddress.*127\.0\.0\.1' "${DST}" || grep -qE 'DNSStubListener=127\.0\.0\.1' "${DST}"
+}
