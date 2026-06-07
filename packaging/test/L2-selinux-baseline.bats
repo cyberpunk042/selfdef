@@ -341,3 +341,36 @@ EOF
     grep -qE '^SELINUX=permissive$' "${SELINUX_CONFIG}"
     ! [ -f "${AUTORELABEL_FILE}" ]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass refuse-to-brick gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # selinux-baseline TOML; parser must tolerate without altering
+    # the gated behavior. enforcing-from-disabled-with-noise WITHOUT
+    # ack MUST still refuse-to-brick (unbootable-system precedence
+    # over noise — no silent escalation to enforcing via parser
+    # tolerance which would trigger an unsafe autorelabel without
+    # operator acknowledgment).
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=disabled
+SELINUXTYPE=targeted
+EOF
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "enforcing"
+acknowledge_relabel = false
+operator_note = "MAC layer for AI safety substrate"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    LIVE_MODE=Disabled run env PATH="${BIN}:${PATH}" \
+        LIVE_MODE=Disabled \
+        SELFDEF_SELINUX_CONFIG="${CONF}" \
+        SELFDEF_SELINUX_CONFIG_FILE="${SELINUX_CONFIG}" \
+        SELFDEF_AUTORELABEL_FILE="${AUTORELABEL_FILE}" \
+        bash "${WD}"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"acknowledge_relabel"* ]]
+    ! [ -f "${AUTORELABEL_FILE}" ]
+    grep -qE '^SELINUX=disabled$' "${SELINUX_CONFIG}"
+}
