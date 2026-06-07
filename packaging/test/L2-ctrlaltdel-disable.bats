@@ -295,3 +295,20 @@ TOMLEOF
     run_wd
     ! grep -q 'systemctl mask ctrl-alt-del.target' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO systemctl mask/reload fires when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without firing systemctl mask ctrl-alt-del.target
+    # AND without reloading systemd-logind. A silent dry-run
+    # that committed would flip reboot-trigger behavior on a
+    # host under investigation (data-center hosts with KVM access
+    # need ctrl-alt-del functional for emergency reboot). Locks
+    # dry-run-preserves-state on the reboot-trigger-burst-guard
+    # substrate.
+    write_config "burst-guard"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    ! grep -q 'systemctl mask ctrl-alt-del.target' "${SYSEOF_LOG}"
+    ! grep -qE 'systemctl (reload|kill).*logind' "${SYSEOF_LOG}"
+}
