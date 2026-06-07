@@ -350,3 +350,11 @@ TOMLEOF
     [ ! -f "${DROPIN}" ]
     ! grep -q 'sysctl -w kernel.randomize_va_space' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (drop-in is chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs.
+    write_config "full"
+    run_wd
+    [ -f "${DROPIN}" ]
+    [ "$(stat -c '%a' "${DROPIN}")" = "644" ]
+}
