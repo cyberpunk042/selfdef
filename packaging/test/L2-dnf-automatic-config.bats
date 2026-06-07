@@ -253,3 +253,16 @@ TOMLEOF
     grep -q 'profile=security-and-reboot' "${DNF_AUTO_CONF}"
     grep -qE 'reboot\s*=\s*(when-needed|when-changed|yes)' "${DNF_AUTO_CONF}"
 }
+
+@test "INVARIANT (security-only does NOT carry apply_updates=no — explicit asymmetric gate)" {
+    # The default operator-shipped dnf-automatic.conf carries
+    # apply_updates=no (download-only, advisory mode). selfdef's
+    # security-only profile MUST set this to yes (actually apply
+    # updates) — otherwise the install is a no-op (download CVE
+    # patches but never apply). Locks the asymmetric gate against
+    # accidental regression to the operator-shipped default.
+    write_config "security-only"
+    run_wd
+    grep -qE '^apply_updates[[:space:]]*=[[:space:]]*yes' "${DNF_AUTO_CONF}"
+    ! grep -qE '^apply_updates[[:space:]]*=[[:space:]]*no' "${DNF_AUTO_CONF}"
+}
