@@ -279,3 +279,19 @@ run_wd() {
     [ -n "${strict_n}" ]
     [ "${strict_n}" -le "${standard_n}" ]
 }
+
+@test "INVARIANT (TMOUT marked readonly — defeats per-session bypass via export TMOUT=0)" {
+    # Sister to pam-faillock even_deny_root INVARIANT in the
+    # session-defense substrate. TMOUT without readonly can be
+    # bypassed by the user: `export TMOUT=0` in any later shell
+    # init (~/.bashrc) defeats the policy entirely. The selfdef
+    # drop-in MUST mark TMOUT readonly so per-user shell init
+    # cannot trivially override it. Without readonly, the
+    # idle-session-logout defense is policy-theater: an attacker
+    # who pivots into a user account leaves a long-running
+    # session active by pre-pending `export TMOUT=0` to the
+    # user's .bashrc and re-logging.
+    write_config "standard"
+    run_wd
+    grep -qE '(readonly\s+TMOUT|declare\s+-r\s+TMOUT)' "${DROPIN}"
+}
