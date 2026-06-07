@@ -291,3 +291,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # ceph not in fstype list). Lock current behavior.
     cap | grep -qE '"severity":"(alert|ok)"'
 }
+
+@test "INVARIANT (JSON profile field echoes operator-set SELFDEF_NFSMOUNT_PROFILE)" {
+    # Sister to mount-options-watchdog's profile-echo INVARIANT.
+    # Downstream operator dashboard / triage pipeline must see the
+    # profile value the watchdog ran under, not just the severity —
+    # so it can distinguish report-mode findings from enforce-mode
+    # findings (the latter would have aborted the unit on alert).
+    # Closes the profile-surfacing axis on the nfs-mount surveillance
+    # surface alongside the mount-options sister-axis already locked.
+    mk_findmnt
+    write_mounts $'nfs4\t/mnt/share\tnosuid,nodev,relatime'
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
