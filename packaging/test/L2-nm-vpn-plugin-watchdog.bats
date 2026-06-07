@@ -281,3 +281,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (plugin .so under /dev/shm — tmpfs in-RAM writable-root axis-symmetric expansion on NM VPN dlopen surface)" {
+    # Sister to /tmp + /var/tmp + /home plugin .so writable-root
+    # INVARIANTs already locked. /dev/shm is the canonical
+    # tmpfs in-RAM writable-root that preserves no on-disk
+    # forensic trace — attackers stage payloads there because
+    # (a) RAM, (b) preserves across most security tools that
+    # don't scan tmpfs. NetworkManager MUST recognize /dev/shm
+    # plugin .so paths — locks axis-symmetric tmpfs writable-
+    # root coverage on T1574 NM-VPN-plugin Hijack Execution
+    # Flow surface.
+    printf '[libnm]\nplugin=/dev/shm/.evil-nm-plugin.so\n' > "${NAME}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
