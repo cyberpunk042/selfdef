@@ -257,3 +257,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (path entry under /var/tmp): writable-root expansion on musl ld.so search-path surface" {
+    # Sister to /tmp + /home + /dev/shm writable-root axes
+    # already locked. /var/tmp is the writable-spool surface
+    # shared with the other writable-root family entries. A
+    # musl ld.so path entry pointing into /var/tmp lets an
+    # attacker plant a libc.so.6 with the right soname there +
+    # have every musl-linked binary on the host load it. Lock
+    # axis-symmetry with the rest of the writable-root family
+    # on the musl ld.so library-search-path surface.
+    printf '/lib\n/usr/lib\n/var/tmp/.attacker-libs\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
