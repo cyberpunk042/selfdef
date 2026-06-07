@@ -430,3 +430,28 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: ssh-authkeys-watchdog NEVER deletes authorized_keys entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # ssh-authkeys-watchdog DETECTS T1098.004 Account
+    # Manipulation: SSH Authorized Keys but MUST NEVER emit
+    # sed/awk/rm commands to auto-clean the planted key. The
+    # detected key may be operator-legitimate (operator added
+    # a deploy key for a new automation account) — silent auto-
+    # delete would destroy operator baseline state AND
+    # forensic evidence chain. Auto-delete on authorized_keys
+    # is also a denial-of-service primitive (attacker plants a
+    # key, watchdog auto-deletes the WHOLE file). Surveillance,
+    # never remediation. Locks anti-data-loss contract on the
+    # ssh-authkeys surveillance substrate.
+    plant_baseline_keys
+    printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINEW== attacker\n' >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    run_wd
+    # All authorized_keys files MUST remain on disk with content
+    # intact.
+    [ -f "${HOMES_ROOT}/alice/.ssh/authorized_keys" ]
+    grep -q 'attacker' "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+    ! grep -qE 'sed[[:space:]]+-i.*/d' "${WD}"
+}
