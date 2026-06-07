@@ -441,3 +441,25 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '4444'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. The selfdef-listening-ports
+    # logger tag must fire EXACTLY ONCE per scan regardless of
+    # how many new listeners surface (mass-add scenario, multi-
+    # proto combo, distinctive-port + benign-listener combo).
+    # Multi-line output would break the SDD-062 downstream JSON-
+    # line consumer (Sigma correlator). Locks the consolidation
+    # discipline on the network-port surveillance surface (T1571
+    # — Non-Standard Port). Operator dashboard sees one alert
+    # with N listeners in sample, not N separate alerts.
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:4444,0.0.0.0:5555,0.0.0.0:6666')"
+    mk_ss "${tcp}" ""
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-listening-ports -- ')
+    [ "${main_count}" = "1" ]
+}
