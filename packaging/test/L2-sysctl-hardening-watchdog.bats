@@ -340,3 +340,21 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-fix: sysctl-hardening-watchdog NEVER edits sysctl files to revert weakened directives — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-fix / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # sysctl-hardening-watchdog DETECTS T1562.001 Impair
+    # Defenses via sysctl weakening but MUST NEVER emit sed/
+    # awk commands to auto-revert the weakened directive. The
+    # detected weakening may be operator-legitimate (operator
+    # intentionally tweaked sysctl for a specific workload,
+    # e.g., kernel.unprivileged_userns_clone=1 for rootless
+    # containers). Silent auto-revert would break operator's
+    # intended workload. Surveillance, never remediation.
+    # Locks anti-data-loss contract on the sysctl-hardening
+    # surveillance substrate.
+    ! grep -qE 'sed[[:space:]]+-i.*sysctl' "${WD}"
+    ! grep -qE 'sysctl[[:space:]]+-w' "${WD}"
+    ! grep -qE 'echo[[:space:]]+.*>[[:space:]]*/proc/sys/' "${WD}"
+}
