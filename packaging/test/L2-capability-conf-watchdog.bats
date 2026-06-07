@@ -535,3 +535,20 @@ seed_benign() {
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (capability-conf-watchdog service does NOT declare Restart=always — anti-restart-storm contract on oneshot probe)" {
+    # Sister to brain-wide oneshot-probe INVARIANT family.
+    # The capability-conf-watchdog probe is Type=oneshot — it RUNS, emits a
+    # verdict, and EXITS. Restart=always on a oneshot would
+    # cause systemd to immediately re-fire the probe in a
+    # tight loop, swamping the dashboard with redundant
+    # records. A regression that added Restart=always would
+    # produce a runaway-probe footgun. Locks the anti-restart-
+    # storm discipline on the capability-conf-watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/capability-conf-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        ! grep -qE '^Restart=always' "${s}"
+        ! grep -qE '^Restart=on-failure' "${s}"
+    done
+}
