@@ -435,3 +435,17 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (wheel group privileged add → alert — RHEL/CentOS sudoers-grant axis)" {
+    # Sister to sudo + docker + shadow + kvm + disk privileged-
+    # group axes. wheel = RHEL/CentOS/Arch convention for
+    # sudoers-grant (%wheel ALL=(ALL) ALL). Closes axis-parity
+    # with sudo group on Debian/Ubuntu. T1548.003 Sudo via
+    # group membership.
+    write_passwd_group
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo 'wheel:x:10:evil-wheel-attacker' >> "${GROUP_FILE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
