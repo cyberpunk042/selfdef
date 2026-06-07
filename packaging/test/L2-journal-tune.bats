@@ -331,3 +331,14 @@ TOMLEOF
     [ -f "${drop_in}" ]
     grep -qE '^SystemMaxUse[[:space:]]*=' "${drop_in}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on journal-tune installer surface
+    # across drop-in + journald-restart phases.
+    write_config "paranoid"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"journal-tune"')
+    [ "${count}" = "1" ]
+}
