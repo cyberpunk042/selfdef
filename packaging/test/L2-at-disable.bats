@@ -336,12 +336,9 @@ TOMLEOF
     ! grep -q 'systemctl stop atd.service' "${SYSEOF_LOG}"
 }
 
-@test "INVARIANT (downgrade mask → stop does NOT auto-unmask — mask is sticky)" {
-    # Sister to brain-wide downgrade-no-auto-unmask INVARIANTs.
+@test "INVARIANT (no auto-uninstall: at package NEVER auto-removed)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs.
     write_config "mask"
     run_wd
-    : > "${SYSEOF_LOG}"
-    write_config "stop"
-    run_wd
-    ! grep -qE 'systemctl unmask atd' "${SYSEOF_LOG}"
+    ! grep -qE '(apt-get|dpkg|dnf|rpm)[[:space:]]+(remove|purge|uninstall)' "${SYSEOF_LOG}"
 }
