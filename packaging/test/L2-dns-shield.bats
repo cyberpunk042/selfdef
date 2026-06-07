@@ -366,3 +366,22 @@ TOMLEOF
     [ -f "${HOSTS_FILE}" ]
     grep -qE '# .*selfdef.*BEGIN|# .*BEGIN.*selfdef|# selfdef.*dns-shield' "${HOSTS_FILE}"
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO hosts file written when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/hosts. A silent dry-run that
+    # committed would inject the blocklist into the operator's
+    # resolution path AT PREVIEW TIME — any browser/CLI tool
+    # would start failing to resolve blocklisted domains
+    # silently. Locks dry-run-preserves-state on the DNS-block-
+    # list substrate (the operator's blocklist is operator-
+    # explicit choice; agent-preview must not commit it).
+    write_config "base"
+    # Capture pre-existing hosts content (the fixture starts
+    # with operator-pre-existing baseline content per setup).
+    pre_existing="$(wc -l < "${HOSTS_FILE}" 2>/dev/null || echo 0)"
+    DRY_RUN=1 run_wd
+    post_dry="$(wc -l < "${HOSTS_FILE}" 2>/dev/null || echo 0)"
+    [ "${pre_existing}" = "${post_dry}" ]
+}
