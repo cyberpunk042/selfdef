@@ -356,3 +356,22 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-modules-load -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (baseline re-establish on operator out-of-band deletion: missing baseline re-creates cleanly + emits baseline_initial)" {
+    # Sister to brain-wide baseline-re-establish INVARIANTs (the
+    # drop-in re-arm pattern across the brain). Operator may wipe
+    # /var/lib/selfdef/modload.tsv during host triage to force a
+    # fresh inventory. The watchdog MUST re-create the baseline
+    # cleanly on the next scan AND emit baseline_initial (not
+    # crash with read-error AND not silently no-op). Locks
+    # state-resilience on the module-autoload persistence
+    # surveillance surface (T1547.006).
+    seed_benign
+    run_wd                                              # establishes baseline
+    [ -f "${BASELINE}" ]
+    rm -f "${BASELINE}"                                  # operator wipe
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # must re-establish
+    [ -f "${BASELINE}" ]                                # baseline re-created
+    cap | grep -qE '"event":"baseline_initial"'         # signals fresh baseline
+}
