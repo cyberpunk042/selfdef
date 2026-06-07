@@ -352,3 +352,20 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"kernel-yama-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (header-marker discipline: drop-in carries 'selfdef' self-identifying header — head-grep stale-cleanup discipline)" {
+    # Sister to brain-wide header-marker discipline INVARIANTs
+    # across L2 drop-in suites. The kernel-yama-baseline drop-in
+    # MUST carry a comment marker identifying it as selfdef-
+    # managed so a stale-cleanup head -2 grep at uninstall time
+    # can identify which files selfdef owns vs which is operator-
+    # original. Without a marker, a subsequent uninstaller could
+    # not tell apart operator baseline ptrace_scope settings from
+    # selfdef-injected ones — risking accidental rollback of
+    # operator changes. Locks marker-discipline on the kernel-
+    # yama-baseline sysctl.d substrate.
+    write_config "strict"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE '^#.*(selfdef|kernel-yama-baseline|managed)' "${DROPIN}"
+}
