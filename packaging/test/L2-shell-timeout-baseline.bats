@@ -306,3 +306,23 @@ run_wd() {
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"shell-timeout-baseline"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: drop-in writes ONLY its own file in /etc/profile.d/ — never deletes operator drop-ins)" {
+    # Sister to brain-wide no-auto-uninstall + scoped-write
+    # INVARIANTs. The shell-timeout-baseline drop-in lives in
+    # /etc/profile.d/50-selfdef-shell-timeout.sh — the installer
+    # MUST only touch ITS OWN drop-in file and never remove other
+    # operator-installed drop-ins in /etc/profile.d/ (operator
+    # may have site-local TMOUT defaults, motd customizations,
+    # PROMPT_COMMAND, etc.). Silent removal of operator drop-ins
+    # during selfdef install would lose operator-baseline state.
+    # Locks scoped-write contract on the profile.d substrate.
+    # Pre-seed an operator drop-in.
+    printf '#!/bin/bash\nexport OPERATOR_VAR=alive\n' > "${PROFILE_D}/99-operator.sh"
+    chmod 0644 "${PROFILE_D}/99-operator.sh"
+    write_config "standard"
+    run_wd
+    # Operator drop-in MUST remain untouched.
+    [ -f "${PROFILE_D}/99-operator.sh" ]
+    grep -q 'OPERATOR_VAR=alive' "${PROFILE_D}/99-operator.sh"
+}
