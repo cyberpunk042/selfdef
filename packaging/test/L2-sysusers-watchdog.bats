@@ -232,3 +232,28 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (membership-into-shadow: 'm myapp shadow' → alert — shadow group read /etc/shadow = credential dump axis)" {
+    # shadow group read membership lets a user read /etc/shadow
+    # directly = credential dump primitive. Sister axis to disk
+    # group + sudo/wheel/docker memberships already locked.
+    seed_benign
+    run_wd
+    printf 'u myapp 999 "My App Daemon"\nm myapp shadow\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (sample names offending .conf in JSON — operator triage routing)" {
+    # When uid-0 or privileged-group-membership alert fires, sample
+    # MUST surface the .conf basename so operator dashboard routes
+    # triage to the right path. Sister contract: polkit-rules/
+    # nfs-exports/rhosts/tmpfiles/securetty sample-naming pattern.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'u backdoor 0 "root clone"\n' > "${CONFD}/99-very-distinctive-attacker.conf"
+    run_wd
+    cap | grep -q 'very-distinctive-attacker'
+}
