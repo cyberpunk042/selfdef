@@ -375,3 +375,17 @@ Changed entries: 1"
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-uninstall: aide-bridge watchdog NEVER emits package-remove commands on aide)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The aide-bridge watchdog invokes aide --check
+    # to detect filesystem integrity drift but MUST NEVER emit
+    # shell commands that uninstall the aide package itself
+    # (apt/dpkg/dnf/rpm/yum remove|purge|uninstall aide). Silent
+    # auto-removal would tear down the file-integrity
+    # surveillance substrate — T1562.001 Impair Defenses self-
+    # defeat by the very module meant to detect tamper. Locks
+    # anti-package-removal contract on the aide-bridge
+    # substrate.
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+aide'
+}
