@@ -262,3 +262,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"severity":"alert"'
     cap | grep -q '"event":"core_pattern_hijacked"'
 }
+
+@test "INVARIANT (pipe to /home → alert: user-writable hijack coverage on coredump-handler axis)" {
+    # Sister to many other watchdog's /home user-writable
+    # INVARIANT across the brain (rsyslog-exec/syslog-ng/fail2ban-
+    # action /home; krb5-plugins /home). /home is the user-
+    # writable surface — an attacker with a regular user account
+    # can drop a malicious handler in their home and have the
+    # kernel pipe every coredump to it AS ROOT (T1547 — Boot or
+    # Logon Autostart Execution variant via crash-trigger; every
+    # SIGSEGV across the host fires the planted handler).
+    write_pattern "|/home/user/.evil-handler %p"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
