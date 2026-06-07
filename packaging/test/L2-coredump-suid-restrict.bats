@@ -330,3 +330,14 @@ TOMLEOF
     [ -f "${SYSCTL_DROPIN}" ]
     [ "$(stat -c '%a' "${SYSCTL_DROPIN}")" = "644" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on coredump-suid-restrict
+    # installer surface across sysctl + limits.d phases.
+    write_config "suid-only"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"coredump-suid-restrict"')
+    [ "${count}" = "1" ]
+}
