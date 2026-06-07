@@ -233,3 +233,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (module under /home: user-writable hijack on PKCS#11 credential-handler dlopen surface)" {
+    # Sister to the /tmp + /var/tmp + /dev/shm writable-root axes
+    # already locked. /home is the user-writable surface — an
+    # attacker with regular user account can drop a malicious
+    # PKCS#11 provider .so into their home and have it dlopen()'d
+    # into every consumer that walks the p11-kit module dirs
+    # (Firefox, browser-based smart card auth, GnuTLS, SSH agent
+    # forwarders). Locks axis-symmetry across the writable-root
+    # family on the PKCS#11 credential-handler dlopen-load surface
+    # (T1574 — Hijack Execution Flow via shared object substitution
+    # specifically on cryptographic-credential APIs).
+    printf 'module: /home/user/.evil-pkcs11.so\n' > "${MOD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
