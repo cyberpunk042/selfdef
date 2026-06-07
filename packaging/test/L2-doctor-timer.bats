@@ -617,3 +617,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     size=$(stat -c '%s' "${SERVICE}")
     [ "${size}" -gt 100 ]
 }
+@test "INVARIANT (.timer file size > 50 bytes — substantial-timer 76)" {
+    size=$(stat -c '%s' "${TIMER}")
+    [ "${size}" -gt 50 ]
+}

@@ -805,3 +805,9 @@ assert isinstance(data, dict)
     size=$(stat -c '%s' "${apply}")
     [ "${size}" -gt 100 ]
 }
+
+@test "INVARIANT (bridge-l2 install/check.sh size > 50 bytes — substantial-check-script 76-cycle)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install/check.sh"
+    size=$(stat -c '%s' "${chk}")
+    [ "${size}" -gt 50 ]
+}

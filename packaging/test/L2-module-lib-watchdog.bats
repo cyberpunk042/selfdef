@@ -696,3 +696,7 @@ setup() {
     size=$(stat -c '%s' "${LIB}")
     [ "${size}" -gt 500 ]
 }
+@test "INVARIANT (lib file size > 1000 bytes — substantial-comprehensive-lib 76)" {
+    size=$(stat -c '%s' "${LIB}")
+    [ "${size}" -gt 1000 ]
+}

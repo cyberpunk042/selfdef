@@ -785,3 +785,7 @@ assert isinstance(data, dict)
     size=$(stat -c '%s' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml")
     [ "${size}" -gt 200 ]
 }
+@test "INVARIANT (detect-host module.toml size > 500 bytes — substantial-manifest 76)" {
+    size=$(stat -c '%s' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml")
+    [ "${size}" -gt 500 ]
+}

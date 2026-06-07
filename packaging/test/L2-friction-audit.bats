@@ -738,3 +738,7 @@ EOF
     size=$(stat -c '%s' "${SCRIPT}")
     [ "${size}" -gt 200 ]
 }
+@test "INVARIANT (script file size > 500 bytes — substantial-audit-script 76)" {
+    size=$(stat -c '%s' "${SCRIPT}")
+    [ "${size}" -gt 500 ]
+}

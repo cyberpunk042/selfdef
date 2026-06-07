@@ -453,3 +453,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     size=$(stat -c '%s' "${UNIT}")
     [ "${size}" -gt 200 ]
 }
+@test "INVARIANT (postinst file size > 100 bytes — substantial-postinst 76)" {
+    size=$(stat -c '%s' "${POSTINST}")
+    [ "${size}" -gt 100 ]
+}

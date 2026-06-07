@@ -871,3 +871,7 @@ assert isinstance(data, dict)
     size=$(stat -c '%s' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/apply.sh")
     [ "${size}" -gt 100 ]
 }
+@test "INVARIANT (slm-cpu-loop install/check.sh size > 50 bytes — substantial-check-script 76)" {
+    size=$(stat -c '%s' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/check.sh")
+    [ "${size}" -gt 50 ]
+}
