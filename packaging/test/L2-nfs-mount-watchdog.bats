@@ -406,3 +406,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -qE 'mount[[:space:]]+(-o[[:space:]]+)?remount' "${WD}"
     ! grep -qE 'umount[[:space:]]+(-f|-l)?[[:space:]]+\$' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # nfs-mount-watchdog runs ON the timer's scheduled fire —
+    # enumerates NFS/CIFS mounts + checks missing-nosuid axis,
+    # emits a verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the nfs-mount-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/nfs-mount-watchdog/systemd/selfdef-nfs-mount.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
