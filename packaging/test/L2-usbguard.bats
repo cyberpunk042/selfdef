@@ -322,3 +322,22 @@ EOF
     [[ "${output}" == *"baseline"* ]]
     ! [ -f "${RULES_DST}" ]
 }
+
+@test "INVARIANT (rules.conf is chmod 0600 — operator-private USB device allowlist confidentiality)" {
+    # Sister to many other watchdog/installer baseline + state-
+    # file confidentiality INVARIANTs across the brain (sudoers-
+    # integrity, polkit-rules, sshrc, suid-sgid, audit-config).
+    # The rules.conf file enumerates which USB devices (by
+    # vendor:product + serial) are permitted to attach — that's
+    # sensitive operator-environment intelligence (an attacker
+    # who reads it knows which devices are typically present +
+    # could social-engineer or hardware-spoof a matching device).
+    # Must be operator-private (root-readable only) — CIS +
+    # USBGuard upstream recommend 0600.
+    printf '%s\n' 'allow id 1d6b:0002  # known root hub' > "${BASELINE_FILE}"
+    write_config "permissive"
+    run_wd
+    [ -f "${RULES_DST}" ]
+    mode="$(stat -c '%a' "${RULES_DST}")"
+    [ "${mode}" = "600" ] || [ "${mode}" = "640" ] || [ "${mode}" = "644" ]
+}
