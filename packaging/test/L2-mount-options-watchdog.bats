@@ -446,3 +446,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # mount-options-watchdog runs ON the timer's scheduled fire
+    # — scans mount table for missing nodev/nosuid/noexec on
+    # canonical paths, emits a verdict, then exits. Type=simple
+    # would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the mount-options-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/mount-options-watchdog/systemd/selfdef-mount-options.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
