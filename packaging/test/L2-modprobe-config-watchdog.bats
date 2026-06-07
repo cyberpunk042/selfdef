@@ -361,3 +361,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # modprobe-config-watchdog runs ON the timer's scheduled
+    # fire — scans /etc/modprobe.d + /usr/lib/modprobe.d for
+    # install/options-directive injection patterns, emits a
+    # verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the modprobe-config-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/modprobe-config-watchdog/systemd/selfdef-modprobe-config.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
