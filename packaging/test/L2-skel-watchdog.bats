@@ -455,3 +455,18 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (skel-watchdog service ExecStart references its libexec script — service-to-libexec binding contract)" {
+    # Sister to brain-wide systemd ExecStart binding INVARIANT
+    # family. Locks the service-to-libexec binding discipline
+    # on the skel-watchdog substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/skel-watchdog/systemd"
+    found=0
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        if grep -qE '^ExecStart=' "${s}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}

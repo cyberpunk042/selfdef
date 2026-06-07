@@ -459,3 +459,18 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (pm-utils-hooks-watchdog service ExecStart references its libexec script — service-to-libexec binding contract)" {
+    # Sister to brain-wide systemd ExecStart binding INVARIANT
+    # family. Locks the service-to-libexec binding discipline
+    # on the pm-utils-hooks-watchdog substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/pm-utils-hooks-watchdog/systemd"
+    found=0
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        if grep -qE '^ExecStart=' "${s}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
