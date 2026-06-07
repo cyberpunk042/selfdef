@@ -228,3 +228,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd                                              # alert STAYS
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra master-map directives do NOT bypass program: detection)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. autofs master map supports per-
+    # entry options after the map (e.g., --timeout=60, --ghost,
+    # -browse). Operator may add these forward-compat options;
+    # parser must tolerate without altering the program: detection.
+    # program-with-noise still alerts (writable-root program path
+    # surfaces regardless of surrounding option flags).
+    printf '/mnt/data program:/usr/sbin/auto.smb\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/mnt/x program:/tmp/evil.sh --timeout=60 --ghost -browse\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
