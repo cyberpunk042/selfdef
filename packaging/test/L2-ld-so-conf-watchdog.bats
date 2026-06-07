@@ -295,3 +295,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger-line INVARIANTs.
+    printf '/opt/app/lib\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/tmp/.lib1\n/var/tmp/.lib2\n/dev/shm/.lib3\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-ld-so-conf -- ')
+    [ "${main_count}" = "1" ]
+}
