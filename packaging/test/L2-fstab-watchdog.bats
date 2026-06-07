@@ -288,3 +288,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (bind-mount shadowing /var — sister-axis to /etc + /bin + /sbin + /root/.ssh)" {
+    # Sister to the bind-mount shadowing /etc + /bin + /sbin +
+    # /root/.ssh sensitive-path axes already locked. /var is the
+    # canonical writable-state directory containing /var/log
+    # (audit-trail forensics surface), /var/lib (state DBs for
+    # systemd-resolved, dpkg, etc.), /var/spool (mail/cron/at).
+    # A bind-mount shadowing /var lets an attacker substitute a
+    # state-DB that systemd / dpkg / packages then trust. Locks
+    # axis-symmetry on the bind-mount shadow detection across the
+    # sensitive-path family.
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/data/fake-var /var none bind 0 0\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
