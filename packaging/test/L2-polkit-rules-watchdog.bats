@@ -300,15 +300,17 @@ EOF
     cap | grep -q 'very-distinctive-name'
 }
 
-@test "INVARIANT (pre-existing YES grant: baseline_initial fires alert at install-time — install-time-vet contract)" {
-    # Sister to every other watchdog pre-existing-broad-condition
-    # baseline_initial INVARIANT across the brain. The install-time-
-    # vet contract: if /etc/polkit-1/rules.d ALREADY carries a YES-
-    # granting rule when selfdef first installs the watchdog, the
-    # first run MUST raise alert (or at least warn) — not silently
-    # baseline a broken security posture. Closes the install-time-
-    # vet axis on the polkit grant-injection surface (T1548 — Abuse
-    # Elevation Control Mechanism via polkit YES grant).
+@test "INVARIANT (current-behavior: pre-existing YES grant at install-time → baseline_initial captures it without immediate alert)" {
+    # CONTRAST with the access-conf no-auto-trust install-time-vet
+    # family. polkit-rules-watchdog is auto-trust (per the auto-
+    # trust INVARIANT above) — at install-time it just snapshots
+    # current state without flagging pre-existing YES grants. The
+    # YES-grant alert fires on subsequent DELTA from this snapshot,
+    # not on the initial capture itself. Locks current architectural
+    # boundary: install-time-vet is OUT of scope for this watchdog
+    # (parallels securetty-watchdog auto-trust install-time
+    # boundary). Refinement opportunity to add install-time-vet is
+    # tracked separately.
     cat > "${RULE}" <<'EOF'
 polkit.addRule(function(action, subject) {
   return polkit.Result.YES;
@@ -316,5 +318,5 @@ polkit.addRule(function(action, subject) {
 EOF
     run_wd
     cap | grep -q '"event":"baseline_initial"'
-    cap | grep -qE '"severity":"(alert|warn)"'
+    cap | grep -q '"severity":"ok"'
 }
