@@ -299,3 +299,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on openssl-conf surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The openssl-conf-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1574 OpenSSL-provider/engine Hijack
+    # Execution Flow alert. Locks parser contract on the
+    # openssl.cnf detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[providers]\nmodule=/usr/lib/x86_64-linux-gnu/ossl-modules/legacy.so\n' > "${CONF}"
+    run_wd                                              # ok / baseline
+    printf '[providers]\nmodule=/tmp/.evil-provider.so\n' > "${CONF}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
