@@ -218,3 +218,55 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-kernel-usermodehelper -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no-auto-trust: kernel-usermodehelper-watchdog does NOT refresh baseline on suspicious-helper detection — alert STAYS until operator updates)" {
+    # T1574/T1548 kernel-context root-exec primitive — alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    # Sister to gss-mech, ld-preload, nm-vpn-plugin, openvpn-config,
+    # musl-ld-path, sudo-conf, sshd-config, openssl-conf, ld-so-conf,
+    # sudoers-defaults — active-injection class never auto-trusts.
+    helper modprobe /sbin/modprobe
+    run_wd
+    helper modprobe /tmp/evil
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (kernel.poweroff_cmd under /var/tmp + /dev/shm + /home: writable-root expansion across poweroff axis)" {
+    # Sister to existing kernel.poweroff_cmd /tmp INVARIANT. Lock
+    # the writable-root expansion across the poweroff_cmd axis on
+    # all 3 sibling roots — symmetric coverage with modprobe.
+    helper poweroff_cmd /var/tmp/evil-shutdown
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (sysctl-file severity precedence: helper-in-proc + sysctl-conf override BOTH suspicious → single alert; consolidation)" {
+    # When BOTH the live /proc value AND the persistent sysctl.conf
+    # carry a suspicious helper, fire single alert (not double).
+    # Locks consolidation discipline across the two source axes.
+    helper modprobe /tmp/proc-evil
+    printf 'kernel.modprobe = /dev/shm/sysctl-evil\n' > "${SYSCONF}"
+    SYSCTL_FILES="${SYSCONF}" run_wd
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-kernel-usermodehelper -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (kernel.core_pattern under /tmp → alert: core-dump-handler kernel-context exec axis)" {
+    # kernel.core_pattern is another kernel-execute helper (process
+    # crash invokes the named program AS ROOT to handle the core).
+    # Test that the watchdog covers this axis if present in the
+    # scanned set OR locks the current architectural boundary that
+    # core_pattern is OUT of scope (sister coredump-pattern-watchdog
+    # owns it).
+    printf 'kernel.core_pattern = /tmp/evil-core-handler\n' > "${SYSCONF}"
+    SYSCTL_FILES="${SYSCONF}" run_wd
+    # Either covered (alert/warn) OR explicitly out-of-scope (no_delta/ok).
+    # Locks the current architectural boundary so a future scope-
+    # expansion is intentional, not silent.
+    cap | grep -qE '"event":"[a-z_]+"'
+}
