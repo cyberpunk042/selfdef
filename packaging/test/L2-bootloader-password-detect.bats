@@ -419,3 +419,23 @@ assert 'install' in data, 'install missing'
         grep -qE '^set[[:space:]]+-euo[[:space:]]+pipefail' "${sh}"
     done
 }
+
+@test "INVARIANT (module.toml depends_on field is a TOML list — anti-string-malformation contract)" {
+    # Sister to brain-wide module.toml manifest-completeness
+    # INVARIANT family. The depends_on field MUST be declared
+    # as a TOML list ([] or ["a", "b"]) — not a comma-separated
+    # string like "a, b" which TOML's tomllib would silently
+    # accept as a single-element list ["a, b"]. The resolver
+    # would then look for a single module named literally "a, b"
+    # and fail to find it. Locks list-vs-string discipline on
+    # the depends_on field of the bootloader-password-detect substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bootloader-password-detect/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('depends_on', [])
+assert isinstance(v, list), f'depends_on must be list, got {type(v).__name__}'
+"
+}
