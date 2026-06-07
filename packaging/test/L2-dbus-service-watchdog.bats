@@ -432,3 +432,22 @@ EOF
     [ -f "${svc}" ]
     grep -qE '^Type=oneshot' "${svc}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. dbus-service-watchdog manifest declares install +
+    # profile gating the resolver enforces; malformed manifest
+    # wedges the D-Bus service-file scanner baseline. Python's
+    # tomllib is the canonical parser. Locks anti-malformed-
+    # manifest on the dbus-service-watchdog substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/dbus-service-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'dbus-service-watchdog', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
