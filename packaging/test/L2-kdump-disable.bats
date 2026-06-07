@@ -309,7 +309,7 @@ TOMLEOF
     write_config "mask"
     run -0 env PATH="${BIN}:${PATH}" \
         SYSEOF_LOG="${SYSEOF_LOG}" \
-        SELFDEF_KDUMP_CONFIG="${CONF}" \
+        SELFDEF_KDUMP_DISABLE_CONFIG="${CONF}" \
         KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 \
         bash "${WD}"
     # emit_status is a single-line JSON to stdout.
