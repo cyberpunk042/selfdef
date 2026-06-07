@@ -344,3 +344,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-share'
 }
+
+@test "INVARIANT (cifs/smbfs missing-nosuid axis: cifs mount without nosuid → alert; Windows-share share-and-share family coverage)" {
+    # Sister to nfs/nfs4 missing-nosuid INVARIANT already locked
+    # and sshfs missing-nosuid INVARIANT already locked. cifs
+    # (SMB/CIFS) is the Windows-share equivalent network-mount
+    # surface — attackers can plant setuid binaries on a
+    # malicious SMB share AS the share-owner, and if cifs mount
+    # lacks nosuid, the binary inherits root on the mounting
+    # host. Locks axis-coverage on the cifs/smbfs network-mount
+    # nosuid contract symmetric to the nfs + sshfs family on
+    # T1078 Valid Accounts surface.
+    mk_findmnt
+    write_mounts $'cifs\t/mnt/winshare\trw,relatime'
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
