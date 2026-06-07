@@ -307,3 +307,35 @@ EOF
     # baseline must NOT be auto-refreshed.
     [ "${pre_sha}" = "${post_sha}" ]
 }
+
+@test "INVARIANT (check.sh on file APPEND surfaces drift — content-grew, not just content-replaced)" {
+    # Sister to drift-detection INVARIANTs already locked (strict
+    # rejects content-replaced + warn-only-passes-content-
+    # replaced). Locks the SHA256-doesn't-care-about-size-only
+    # contract — content-APPEND (content grew without replacing
+    # original bytes) MUST also surface drift because SHA256 of
+    # original-N-bytes != SHA256 of original-N-bytes+appended-
+    # M-bytes. The watchdog cannot have a "size-only" shortcut
+    # that would miss tamper patterns like log-tampering
+    # (T1565.001) where attacker appends fake entries without
+    # rewriting existing log content. Closes the size-vs-hash
+    # discipline axis on the file-integrity surveillance
+    # surface.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_INTEGRITY_SENTINEL_CONFIG="${TEST_DIR}/integrity.toml"
+    echo "${TEST_DIR}/target.txt" > "${TEST_DIR}/paths.txt"
+    echo "original line 1" > "${TEST_DIR}/target.txt"
+    cat > "${SELFDEF_INTEGRITY_SENTINEL_CONFIG}" <<EOF
+profile = "strict"
+paths_file = "${TEST_DIR}/paths.txt"
+baseline_path = "${TEST_DIR}/baseline.sha256"
+on_missing = "create"
+EOF
+    bash "${INSTALL_DIR}/apply.sh" >/dev/null 2>&1
+    echo "appended line 2" >> "${TEST_DIR}/target.txt"
+    run bash "${INSTALL_DIR}/check.sh"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_INTEGRITY_SENTINEL_CONFIG
+    # strict profile MUST fail (exit non-zero) on append-drift.
+    [ "${status}" -ne 0 ]
+}
