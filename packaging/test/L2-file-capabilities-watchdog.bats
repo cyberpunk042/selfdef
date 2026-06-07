@@ -343,3 +343,22 @@ mk_cap() { printf '#!/bin/sh\n' > "${ROOT}/$1"; chmod 0755 "${ROOT}/$1"; setcap 
     main_count=$(cap | grep -cE '^-t selfdef-file-caps -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (cap_sys_admin dangerous-cap detect — almost-root super-capability — also alerts)" {
+    # Sister to the cap_setuid + cap_dac_override + cap_sys_ptrace +
+    # cap_sys_module dangerous-cap axes in the capability-conf-
+    # watchdog already locked. cap_sys_admin is the "almost-root"
+    # super-capability covering mount/namespace/firmware-load/kexec.
+    # Lock its coverage on the file-capabilities surface (xattr-
+    # granted-cap binary axis, sister axis to pam_cap login-grant
+    # axis). Closes axis-parity between the two capability-tracking
+    # watchdogs on the cap_sys_admin super-capability detection.
+    mk_cap baseline cap_net_raw+ep
+    run_wd
+    mk_cap sys_admin_binary cap_sys_admin+ep
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"dangerous_capability_added"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q 'sys_admin_binary'
+}
