@@ -324,3 +324,14 @@ TOMLEOF
     [ -f "${DROPIN}" ]
     [ "$(stat -c '%a' "${DROPIN}")" = "644" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on file-protections-baseline
+    # installer surface across 4-sysctl + drop-in phases.
+    write_config "baseline"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"file-protections-baseline"')
+    [ "${count}" = "1" ]
+}
