@@ -273,3 +273,18 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # guardian unit substrate.
     grep -qE '^ExecStart=/usr/local/bin/selfdef-guardian' "${UNIT}"
 }
+
+@test "INVARIANT (guardian.service file has [Unit] + [Service] + [Install] section headers — systemd INI structural contract)" {
+    # Sister to brain-wide systemd INI-structure INVARIANT
+    # family. A systemd .service file MUST contain three
+    # canonical section headers: [Unit] (metadata + ordering),
+    # [Service] (exec contract + hardening), [Install]
+    # (enable-graph WantedBy). Without all three, systemd's
+    # parser handles the unit as malformed. The guardian.
+    # service is a complete unit — all three must be present
+    # at start-of-line. Locks the 3-section INI structural
+    # discipline on the guardian service substrate.
+    grep -qE '^\[Unit\]' "${UNIT}"
+    grep -qE '^\[Service\]' "${UNIT}"
+    grep -qE '^\[Install\]' "${UNIT}"
+}

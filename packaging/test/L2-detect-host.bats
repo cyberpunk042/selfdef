@@ -433,3 +433,28 @@ cat = data.get('category', '')
 assert cat, f'category field must be non-empty, got {cat!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml declares provides field as TOML list — capability-export contract)" {
+    # Sister to brain-wide module.toml provides INVARIANT
+    # family. detect-host provides the foundational
+    # event-bus + finding-store + sigma-correlator
+    # capabilities that other modules consume via the
+    # `consumes` field. The provides field MUST be a TOML
+    # list type (not a string) so the resolver can iterate
+    # the provided capabilities + match consumers against
+    # each. A regression that swapped to a string would
+    # silently treat "event-bus,finding-store" as a single
+    # capability name + break consumer matching. Locks the
+    # capability-export TOML-list discipline on the
+    # detect-host substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+prov = data.get('provides')
+assert isinstance(prov, list), f'provides must be a TOML list, got {type(prov).__name__}'
+assert len(prov) >= 1, f'provides must declare ≥1 capability, got {prov!r}'
+"
+}

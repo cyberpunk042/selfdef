@@ -399,3 +399,23 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     # timer substrate.
     grep -qE '^Documentation=man:selfdefctl' "${TIMER}"
 }
+
+@test "INVARIANT (.service file has [Unit] + [Service] + [Install] section headers — systemd INI structural contract)" {
+    # Sister to brain-wide systemd INI-structure INVARIANT
+    # family. A systemd .service file MUST contain three
+    # canonical section headers: [Unit] (metadata + ordering),
+    # [Service] (exec contract + hardening), [Install]
+    # (enable-graph WantedBy). Without all three, systemd's
+    # parser handles the unit as malformed: missing [Unit]
+    # strips Description/After/Documentation; missing
+    # [Service] makes ExecStart/Type a no-op; missing
+    # [Install] makes systemctl enable a no-op. The doctor.
+    # service is a complete unit — all three must be present
+    # at start-of-line. A regression that collapsed sections
+    # or merged them would break systemd parsing. Locks the
+    # 3-section INI structural discipline on the doctor
+    # service substrate.
+    grep -qE '^\[Unit\]' "${SERVICE}"
+    grep -qE '^\[Service\]' "${SERVICE}"
+    grep -qE '^\[Install\]' "${SERVICE}"
+}

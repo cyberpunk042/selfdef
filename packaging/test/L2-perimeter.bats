@@ -475,3 +475,23 @@ name = data.get('metadata', {}).get('name', '')
 assert name == 'sovereign-kernel-fence', f'metadata.name must be sovereign-kernel-fence (sain-01 §6 verbatim), got {name!r}'
 "
 }
+
+@test "INVARIANT (YAML spec.kprobes[0].selectors is non-empty list — perimeter MUST have ≥1 enforcement selector)" {
+    # Sister to brain-wide selectors-non-empty INVARIANT
+    # family. A Tetragon kprobe without selectors is
+    # syntactically valid but semantically inert — the kprobe
+    # would attach + observe execve calls but trigger no
+    # matchAction. A regression dropping the selectors block
+    # would leave the perimeter as an observability-only
+    # tap, NOT an enforcement fence. The MS047 SovereignOS
+    # perimeter is enforcement-by-design; ≥1 selector with
+    # matchActions=Sigkill is foundational. Locks the
+    # non-empty-selectors enforcement-presence discipline on
+    # the perimeter YAML substrate.
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+sels = data['spec']['kprobes'][0].get('selectors', [])
+assert isinstance(sels, list) and len(sels) > 0, f'selectors must be non-empty list (enforcement presence), got {sels!r}'
+"
+}

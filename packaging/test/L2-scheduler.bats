@@ -452,3 +452,16 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # unit substrate.
     ! grep -qE '^RemainAfterExit=' "${UNIT}"
 }
+
+@test "INVARIANT (.service file has [Unit] + [Service] + [Install] section headers — systemd INI structural contract)" {
+    # Sister to brain-wide systemd INI-structure INVARIANT
+    # family. The scheduler.service is a complete unit — all
+    # three canonical section headers ([Unit] + [Service] +
+    # [Install]) must be present at start-of-line. Without
+    # all three, systemd's parser handles the unit as
+    # malformed. Locks the 3-section INI structural
+    # discipline on the scheduler service substrate.
+    grep -qE '^\[Unit\]' "${UNIT}"
+    grep -qE '^\[Service\]' "${UNIT}"
+    grep -qE '^\[Install\]' "${UNIT}"
+}

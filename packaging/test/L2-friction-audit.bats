@@ -553,3 +553,18 @@ EOF
     # substrate.
     grep -qE 'printf.*"class_uid":%d,"severity_id":%d' "${SCRIPT}"
 }
+
+@test "INVARIANT (script trap-cleanup on EXIT — anti-tempfile-leak contract)" {
+    # Sister to brain-wide trap-cleanup INVARIANT family. Long-
+    # running scripts that mktemp transient files MUST install
+    # an EXIT trap that cleans them up — without trap rm -rf
+    # \${tmp}, an unexpected exit (SIGTERM during systemd
+    # watchdog timeout, kill -9, exception) leaves orphan
+    # /tmp/ entries that accumulate over hundreds of cron
+    # cycles. The friction-audit script's mktemp usage MUST
+    # be paired with an EXIT trap. Locks the trap-cleanup
+    # tempfile-discipline contract on the friction-audit
+    # script substrate.
+    grep -qE 'trap.*EXIT|trap .* INT TERM EXIT' "${SCRIPT}" || \
+        ! grep -qE 'mktemp' "${SCRIPT}"
+}

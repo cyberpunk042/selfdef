@@ -561,3 +561,26 @@ assert isinstance(dep, list), f'depends_on must be a TOML list, got {type(dep)._
 assert 'hardware-tune-cache' in dep, f'depends_on must include hardware-tune-cache (SD-R64 substrate), got {dep!r}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml declares consumes field as TOML list — capability-consumer contract)" {
+    # Sister to brain-wide module.toml consumes INVARIANT
+    # family. slm-cpu-loop consumes hardware-tune-env
+    # (provided by hardware-tune-cache for the SD-R68 cycle-3
+    # predicate set). The consumes field MUST be a TOML list
+    # type so the resolver can iterate consumed capabilities
+    # + verify a provider exists for each. A regression to a
+    # string would silently treat "hardware-tune-env,other"
+    # as a single capability name + fail to resolve. Locks
+    # the capability-consumer TOML-list discipline on the
+    # slm-cpu-loop substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+cons = data.get('consumes')
+assert isinstance(cons, list), f'consumes must be a TOML list, got {type(cons).__name__}'
+assert 'hardware-tune-env' in cons, f'consumes must include hardware-tune-env (SD-R68 substrate), got {cons!r}'
+"
+}

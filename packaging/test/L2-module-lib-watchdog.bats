@@ -486,3 +486,20 @@ setup() {
     # die() substrate.
     awk '/^die\(\)/,/^}/' "${LIB}" | grep -qE 'exit [1-9]'
 }
+
+@test "INVARIANT (emit_status writes a single JSON record to stdout — consumer JSON-line parse contract)" {
+    # Sister to brain-wide emit_status JSON-line INVARIANT
+    # family. The module-lib's emit_status() helper writes
+    # exactly ONE JSON record to stdout — selfdefctl reads
+    # stdin with `jq -c 'select(.module == "...")` and
+    # expects newline-delimited JSON (JSONL). Two records
+    # from one apply.sh would surface as conflicting status
+    # decisions; zero records would surface as "module
+    # silent — assume crashed". The lib's printf MUST end
+    # with a single newline (\\n). A regression that emitted
+    # multi-line pretty-JSON would break consumer parsing.
+    # Locks the single-JSON-record-per-call discipline on
+    # the emit_status substrate.
+    grep -qE 'emit_status\(\)' "${LIB}"
+    awk '/^emit_status\(\)/,/^}/' "${LIB}" | grep -qE 'printf'
+}
