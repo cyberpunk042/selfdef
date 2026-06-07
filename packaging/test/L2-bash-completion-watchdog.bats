@@ -363,3 +363,16 @@ seed_benign() {
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(HOOKD|FILE|file|COMPLETION)'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # bash-completion-watchdog runs ON the timer's scheduled
+    # fire — scans /etc/bash_completion.d for injection patterns
+    # in completion scripts, emits a verdict, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the bash-completion-
+    # watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/bash-completion-watchdog/systemd/selfdef-bash-completion.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
