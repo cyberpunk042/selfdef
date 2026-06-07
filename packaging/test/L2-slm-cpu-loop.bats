@@ -325,3 +325,17 @@ INSTALL_DIR="${MODULE_DIR}/install"
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"slm-cpu-loop"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (check.sh + uninstall.sh use set -euo pipefail — fail-loud invariant across full module surface)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # apply.sh's fail-loud already locked; check.sh + uninstall.sh
+    # are the OTHER two operator-facing scripts in the module
+    # surface. Silent check.sh failure would mask slm-loop.env
+    # corruption from operator observation; silent uninstall.sh
+    # failure leaves the SLM-on-CPU agent loop runtime layer in
+    # half-removed state during package purge. Locks fail-loud
+    # contract on the full module-script surface (apply + check +
+    # uninstall) on the slm-cpu-loop substrate.
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/check.sh"
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
+}
