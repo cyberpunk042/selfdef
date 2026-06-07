@@ -313,3 +313,24 @@ Scanned files: 1"
     run_wd
     cap | grep -q 'distinctive-attacker-malware'
 }
+
+@test "INVARIANT (multi-FOUND consolidation: 5 hits in one scan → single consolidated alert; aggregation discipline)" {
+    # Sister to brain-wide multi-item-single-alert consolidation
+    # INVARIANTs across the brain (anacrontab-watchdog 3-job,
+    # account-watchdog 2-uid0, access-conf-watchdog 3-broad-permit).
+    # When clamscan reports multiple FOUND hits in one scan, the
+    # watchdog MUST consolidate into a SINGLE alert JSON record
+    # (not 5 separate alerts that would flood operator dashboard).
+    # Locks the consolidation discipline alongside the SDD-062
+    # single-line consumer contract. Operator sees one alert with
+    # 5 file paths in sample, not 5 alerts.
+    mk_clam 1 "/tmp/.evil1: Win.Trojan.A FOUND
+/var/tmp/.evil2: Win.Trojan.B FOUND
+/dev/shm/.evil3: Linux.Trojan.C FOUND
+/home/alice/.evil4: Linux.Miner.D FOUND
+/opt/.evil5: Linux.Backdoor.E FOUND"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-clamav -- ')
+    [ "${main_count}" = "1" ]
+}
