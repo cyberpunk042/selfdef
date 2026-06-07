@@ -425,3 +425,17 @@ v = data.get('depends_on', [])
 assert isinstance(v, list), f'depends_on must be list, got {type(v).__name__}'
 "
 }
+
+@test "INVARIANT (module.toml conflicts field is a TOML list — anti-string-malformation contract on conflicts)" {
+    # Sister to brain-wide module.toml manifest-completeness
+    # family. Locks list-vs-string discipline on conflicts.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/sysctl-network-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('conflicts', [])
+assert isinstance(v, list), f'conflicts must be list, got {type(v).__name__}'
+"
+}
