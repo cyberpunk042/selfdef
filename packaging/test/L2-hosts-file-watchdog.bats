@@ -275,3 +275,21 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (sensitive-domain: anthropic.com / api.anthropic / openai.com — AI-service-pin → alert (LLM API MITM))" {
+    # Sister to the package + supply-chain + CA + NTP axes
+    # already locked. Pinning AI-service-API domains lets an
+    # attacker MITM the LLM API responses — Claude / GPT calls
+    # would route to attacker-controlled servers returning
+    # crafted responses. On AI-substrate-critical hosts (which
+    # this project IS), this is the most-impactful MITM axis
+    # for the modern attack surface. T1565.002 — Transmitted
+    # Data Manipulation via API-endpoint hijacking. Locks the
+    # AI-service-domain axis on the /etc/hosts pin surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '127.0.0.1 localhost\n0.0.0.0 api.anthropic.com\n' > "${HOSTS}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
