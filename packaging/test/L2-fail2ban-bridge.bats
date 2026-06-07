@@ -360,3 +360,14 @@ TOMLEOF
     [ -f "${JAIL_D}/50-selfdef.conf" ]
     [ "$(stat -c '%a' "${JAIL_D}/50-selfdef.conf")" = "644" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on fail2ban-bridge installer
+    # surface across jail.d-drop-in + restart phases.
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"fail2ban-bridge"')
+    [ "${count}" = "1" ]
+}
