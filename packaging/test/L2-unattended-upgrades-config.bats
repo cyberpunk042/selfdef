@@ -380,3 +380,23 @@ EOF
     dropin="${APT_CONFD}/50selfdef-unattended-upgrades"
     [ ! -f "${dropin}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${dropin}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. unattended-upgrades-config manifest declares
+    # install + profile gating (security-only / all-updates)
+    # the resolver enforces; malformed manifest wedges the
+    # CVE-patch auto-install baseline. Python's tomllib is the
+    # canonical parser. Locks anti-malformed-manifest on the
+    # unattended-upgrades-config substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/unattended-upgrades-config/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'unattended-upgrades-config', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
