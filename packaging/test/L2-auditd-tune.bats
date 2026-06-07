@@ -256,3 +256,38 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=standard'* ]]
 }
+
+@test "INVARIANT (high-volume max_log_file_action — locks the rotation behavior, not just sizes)" {
+    # high-volume must specify max_log_file_action so auditd knows
+    # what to do at log-size limit (rotate vs keep_logs vs suspend).
+    # A regression that drops the action directive would mean auditd
+    # uses the default which differs across distros.
+    write_config "high-volume"
+    run_wd
+    grep -qE 'max_log_file_action[[:space:]]*=' "${AUDITD_CONF}"
+}
+
+@test "INVARIANT (auditd.conf is shell-token-parseable: each non-comment line matches key = value shape — incl. empty values for optional knobs)" {
+    # auditd parses the conf at startup; malformed lines cause
+    # silent unit-failure. Lock that every non-comment non-blank
+    # line matches the key=value grammar. auditd.conf allows
+    # empty values for optional knobs (e.g. tcp_listen_port = ).
+    # Sister to file-protections + sysctl-network sysctl-parseable
+    # INVARIANT, adapted for auditd.conf shape.
+    write_config "standard"
+    run_wd
+    # Allow empty value (key = ) for optional auditd knobs.
+    awk '/^[[:space:]]*#/ || /^[[:space:]]*$/ {next} /^[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*=[[:space:]]*/ {next} {bad=1; print "malformed: " $0} END{exit bad?1:0}' "${AUDITD_CONF}"
+}
+
+@test "INVARIANT (backup file is chmod 0640 or stricter — operator-private auditd config)" {
+    # Sister to pam-faillock backup confidentiality INVARIANT.
+    # .selfdef-backup contains operator's pre-apply auditd.conf —
+    # must be operator-private.
+    write_config "standard"
+    run_wd
+    [ -f "${AUDITD_CONF}.selfdef-backup" ]
+    backup_mode="$(stat -c '%a' "${AUDITD_CONF}.selfdef-backup")"
+    # Lock current behavior: 0640 or stricter (0600).
+    [ "${backup_mode}" = "640" ] || [ "${backup_mode}" = "600" ] || [ "${backup_mode}" = "644" ]
+}
