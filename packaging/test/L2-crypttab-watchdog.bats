@@ -264,3 +264,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (keyscript under /dev/shm — tmpfs writable-root variant on the keyscript axis)" {
+    # Sister to the keyscript-under-/tmp + /var/tmp + /home axes
+    # already locked. /dev/shm is tmpfs world-writable on most
+    # distros — an attacker-planted keyscript there would be reset
+    # at reboot but if the attacker can sync this exec across a
+    # reboot via a sister persistence hook (e.g. a systemd-power-
+    # hook that re-writes /dev/shm/.getkey at boot), the LUKS
+    # unlock surface is hijacked. Locks the tmpfs writable-root
+    # axis on the keyscript surface (T1546 — Event Triggered
+    # Execution via LUKS unlock keyscript).
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'data /dev/sda2 none luks,keyscript=/dev/shm/.getkey\n' > "${CRYPTTAB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
