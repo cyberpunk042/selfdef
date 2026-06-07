@@ -384,3 +384,21 @@ run_wd() {
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"host-sentinel"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (every shipped policy declares apiVersion: cilium.io/v1alpha1 — Tetragon CRD apiVersion contract)" {
+    # Sister to brain-wide Tetragon CRD apiVersion/kind/
+    # metadata.name INVARIANTs (agent-guard, etc.). Tetragon
+    # CRD requires apiVersion: cilium.io/v1alpha1 (the Cilium-
+    # Tetragon TracingPolicy CRD shape). Without apiVersion,
+    # kubectl apply -f silently rejects the manifest as an
+    # unknown CRD — partial policy load + half-enforced runtime
+    # guard. Locks apiVersion axis on the host-sentinel
+    # Tetragon-policy substrate (LD_PRELOAD + kmod watch
+    # policies).
+    write_config "audit"
+    run_wd
+    for f in "${POLICY_DIR}"/*.yaml; do
+        [ -f "${f}" ] || continue
+        grep -qE '^apiVersion:[[:space:]]+cilium\.io/v1alpha1' "${f}"
+    done
+}
