@@ -318,3 +318,11 @@ TOMLEOF
     run_wd
     grep -qE '^Persistent=true' "${SYSTEMD_DIR}/selfdef-entropy.timer"
 }
+
+@test "INVARIANT (timer + service + libexec unit chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs.
+    write_config "report"
+    run_wd
+    [ "$(stat -c '%a' "${SYSTEMD_DIR}/selfdef-entropy.timer")" = "644" ]
+    [ "$(stat -c '%a' "${SYSTEMD_DIR}/selfdef-entropy.service")" = "644" ]
+}
