@@ -337,3 +337,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # musl-ld-path-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/ld-musl-*.path for writable-root entries, emits
+    # a verdict, then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the musl-ld-path-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/musl-ld-path-watchdog/systemd/selfdef-musl-ld-path.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
