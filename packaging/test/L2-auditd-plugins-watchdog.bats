@@ -357,3 +357,23 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: auditd-plugins-watchdog NEVER deletes plugin.d entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # auditd-plugins-watchdog DETECTS T1562.001 SIEM-evasion
+    # via dispatcher plugin hijack but MUST NEVER emit sed/awk/
+    # rm commands to auto-clean the plugin entry. The detected
+    # plugin may be operator-legitimate (custom SIEM forwarder,
+    # syslog bridge, splunk forwarder). Silent auto-delete
+    # would destroy operator baseline state AND could break
+    # operator's intended audit-event forwarding pipeline.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the auditd-plugins surveillance substrate.
+    printf 'active = yes\npath = /tmp/.evil\ntype = always\n' > "${CONF}"
+    run_wd
+    [ -f "${CONF}" ]
+    grep -q 'path' "${CONF}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*audit'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+}
