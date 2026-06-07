@@ -237,3 +237,21 @@ MODULE_DIR="${BATS_TEST_DIRNAME}/../../modules/detect-host"
     # manifest substrate.
     grep -qE '^consumes[[:space:]]*=[[:space:]]*\[\]' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT ([profiles] section present + default = \"default\" — manifest declares single-profile contract for debian-package modules)" {
+    # Sister to brain-wide module.toml manifest-completeness
+    # contract family. detect-host's manifest declares a
+    # [profiles] section even though debian-package modules
+    # have no script-driven profile-switching: this lets the
+    # dashboard's profile-picker render the canonical "default"
+    # profile in the UI consistently with script-kind modules.
+    # The default = "default" key + available = ["default"] list
+    # locks the single-profile contract for the foundational
+    # detect-host module. Renaming "default" or omitting
+    # [profiles] would break the dashboard's profile-picker
+    # default-selection logic. Locks the [profiles] single-
+    # profile manifest contract on the detect-host substrate.
+    grep -qE '^\[profiles\]' "${MODULE_DIR}/module.toml"
+    grep -qE '^default[[:space:]]*=[[:space:]]*"default"' "${MODULE_DIR}/module.toml"
+    grep -qE 'available[[:space:]]*=[[:space:]]*\[[[:space:]]*"default"[[:space:]]*\]' "${MODULE_DIR}/module.toml"
+}
