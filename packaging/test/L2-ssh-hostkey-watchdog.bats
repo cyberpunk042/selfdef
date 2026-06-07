@@ -420,3 +420,25 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # Watchdog must not change pub-key file perms.
     [ "$(stat -c '%a' "${KEYDIR}/ssh_host_ed25519_key.pub")" = "644" ]
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs. The
+    # selfdef-ssh-hostkey tag MUST fire EXACTLY ONCE per scan
+    # regardless of how many host-key changes surface (multi-key
+    # swap scenario). Multi-line output would break SDD-062
+    # downstream JSON-line consumer. Locks consolidation
+    # discipline on the SSH MITM detection substrate (host-key
+    # change = canonical MITM signal).
+    mk_key ed25519 "ssh-ed25519 ORIGINAL_ED root@host"
+    mk_key rsa "ssh-rsa ORIGINAL_RSA root@host"
+    mk_key ecdsa "ecdsa-sha2-nistp256 ORIGINAL_EC root@host"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Swap all three host keys simultaneously (MITM scenario).
+    mk_key ed25519 "ssh-ed25519 ATTACKER_ED root@host"
+    mk_key rsa "ssh-rsa ATTACKER_RSA root@host"
+    mk_key ecdsa "ecdsa-sha2-nistp256 ATTACKER_EC root@host"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-ssh-hostkey -- ')
+    [ "${main_count}" = "1" ]
+}
