@@ -1147,3 +1147,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/install/check.sh"
     head -1 "${chk}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (ssh-moduli-harden install/uninstall.sh has shebang line — POSIX-conformant 81)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/install/uninstall.sh"
+    head -1 "${uni}" | grep -qE '^#!'
+}

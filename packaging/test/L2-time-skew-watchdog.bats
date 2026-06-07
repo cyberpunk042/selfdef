@@ -1030,3 +1030,9 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         head -50 "${s}" | grep -qE '^set -'
     done
 }
+
+@test "INVARIANT (time-skew-watchdog module.toml size > 200 bytes — substantial-watchdog-manifest 81)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/module.toml"
+    size=$(stat -c '%s' "${mtoml}")
+    [ "${size}" -gt 200 ]
+}

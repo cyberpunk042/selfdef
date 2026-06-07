@@ -1019,3 +1019,9 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         head -50 "${s}" | grep -qE '^set -'
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog module.toml size > 200 bytes — substantial-watchdog-manifest 81)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/module.toml"
+    size=$(stat -c '%s' "${mtoml}")
+    [ "${size}" -gt 200 ]
+}

@@ -1065,3 +1065,9 @@ seed_benign() {
         head -50 "${s}" | grep -qE '^set -'
     done
 }
+
+@test "INVARIANT (auditd-plugins-watchdog module.toml size > 200 bytes — substantial-watchdog-manifest 81)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-plugins-watchdog/module.toml"
+    size=$(stat -c '%s' "${mtoml}")
+    [ "${size}" -gt 200 ]
+}

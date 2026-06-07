@@ -1090,3 +1090,9 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         head -50 "${s}" | grep -qE '^set -'
     done
 }
+
+@test "INVARIANT (apt-hooks-watchdog module.toml size > 200 bytes — substantial-watchdog-manifest 81)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/module.toml"
+    size=$(stat -c '%s' "${mtoml}")
+    [ "${size}" -gt 200 ]
+}

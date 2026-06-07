@@ -1135,3 +1135,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/apparmor-baseline/install/check.sh"
     head -1 "${chk}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (apparmor-baseline install/uninstall.sh has shebang line — POSIX-conformant 81)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/apparmor-baseline/install/uninstall.sh"
+    head -1 "${uni}" | grep -qE '^#!'
+}

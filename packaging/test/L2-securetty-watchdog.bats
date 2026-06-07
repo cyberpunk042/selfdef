@@ -1026,3 +1026,9 @@ assert 'install' in data, 'install missing'
         head -50 "${s}" | grep -qE '^set -'
     done
 }
+
+@test "INVARIANT (securetty-watchdog module.toml size > 200 bytes — substantial-watchdog-manifest 81)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/securetty-watchdog/module.toml"
+    size=$(stat -c '%s' "${mtoml}")
+    [ "${size}" -gt 200 ]
+}

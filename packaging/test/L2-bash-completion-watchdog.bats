@@ -1051,3 +1051,9 @@ seed_benign() {
         head -50 "${s}" | grep -qE '^set -'
     done
 }
+
+@test "INVARIANT (bash-completion-watchdog module.toml size > 200 bytes — substantial-watchdog-manifest 81)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bash-completion-watchdog/module.toml"
+    size=$(stat -c '%s' "${mtoml}")
+    [ "${size}" -gt 200 ]
+}

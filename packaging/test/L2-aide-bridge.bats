@@ -1035,3 +1035,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/aide-bridge/install/check.sh"
     head -1 "${chk}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (aide-bridge install/uninstall.sh has shebang line — POSIX-conformant 81)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/aide-bridge/install/uninstall.sh"
+    head -1 "${uni}" | grep -qE '^#!'
+}
