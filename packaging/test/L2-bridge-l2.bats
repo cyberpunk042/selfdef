@@ -757,3 +757,8 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
     apply="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install/apply.sh"
     [ -s "${apply}" ]
 }
+
+@test "INVARIANT (bridge-l2 install/check.sh declares non-empty body — non-trivial-script contract)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/install/check.sh"
+    [ -s "${chk}" ]
+}

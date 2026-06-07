@@ -688,3 +688,7 @@ assert s == True, f'syscall must be True, got {s!r}'
     lines=$(wc -l < "${YAML}")
     [ "${lines}" -gt 10 ]
 }
+@test "INVARIANT (YAML has >20 lines including comments — non-trivial-policy-file contract)" {
+    lines=$(wc -l < "${YAML}")
+    [ "${lines}" -gt 20 ]
+}

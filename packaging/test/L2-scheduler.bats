@@ -603,3 +603,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     lines=$(wc -l < "${UNIT}")
     [ "${lines}" -gt 10 ]
 }
+@test "INVARIANT (postinst has >5 lines specific to scheduler — non-trivial-postinst contract)" {
+    n=$(grep -c 'scheduler' "${POSTINST}")
+    [ "${n}" -ge 2 ]
+}

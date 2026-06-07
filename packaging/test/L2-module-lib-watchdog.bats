@@ -669,3 +669,7 @@ setup() {
     lines=$(wc -l < "${LIB}")
     [ "${lines}" -gt 50 ]
 }
+@test "INVARIANT (lib defines >5 functions — multi-helper library contract)" {
+    n=$(grep -cE '^[a-zA-Z_][a-zA-Z0-9_]*\(\)' "${LIB}")
+    [ "${n}" -gt 5 ]
+}

@@ -589,3 +589,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     lines=$(wc -l < "${SERVICE}")
     [ "${lines}" -gt 5 ]
 }
+@test "INVARIANT (.timer file has >5 lines of directives — non-trivial-timer-file contract)" {
+    lines=$(wc -l < "${TIMER}")
+    [ "${lines}" -gt 5 ]
+}

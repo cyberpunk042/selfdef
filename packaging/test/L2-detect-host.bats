@@ -747,3 +747,8 @@ assert 'sigma-correlator' in p, f'must provide sigma-correlator, got {p!r}'
     lines=$(wc -l < "${mtoml}")
     [ "${lines}" -gt 10 ]
 }
+@test "INVARIANT (detect-host module.toml has >20 lines including comments — non-trivial-manifest contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    lines=$(wc -l < "${mtoml}")
+    [ "${lines}" -gt 20 ]
+}

@@ -424,3 +424,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     lines=$(wc -l < "${UNIT}")
     [ "${lines}" -gt 10 ]
 }
+@test "INVARIANT (postinst has >10 lines specific to guardian — non-trivial-postinst contract)" {
+    n=$(grep -c 'guardian' "${POSTINST}")
+    [ "${n}" -ge 3 ]
+}

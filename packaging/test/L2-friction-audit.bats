@@ -709,3 +709,8 @@ EOF
 @test "INVARIANT (script declares emit_ring function — ring-buffer-emit canonical surface)" {
     grep -qE '^emit_ring\(\)|emit_ring \(\)' "${SCRIPT}"
 }
+@test "INVARIANT (script declares 3 gates: PCIe, ZFS, Memory — sain-01 §5 verbatim gate-count)" {
+    grep -qE 'pcie' "${SCRIPT}"
+    grep -qE 'zfs' "${SCRIPT}"
+    grep -qE 'memory' "${SCRIPT}"
+}
