@@ -254,3 +254,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # Inverse check: not the alert event when hidden=0.
     ! printf '%s' "${line}" | grep -q '"event":"hidden_process_detected"'
 }
+
+@test "INVARIANT (JSON record is emitted as a SINGLE main logger line — SDD-062 downstream consumer contract)" {
+    # Sister to every other watchdog's SINGLE-MAIN-line JSON record
+    # INVARIANT across the brain. hidden-process-watchdog emits ONE
+    # main JSON record (the SDD-062 downstream consumer routes by
+    # tag). Lock that no regression accidentally adds a second main
+    # record per run (would break Sigma routing + flood operator
+    # dashboard).
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-hidden-process -- ')
+    [ "${main_count}" = "1" ]
+}
