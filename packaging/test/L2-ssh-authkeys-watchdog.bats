@@ -455,3 +455,16 @@ EOF
     ! grep -qE 'find[[:space:]].*-delete' "${WD}"
     ! grep -qE 'sed[[:space:]]+-i.*/d' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # ssh-authkeys-watchdog runs ON the timer's scheduled fire —
+    # diffs every user's ~/.ssh/authorized_keys against baseline,
+    # emits a verdict on new-key additions (persistence-vector
+    # axis), then exits. Type=simple would break timer
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract on
+    # the ssh-authkeys-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/ssh-authkeys-watchdog/systemd/selfdef-ssh-authkeys.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
