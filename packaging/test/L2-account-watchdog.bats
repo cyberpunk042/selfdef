@@ -487,3 +487,20 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: account-watchdog NEVER emits userdel/passwd -l on detected accounts — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # account-watchdog DETECTS T1136 Create Account / T1098
+    # Account Manipulation but MUST NEVER emit userdel/
+    # deluser/passwd -l commands to auto-remove the planted
+    # account. Auto-removal is a denial-of-service primitive
+    # (attacker plants a fake uid=0 account, watchdog removes
+    # operator's actual sudo grant). Forensic evidence value
+    # of the live account is high (operator triage needs to
+    # inspect home dir, shell history, scheduled tasks).
+    # Surveillance, never remediation. Locks anti-evidence-
+    # destruction contract on the account surveillance
+    # substrate.
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*(userdel|deluser|passwd[[:space:]]+-l)'
+}
