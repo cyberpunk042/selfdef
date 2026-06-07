@@ -474,3 +474,28 @@ DLEOF
     # userdel/deluser MUST NEVER have fired.
     ! [ -s "${SYSCALL_LOG}" ]
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on service-account-lock surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The service-account-lock installer MUST only emit severity
+    # values from the closed set {ok,warn,alert} — never custom
+    # values (critical, error, fatal, notice, info). Operator
+    # dashboard parsers branch on the literal severity string;
+    # an out-of-set value silently falls through routing and
+    # the operator never sees the service-account neutralization
+    # status alert. Locks parser contract on the service-
+    # account-lock installer JSON surface (consistency-with-
+    # watchdog-family discipline).
+    write_synth_passwd
+    write_config "enforce"
+    output=$(run env PATH="${BIN}:${PATH}" \
+        SELFDEF_DRY_RUN=0 \
+        SELFDEF_SVC_ACCOUNT_CONFIG="${CONF}" \
+        SELFDEF_PASSWD_FILE="${PASSWD_FILE}" \
+        SELFDEF_SVC_ACCOUNT_LOG="${ORIGINAL_LOG}" \
+        CHSH_LOG="${CHSH_LOG}" \
+        PASSWD_LOG="${PASSWD_LOG}" \
+        bash "${WD}" 2>&1)
+    bad=$(printf '%s\n' "${output}" | grep -oE '"severity":"[^"]+"' | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
