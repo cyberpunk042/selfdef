@@ -225,3 +225,43 @@ EOF
     cap | grep -qE '"severity":"(warn|ok)"'
     ! cap | grep -q '"event":"tmpfiles_suspicious"'
 }
+
+@test "INVARIANT (multi-dir scan: a second tmpfiles dir ALSO scanned — system /usr/lib/tmpfiles.d + operator /etc/tmpfiles.d)" {
+    # systemd-tmpfiles reads /usr/lib/tmpfiles.d (vendor), /etc/
+    # tmpfiles.d (operator), /run/tmpfiles.d (runtime). All three
+    # may carry attacker-planted setuid entries — watchdog must
+    # enumerate every dir in SELFDEF_TMPFILES_DIRS.
+    CONFD2="${TMP}/tmpfiles.d.system"; mkdir -p "${CONFD2}"
+    seed_benign
+    DIRS_V="${CONFD} ${CONFD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'f /run/sysmod/shell 4755 root root -\n' > "${CONFD2}/system-evil.conf"
+    DIRS_V="${CONFD} ${CONFD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: tab-separated fields in tmpfiles entry still parsed for setuid)" {
+    # Attacker may use tab-separated fields to defeat naive '
+    # ' grep. Watchdog positional-parser MUST treat tab the same
+    # as space for the type/path/mode/uid/gid/age grammar.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'f\t/run/myapp/shell\t4755\troot\troot\t-\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (sample names the offending .conf in JSON — operator triage routing)" {
+    # When setuid-entry fires, sample MUST surface the .conf
+    # path so operator dashboard routes triage to the right path.
+    # Sister contract: polkit-rules/nfs-exports/rhosts pattern.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${CONFD}/99-very-distinctive-attacker.conf" <<'EOF'
+f /run/backdoor 4755 root root -
+EOF
+    run_wd
+    cap | grep -q 'very-distinctive-attacker'
+}
