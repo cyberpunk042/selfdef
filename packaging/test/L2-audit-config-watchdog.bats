@@ -396,3 +396,18 @@ setup_baseline_state() {
     cap | grep -q '"event":"audit_conf_changed"'
     cap | grep -qE '"conf_changes":[1-9]'
 }
+
+@test "INVARIANT (emit_status JSON: tag=selfdef-audit-config surfaces in MAIN logger record — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog tag-emission INVARIANTs across
+    # the brain. The SDD-062 single-line JSON consumer (downstream
+    # dashboard / SIEM correlator) routes by the 'tag' field. A
+    # silent rename of the tag would silently disconnect this
+    # watchdog from the dashboard — operator would see the
+    # auditd-disabled / rules-flushed signal disappear with no
+    # error. Locks the tag-emission contract on the audit-config
+    # T1562.001 (Impair Defenses: Disable or Modify Tools)
+    # surveillance surface.
+    setup_baseline_state
+    run_wd
+    cap | grep -qE 'selfdef-audit-config'
+}
