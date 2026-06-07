@@ -161,3 +161,17 @@ MODULE_DIR="${BATS_TEST_DIRNAME}/../../modules/detect-host"
     [ ! -f "${MODULE_DIR}/install/check.sh" ]
     [ ! -f "${MODULE_DIR}/check.sh" ]
 }
+
+@test "INVARIANT (module.toml provides detect-host contract — downstream-consumer interface lock for the foundational module)" {
+    # Sister to many other installer module's provides-contract
+    # INVARIANTs across the brain (bridge-l2 l2-bridge, suricata
+    # ids+eve-json, slm-cpu-loop slm-loop-runtime, tensor-
+    # parallel-inference tensor-parallel-runtime, wasm-aot-cache
+    # wasm-aot-cache-dir, hardware-tune-cache hardware-tune-env,
+    # bitnet-gpu-inference bitnet-gpu-runtime). The detect-host
+    # module is the foundational module — every other module's
+    # depends_on lists detect-host (or its provides token). A
+    # silent rename of the provides token would break the entire
+    # module dependency graph at install time.
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[' "${MODULE_DIR}/module.toml"
+}
