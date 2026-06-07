@@ -286,3 +286,18 @@ TOMLEOF
     [ -n "${strict_n}" ]
     [ "${strict_n}" -ge "${standard_n}" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in written when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/security/pwquality.conf.d/
+    # 50-selfdef.conf. A silent dry-run that committed would
+    # activate password-quality enforcement on a host where
+    # operator was investigating PAM behavior — could block
+    # legitimate password changes during testing. Locks dry-run-
+    # preserves-state on the PAM password-quality substrate.
+    write_config "strict"
+    rm -f "${DST}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DST}" ]
+}
