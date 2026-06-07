@@ -266,6 +266,27 @@ EOF
     cap | grep -q 'DISTINCTIVE-ATTACKER-FINDING'
 }
 
+@test "INVARIANT (severity field is bounded vocabulary {ok,warn,alert,high} — operator dashboard severity axis lock)" {
+    # Sister to brain-wide bounded-vocabulary INVARIANTs. The
+    # severity field surfaces on the operator dashboard's
+    # color-coded severity axis (green/yellow/red/triage). If a
+    # future refactor introduced a fifth value (e.g. 'critical'
+    # or 'info'), the dashboard's color-mapping would silently
+    # bucket it as unknown. Lock the bounded set so any new
+    # severity value is intentional + dashboard-mapped, not a
+    # silent regression.
+    cat > "${REPORT}" <<'EOF'
+warning[]=W1|first|/etc|low
+hardening_index=85
+EOF
+    run_wd
+    sev=$(cap | grep -oE '"severity":"[^"]+"' | head -1)
+    case "${sev}" in
+        '"severity":"ok"'|'"severity":"warn"'|'"severity":"alert"'|'"severity":"high"') : ;;
+        *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert,high}" ;;
+    esac
+}
+
 @test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
     # Sister to many other watchdog single-MAIN-logger-line
     # INVARIANTs across the brain. The selfdef-lynis logger tag
