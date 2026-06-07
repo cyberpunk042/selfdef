@@ -304,3 +304,20 @@ TOMLEOF
     [ -f "${MODPROBE_BLACKLIST}" ]
     grep -q 'managed-by: selfdef bluetooth-disable' "${MODPROBE_BLACKLIST}"
 }
+
+@test "INVARIANT (asymmetric profile content: stop does NOT install modprobe blacklist — blacklist is mask-only)" {
+    # Sister to wireless-disable + wwan-disable asymmetric-content
+    # INVARIANTs already locked (rfkill = soft kill; mask = hard
+    # kill). The stop profile fires rfkill block bluetooth + stop+
+    # disable on the service (live block + boot-time skip) but does
+    # NOT install the persistent modprobe blacklist OR the systemctl
+    # mask. The mask profile is the only one that adds the persistent
+    # driver blacklist + systemctl mask. Locks the soft/hard boundary
+    # on the Bluetooth radio neutralization axis (BlueBorne / BLE
+    # tracking / KNOB attack surface).
+    write_config "stop"
+    run_wd
+    grep -qE 'rfkill block bluetooth' "${RF_LOG}"
+    ! [ -f "${MODPROBE_BLACKLIST}" ]
+    ! grep -q 'systemctl mask bluetooth.service' "${SYSEOF_LOG}"
+}
