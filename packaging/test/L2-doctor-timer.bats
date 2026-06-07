@@ -190,3 +190,13 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     [ -f "${SERVICE}" ]
     [ "$(stat -c '%a' "${SERVICE}")" = "644" ]
 }
+
+@test "INVARIANT (service unit carries Description= or Documentation= with selfdef identifier — operator-audit-trail)" {
+    # Sister to brain-wide service-unit identity INVARIANTs.
+    # selfdef-doctor.service MUST carry the selfdef identifier
+    # in Description or Documentation so operator running
+    # systemctl status / journalctl -t can immediately
+    # identify the unit as selfdef-owned.
+    [ -f "${SERVICE}" ]
+    grep -qE '^(Description|Documentation)=.*selfdef' "${SERVICE}"
+}
