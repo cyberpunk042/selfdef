@@ -250,3 +250,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-world-writable'
 }
+
+@test "INVARIANT (world-writable + setuid combined → alert at higher tier — multi-axis compound severity)" {
+    # Sister to world-writable file + world-writable dir
+    # INVARIANTs already locked. The combined 4666/6666 mode
+    # (setuid + world-writable) on a binary is the most-dangerous
+    # mode of all — every user can rewrite the file's content
+    # AND it executes with the owner's privileges (typically
+    # root). An attacker who gets file content control becomes
+    # the file's owner-uid at exec time. Locks compound-severity
+    # detection on the suid + world-writable combined axis
+    # (T1548.001 Setuid + T1222 file-perm modification).
+    printf 'x' > "${ROOT}/suid-and-writable.elf"
+    chmod 6666 "${ROOT}/suid-and-writable.elf"
+    run_wd
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
