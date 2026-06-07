@@ -330,3 +330,14 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"secure-boot-status"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (libexec script is chmod 0755 — executable contract for ExecStart)" {
+    # Sister to brain-wide chmod 0755 INVARIANTs for service-
+    # executable files. The systemd service ExecStart= MUST
+    # invoke an executable script; chmod 0644 would silently
+    # break the timer.
+    write_config "monitor"
+    run_wd
+    [ -f "${SCRIPT_DST}" ]
+    [ "$(stat -c '%a' "${SCRIPT_DST}")" = "755" ]
+}
