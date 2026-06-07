@@ -1030,3 +1030,9 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     size=$(stat -c '%s' "${chk}")
     [ "${size}" -gt 50 ]
 }
+
+@test "INVARIANT (selfdef-self-integrity install/uninstall.sh size > 50 bytes — substantial-uninstall-script 77-cycle)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/install/uninstall.sh"
+    size=$(stat -c '%s' "${uni}")
+    [ "${size}" -gt 50 ]
+}

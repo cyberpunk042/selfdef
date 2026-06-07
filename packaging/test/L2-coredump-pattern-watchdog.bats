@@ -989,3 +989,9 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         [ "${size}" -gt 50 ]
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog README.md file size > 100 bytes — substantial-readme 77-cycle)" {
+    readme="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/README.md"
+    size=$(stat -c '%s' "${readme}")
+    [ "${size}" -gt 100 ]
+}

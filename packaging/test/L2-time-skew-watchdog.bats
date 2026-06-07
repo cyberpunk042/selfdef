@@ -1000,3 +1000,9 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         [ "${size}" -gt 50 ]
     done
 }
+
+@test "INVARIANT (time-skew-watchdog README.md file size > 100 bytes — substantial-readme 77-cycle)" {
+    readme="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/README.md"
+    size=$(stat -c '%s' "${readme}")
+    [ "${size}" -gt 100 ]
+}

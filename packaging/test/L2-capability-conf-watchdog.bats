@@ -1038,3 +1038,9 @@ seed_benign() {
         [ "${size}" -gt 50 ]
     done
 }
+
+@test "INVARIANT (capability-conf-watchdog README.md file size > 100 bytes — substantial-readme 77-cycle)" {
+    readme="${BATS_TEST_DIRNAME}/../../modules/capability-conf-watchdog/README.md"
+    size=$(stat -c '%s' "${readme}")
+    [ "${size}" -gt 100 ]
+}

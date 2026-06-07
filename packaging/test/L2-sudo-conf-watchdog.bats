@@ -987,3 +987,9 @@ assert 'install' in data, 'install missing'
         [ "${size}" -gt 50 ]
     done
 }
+
+@test "INVARIANT (sudo-conf-watchdog README.md file size > 100 bytes — substantial-readme 77-cycle)" {
+    readme="${BATS_TEST_DIRNAME}/../../modules/sudo-conf-watchdog/README.md"
+    size=$(stat -c '%s' "${readme}")
+    [ "${size}" -gt 100 ]
+}
