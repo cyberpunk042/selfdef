@@ -215,3 +215,21 @@ TEMPLATES_DIR="${MODULE_DIR}/templates"
     grep -qE 'install[[:space:]].*-m[[:space:]]+0?644' "${INSTALL_DIR}/apply.sh" \
         || grep -qE 'chmod[[:space:]]+0?644' "${INSTALL_DIR}/apply.sh"
 }
+
+@test "INVARIANT (50-selfdef-presence executable chmod 0755 — pam-motd execution contract)" {
+    # Sister to brain-wide chmod-0755-executable INVARIANTs on
+    # script files (vs chmod-0644-on-config-data). The
+    # /etc/update-motd.d/50-selfdef-presence script is
+    # executed by pam-motd at login time — pam-motd only runs
+    # files in /etc/update-motd.d/ that are executable. A
+    # 0644 regression on the script would silently disable the
+    # selfdef post-login presence banner (operator can't tell
+    # selfdef is running on the host from their login
+    # session). Locks the executable-script perm contract at
+    # the shipped-source layer (apply.sh's install -m 0755
+    # for the script file, separate from -m 0644 for the
+    # banner config files).
+    grep -qE 'install[[:space:]].*-m[[:space:]]+0?755[[:space:]].*50-selfdef-presence' "${INSTALL_DIR}/apply.sh" \
+        || grep -qE '50-selfdef-presence.*-m[[:space:]]+0?755' "${INSTALL_DIR}/apply.sh" \
+        || grep -qE 'chmod[[:space:]]+0?755[[:space:]].*50-selfdef-presence' "${INSTALL_DIR}/apply.sh"
+}
