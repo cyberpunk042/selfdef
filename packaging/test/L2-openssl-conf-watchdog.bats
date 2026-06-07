@@ -260,3 +260,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named engine path surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker adds a new
+    # engine or provider definition pointing at an attacker-
+    # controlled .so, the engine NAME or path MUST surface in
+    # the JSON sample so operator dashboard routes triage to
+    # the right code-load surface (T1574 Hijack Execution Flow
+    # via OpenSSL engine substitution; engine runs AS consuming
+    # process with full TLS-key access).
+    printf 'engine_id = legit\ndynamic_path = /usr/lib/engines-3/legit.so\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'engine_id = distinctive_attacker_engine\ndynamic_path = /tmp/.evil-engine.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q 'distinctive_attacker_engine\|/tmp/.evil-engine'
+}
