@@ -304,3 +304,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on gss-mech surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The gss-mech-watchdog MUST only emit severity values from
+    # the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1574 Hijack Execution Flow via GSSAPI
+    # mechanism plugin alert. Locks parser contract on the
+    # /etc/gss/mech detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'kerberos_v5 1.2.840.113554.1.2.2 /usr/lib/libgssapi_krb5.so\n' > "${MECH}"
+    run_wd                                              # ok / baseline
+    printf 'gssapi_evil 1.2.3.4 /tmp/.evil-gss.so\n' > "${MECH}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
