@@ -194,3 +194,42 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-pkcs11-modules -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): pkcs11-modules-watchdog does NOT refresh baseline on suspicious-module detection — alert STAYS until operator updates" {
+    # T1574 credential-handling code-load primitive — alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    printf 'module: /usr/lib/opensc-pkcs11.so\n' > "${MOD}"
+    run_wd
+    printf 'module: /tmp/evil.so\n' > "${MOD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/pkcs11/modules + /usr/share/p11-kit/modules axes — suspicious module in EITHER → alert)" {
+    MODDIR2="${TMP}/share-p11-kit-modules"; mkdir -p "${MODDIR2}"
+    printf 'module: /usr/lib/opensc-pkcs11.so\n' > "${MOD}"
+    DIRS="${MODDIR} ${MODDIR2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'module: /tmp/evil.so\n' > "${MODDIR2}/evil.module"
+    DIRS="${MODDIR} ${MODDIR2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: 'module:    /tmp/evil.so' multi-space variant still triggers alert)" {
+    # Attacker may use multi-spaces between 'module:' and the path to
+    # evade naive grep.
+    printf 'module:    /tmp/evil.so\n' > "${MOD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multiple module: lines per .module file: ANY suspicious entry → alert)" {
+    # A .module file may contain MULTIPLE module: directives. Each must
+    # be evaluated; ANY suspicious entry triggers alert (not just first).
+    printf 'module: /usr/lib/opensc-pkcs11.so\nmodule: /tmp/evil.so\n' > "${MOD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
