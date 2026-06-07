@@ -278,3 +278,20 @@ seed_benign() {
     cap | grep -q '"event":"baseline_initial"'
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named host in hosts.equiv surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker adds a
+    # distinctively-named host to hosts.equiv (T1199 — Trusted
+    # Relationship via legacy rsh/rlogin hostbased-auth), the
+    # host name MUST surface in the JSON sample so operator
+    # dashboard routes triage to the right path. Locks the
+    # operator-visibility contract on the legacy-trust grant
+    # surface.
+    printf 'trusted.example.com\n' > "${EQUIV}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'trusted.example.com\ndistinctive-attacker-host.evil.example\n' > "${EQUIV}"
+    run_wd
+    cap | grep -q 'distinctive-attacker-host'
+}
