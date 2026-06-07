@@ -256,3 +256,22 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (sensitive-domain: ntp.org / time-service pin → alert (clock-skew evasion))" {
+    # Sister to the package + supply-chain + CA axes already locked.
+    # Pinning a time-service domain like pool.ntp.org or
+    # time.cloudflare.com lets an attacker MITM the NTP-handshake
+    # to skew the system clock — which then defeats certificate
+    # validity checks (a future-dated cert becomes valid), defeats
+    # audit-log forensics (timestamps become unreliable), defeats
+    # rate-limiter logic (token-bucket replenishments accelerate).
+    # T1565.002 — Transmitted Data Manipulation via NTP MITM.
+    # Locks the time-service-domain axis on the /etc/hosts pin
+    # surface alongside the other CAR-defense axes already covered.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '127.0.0.1 localhost\n0.0.0.0 pool.ntp.org\n' > "${HOSTS}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
