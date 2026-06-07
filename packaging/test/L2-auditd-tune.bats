@@ -331,3 +331,13 @@ TOMLEOF
     [ ! -f "${AUDITD_CONF}" ]
     ! grep -q 'restart auditd' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (auditd.conf carries log_file directive — actual on-disk-log path declared)" {
+    # Sister to brain-wide config-content-presence INVARIANTs.
+    # The auditd.conf MUST declare log_file (path to on-disk
+    # audit.log) — without it auditd defaults silently which is
+    # operator-opaque.
+    write_config "standard"
+    run_wd
+    grep -qE '^log_file[[:space:]]*=' "${AUDITD_CONF}"
+}
