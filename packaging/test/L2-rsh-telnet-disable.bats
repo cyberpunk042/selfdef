@@ -320,8 +320,13 @@ TOMLEOF
     # units present). Locks operator observability contract on
     # the cleartext-protocol neutralization substrate.
     write_config "mask"
-    LEGACY_PRESENT=1 run_wd
-    cap | grep -qE '"status":"ok"'
-    cap | grep -qE 'profile=mask'
-    cap | grep -qE 'acted=[1-9]'
+    run -0 env PATH="${BIN}:${PATH}" \
+        SYSEOF_LOG="${SYSEOF_LOG}" \
+        SELFDEF_DRY_RUN=0 \
+        SELFDEF_LEGACY_CONFIG="${CONF}" \
+        LEGACY_PRESENT=1 \
+        bash "${WD}"
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+    [[ "${output}" =~ acted=[1-9] ]]
 }
