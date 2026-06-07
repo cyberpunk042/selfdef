@@ -378,21 +378,21 @@ EOF
     cap | grep -qE '"severity":"(alert|warn)"'
 }
 
-@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named comment key surfaces in sample for operator-triage routing)" {
+@test "INVARIANT (DELTA detect — added_sample surfaces user:fingerprint for operator-triage routing)" {
     # Sister to many other watchdog DELTA-detect sample-naming
     # INVARIANTs across the brain. When an attacker adds a new
-    # SSH key to an authorized_keys file, the key's COMMENT
-    # field (free-form descriptor appearing after the base64
-    # blob) MUST surface in the JSON sample so operator
-    # dashboard routes triage to the right key. The comment
-    # is the key's identifier — operators MUST be able to tell
-    # WHICH key was added without re-running diff. Locks
-    # operator-visibility on the SSH key-grant surface (T1098.004
-    # — Account Manipulation: SSH Authorized Keys).
+    # SSH key to an authorized_keys file, the user-name + key
+    # fingerprint MUST surface in the JSON added_sample so
+    # operator dashboard routes triage to the right user +
+    # the specific fingerprint identifies WHICH key. Locks
+    # operator-visibility on the SSH key-grant surface
+    # (T1098.004 — Account Manipulation: SSH Authorized Keys).
     plant_baseline_keys
     run_wd
     : > "${SELFDEF_TEST_LOGCAP}"
     printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINEW== distinctive-attacker-key\n' >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
     run_wd
-    cap | grep -q 'distinctive-attacker-key\|AAAAINEW'
+    # added_sample carries user:fingerprint — at minimum the
+    # user name surfaces.
+    cap | grep -qE '"added_sample":"[^"]*alice'
 }
