@@ -309,3 +309,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger-line INVARIANTs.
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\na:5:respawn:/tmp/.evil1\nb:5:respawn:/var/tmp/.evil2\nc:5:respawn:/dev/shm/.evil3\n' > "${INITTAB}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-inittab -- ')
+    [ "${main_count}" = "1" ]
+}
