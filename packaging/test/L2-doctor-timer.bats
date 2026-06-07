@@ -279,3 +279,21 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     # service substrate.
     grep -qE '^ExecStart=/usr/bin/selfdefctl' "${SERVICE}"
 }
+
+@test "INVARIANT (.timer uses OnBootSec + OnUnitActiveSec — boot-delay + recurring cadence pair, NOT OnCalendar)" {
+    # Sister to brain-wide timer-cadence INVARIANT family. The
+    # doctor.timer uses OnBootSec=10min (delay first probe after
+    # boot so OS finishes settling) + OnUnitActiveSec=1h
+    # (recurring hourly cadence) — NOT OnCalendar=. A regression
+    # that swapped to OnCalendar="*-*-* *:00:00" would fire at
+    # absolute clock times which:
+    #   (a) introduces fleet-coordination thundering-herd
+    #       (every host fires at :00 simultaneously)
+    #   (b) breaks the boot-delay grace period — a host that
+    #       boots at :59 would fire its first probe before OS
+    #       services have settled
+    # Locks the OnBootSec+OnUnitActiveSec cadence discipline.
+    grep -qE '^OnBootSec=' "${TIMER}"
+    grep -qE '^OnUnitActiveSec=' "${TIMER}"
+    ! grep -qE '^OnCalendar=' "${TIMER}"
+}
