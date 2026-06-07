@@ -399,3 +399,23 @@ TOMLEOF
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(apt|apt-utils)'
     ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${DST}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. package-trust-baseline manifest declares install +
+    # profile gating the resolver enforces; malformed manifest
+    # wedges the apt allow-downgrades / unsigned-suite-deny
+    # baseline. Python's tomllib is the canonical parser. Locks
+    # anti-malformed-manifest on the package-trust-baseline
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/package-trust-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'package-trust-baseline', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
