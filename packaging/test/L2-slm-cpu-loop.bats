@@ -302,3 +302,15 @@ INSTALL_DIR="${MODULE_DIR}/install"
     # downstream consumer module.
     grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"slm-loop-runtime"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (module.toml depends_on hardware-tune-env — CPU-tuning ingestion contract)" {
+    # Sister to provides-contract INVARIANT just locked. slm-
+    # cpu-loop composes on hardware-tune-cache (hardware-tune-
+    # env CFLAGS/RUSTFLAGS). depends_on MUST list hardware-
+    # tune-env so resolver installs hardware-tune-cache BEFORE
+    # slm-cpu-loop — without it slm-loop.env would install
+    # before tuned CFLAGS are available + fall back to generic
+    # builds.
+    grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"hardware-tune-env"' "${MODULE_DIR}/module.toml" \
+        || grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"hardware-tune-cache"' "${MODULE_DIR}/module.toml"
+}
