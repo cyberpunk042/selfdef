@@ -416,3 +416,23 @@ EOF
     run_wd
     cap | grep -q 'distinctive-attacker-cron'
 }
+
+@test "INVARIANT (sub-minute @reboot job NOT silent — @reboot trigger surfaces just like time-based)" {
+    # Sister to high-frequency cron schedule observability INVARIANT
+    # already locked. The @reboot directive is a non-time-based
+    # scheduling primitive: cron runs the job ONCE on every system
+    # boot. Attackers use @reboot for boot-survival persistence
+    # (T1053.003 variant — runs AS ROOT every boot, more reliable
+    # than wall-clock schedules because system uptime is finite).
+    # The cron-job-watchdog MUST treat @reboot adds with the same
+    # add-discipline as time-based: surface in count + sample so
+    # operator dashboard distinguishes boot-persistence from
+    # routine ops jobs. Locks the @reboot trigger class on the
+    # cron-watchdog surface.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '@reboot root /tmp/.boot-evil' > "${CRON_D}/99-reboot-persistence"
+    run_wd
+    cap | grep -qE '"added":[1-9]'
+}
