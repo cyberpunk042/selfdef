@@ -272,3 +272,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (LD_LIBRARY_PATH injection — sister axis to LD_PRELOAD/LD_AUDIT on dynamic-linker family)" {
+    # Sister to LD_PRELOAD + LD_AUDIT axes already locked.
+    # LD_LIBRARY_PATH prepends attacker-controlled paths to the
+    # library search order — soname collisions (e.g. shipping a
+    # malicious libc.so.6 in the named path) hijack every dyn-
+    # linked invocation. Equally powerful as LD_PRELOAD for
+    # global code execution. Locks the third axis of the ld.so
+    # dynamic-loader env-injection family on the systemd manager
+    # DefaultEnvironment surface (T1574.006 every-service env-
+    # injection).
+    printf '[Manager]\nDefaultEnvironment=LANG=en_US.UTF-8\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Manager]\nDefaultEnvironment=LD_LIBRARY_PATH=/tmp/evil-libs\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
