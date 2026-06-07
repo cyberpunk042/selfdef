@@ -269,3 +269,23 @@ INSTALL_DIR="${MODULE_DIR}/install"
     unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
     [ "${re_armed}" = "1" ]
 }
+
+@test "INVARIANT (env file header carries slm-cpu-loop self-identifying marker — head -1 stale-cleanup discipline)" {
+    # Sister to many other installer module's header-marker
+    # INVARIANT across the brain. A stale-cleanup pass (operator
+    # housekeeping or uninstall path) inspects the first non-blank
+    # comment line to identify selfdef-rendered config from
+    # operator-hand-authored config. Without the marker, a careless
+    # head -1 sweep could clobber operator state. Locks the
+    # provenance contract.
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${SELFDEF_SLM_LOOP_ENV}")"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+    [[ "${first_nonblank}" == *"slm-cpu-loop"* ]]
+}
