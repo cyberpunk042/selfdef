@@ -787,3 +787,14 @@ assert 'install' in data, 'install missing'
         [ -f "${timer_dir}/${unit}" ]
     done
 }
+
+@test "INVARIANT (rhosts-watchdog .sh script is executable (mode includes +x) — script-runnable contract)" {
+    # Sister to brain-wide script-executable INVARIANT family.
+    # The watchdog .sh script MUST be chmod +x so systemd's
+    # ExecStart can invoke it without needing a bash prefix.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/rhosts-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        [ -x "${s}" ]
+    done
+}

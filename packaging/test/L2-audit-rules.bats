@@ -904,3 +904,15 @@ v = data.get('version', '')
 assert v, f'version must be non-empty, got {v!r}'
 "
 }
+
+@test "INVARIANT (audit-rules module.toml [install_paths].paths includes at least one /etc/ path — operator-config-staging-target contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/audit-rules/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ target, got {ps!r}'
+"
+}
