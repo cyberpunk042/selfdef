@@ -266,3 +266,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED display-manager hook surfaces in sample)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # display-manager hook (rather than modifying an existing one),
+    # the added hook MUST surface in the JSON sample so operator
+    # dashboard routes triage to the right path. Locks the new-
+    # file-discovered operator-visibility contract on the
+    # graphical-login-triggered root-exec surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\necho "new"\n' > "${HOOKD}/distinctive-attacker-dm-hook"
+    chmod 0755 "${HOOKD}/distinctive-attacker-dm-hook"
+    run_wd
+    cap | grep -q 'distinctive-attacker-dm-hook'
+}
