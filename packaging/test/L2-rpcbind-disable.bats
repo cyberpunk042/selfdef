@@ -305,3 +305,14 @@ TOMLEOF
     # No unmask command fires on downgrade.
     ! grep -qE 'systemctl unmask rpcbind' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on rpcbind-neutralization
+    # installer surface across .service + .socket units.
+    write_config "mask"
+    output="$(RPCBIND_PRESENT=1 run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"rpcbind-disable"')
+    [ "${count}" = "1" ]
+}
