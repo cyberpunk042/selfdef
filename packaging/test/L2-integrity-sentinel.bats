@@ -366,3 +366,14 @@ EOF
     # content hash tracked; mode tamper not yet in baseline).
     [ "${status}" -eq 0 ] || [ "${status}" -ne 0 ]
 }
+
+@test "INVARIANT (apply.sh + check.sh + uninstall.sh use set -euo pipefail — fail-loud invariant)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # integrity-sentinel is the meta-watchdog substrate; silent
+    # failure during apply/check/uninstall would leave baseline.
+    # sha256 in half-installed state, breaking the integrity-
+    # surveillance substrate.
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/apply.sh"
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/check.sh"
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
+}
