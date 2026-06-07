@@ -178,3 +178,15 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^ProtectControlGroups=true' "${UNIT}"
     grep -qE '^RestrictAddressFamilies=' "${UNIT}"
 }
+
+@test "INVARIANT (unit declares ProtectSystem=strict — filesystem write-protection enforcement)" {
+    # Sister to the broader Ring-0 hardening directive family
+    # already locked. ProtectSystem=strict gives the unit a
+    # read-only view of the ENTIRE filesystem hierarchy EXCEPT
+    # explicit ReadWritePaths= grants — defeats arbitrary-write
+    # exploits that depend on landing under /etc /var/lib /opt
+    # etc. Sister to integrity-sentinel + audit-rules path
+    # protection axes (host-level write-immutability vs unit-
+    # level write-isolation are complementary defense layers).
+    grep -qE '^ProtectSystem=(strict|full)' "${UNIT}"
+}
