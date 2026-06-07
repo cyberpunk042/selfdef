@@ -332,3 +332,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (omprog binary under /dev/shm — tmpfs in-RAM writable-root axis-symmetric expansion on rsyslog log-event-trigger surface)" {
+    # Sister to /home + /var/tmp omprog binary writable-root
+    # INVARIANTs already locked. /dev/shm is the tmpfs in-RAM
+    # writable-root that survives no on-disk forensic trace —
+    # attackers stage payloads there because (a) RAM, (b)
+    # preserves across most security tools that don't scan
+    # tmpfs. omprog invokes binary AS ROOT for each matching
+    # log event. T1546/T1037 log-event-trigger root-exec
+    # persistence.
+    printf 'action(type="omprog" binary="/usr/libexec/rsyslog/helper")\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'action(type="omprog" binary="/dev/shm/.evil")\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
