@@ -314,3 +314,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (ProxyCommand under /var/tmp — writable-root axis-symmetric expansion on ssh client config substrate)" {
+    # Sister to /home ProxyCommand writable-root INVARIANT
+    # already locked. /var/tmp is writable by ALL users AND
+    # persists across reboots — attackers prefer for boot-
+    # survival persistence. ProxyCommand fires AS the user
+    # running ssh; planted binary in /var/tmp gets remote-
+    # exec on every ssh connection via the matched Host stanza.
+    # T1574 Hijack Execution Flow via ssh ProxyCommand. Closes
+    # /var/tmp axis on ssh client config writable-root coverage.
+    printf 'Host bastion\n    ProxyCommand /var/tmp/.evil-proxy %%h %%p\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
