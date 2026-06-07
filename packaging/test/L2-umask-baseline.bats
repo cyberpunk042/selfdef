@@ -301,3 +301,15 @@ TOMLEOF
     # Strict numerically higher = more bits masked = stricter.
     [ "${strict_umask}" -ge "${group_umask}" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-ins written when DRY_RUN=1)" {
+    # Sister to brain-wide installer DRY_RUN INVARIANTs. Silent
+    # dry-run flip of default umask could break operator
+    # workflows that intentionally create files with specific
+    # perms during testing.
+    write_config "strict"
+    rm -f "${PROFILE_D}/50-selfdef-umask.sh" "${LOGIN_DEFS_D}/50-selfdef-umask.conf"
+    DRY_RUN=1 run_wd
+    [ ! -f "${PROFILE_D}/50-selfdef-umask.sh" ]
+    [ ! -f "${LOGIN_DEFS_D}/50-selfdef-umask.conf" ]
+}
