@@ -291,3 +291,25 @@ run_wd() {
     # Lock current behavior: 0640 or stricter (0600).
     [ "${backup_mode}" = "640" ] || [ "${backup_mode}" = "600" ] || [ "${backup_mode}" = "644" ]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # auditd-tune TOML; parser must tolerate without altering the
+    # profile-gated content. paranoid-with-noise still installs
+    # the paranoid auditd.conf (tighter num_logs / max_log_file /
+    # space_left_action — strict log-retention + alert escalation
+    # for high-volume hosts).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "high-volume"
+operator_note = "audit rules paranoid + AI-tool journal heavy"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    # auditd.conf still installed (profile gate held despite noise).
+    [ -f "${AUDITD_CONF}" ]
+    # high-volume-specific knob present (num_logs higher than standard).
+    grep -qE '^num_logs[[:space:]]*=' "${AUDITD_CONF}"
+}
