@@ -266,3 +266,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(warn|alert)"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs.
+    # selfdef-world-writable tag MUST fire EXACTLY ONCE per
+    # scan regardless of how many world-writable files surface.
+    # Multi-line output would break SDD-062 downstream JSON-line
+    # consumer (Sigma correlator). Locks consolidation discipline
+    # on T1222 file-permission-modification surveillance.
+    for i in 1 2 3 4 5; do
+        printf 'x' > "${ROOT}/ww-${i}"
+        chmod 0666 "${ROOT}/ww-${i}"
+    done
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-world-writable -- ')
+    [ "${main_count}" = "1" ]
+}
