@@ -333,3 +333,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on inittab surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The inittab-watchdog MUST only emit severity values from
+    # the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1037 init-process persistence alert.
+    # Locks parser contract on the /etc/inittab respawn/
+    # bootwait/powerwait detection surface.
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\na:5:respawn:/tmp/.evil\n' > "${INITTAB}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
