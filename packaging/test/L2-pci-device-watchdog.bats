@@ -433,3 +433,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     ! grep -qE 'echo[[:space:]]+1[[:space:]]*>[[:space:]]*.*/sys/bus/pci/.*/(remove|reset)' "${WD}"
     ! grep -qE 'echo[[:space:]]+0[[:space:]]*>[[:space:]]*.*/sys/bus/pci/' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # pci-device-watchdog runs ON the timer's scheduled fire —
+    # diffs lspci output against baseline, emits a verdict on
+    # new-device additions (USB/FireWire/ThunderBolt DMA axes),
+    # then exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the pci-device-
+    # watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/pci-device-watchdog/systemd/selfdef-pci-device.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
