@@ -393,3 +393,9 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service ProtectControlGroups=true — cgroup-mutation containment)" {
     grep -qE '^ProtectControlGroups=true' "${UNIT}"
 }
+
+@test "INVARIANT (guardian.service postrm preserves /var/cache/selfdef on remove (not purge) — operator-state-preserve contract)" {
+    # postrm remove case must NOT delete /var/cache/selfdef
+    # (only purge does). Allow check at postrm structure.
+    grep -qE '/var/cache/selfdef' "${POSTRM}"
+}

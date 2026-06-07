@@ -646,3 +646,13 @@ n = data['metadata']['name']
 assert ' ' not in n, f'metadata.name must not contain spaces, got {n!r}'
 "
 }
+
+@test "INVARIANT (YAML uses canonical sain-01 §6 verbatim allowlist members — operator-extension-policy contract)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+vals = data['spec']['kprobes'][0]['selectors'][0]['matchArgs'][0]['values']
+expected = {'/usr/bin/python3', '/usr/bin/nvidia-smi', '/usr/local/bin/vllm', '/usr/bin/podman'}
+assert set(vals) == expected, f'allowlist must be sain-01 §6 verbatim set, got {vals!r}'
+"
+}

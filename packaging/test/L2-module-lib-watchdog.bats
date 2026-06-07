@@ -638,3 +638,8 @@ setup() {
     out="$(selfdef_injection_patterns)"
     echo "${out}" | grep -q 'dev/tcp'
 }
+
+@test "INVARIANT (lib injection_patterns includes base64 decode — known-attack coverage)" {
+    out="$(selfdef_injection_patterns)"
+    echo "${out}" | grep -q 'base64'
+}

@@ -577,3 +577,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service ProtectControlGroups=true — cgroup-mutation containment)" {
     grep -qE '^ProtectControlGroups=true' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler.service Documentation field present — operator-doc-trail contract)" {
+    grep -qE '^Documentation=' "${UNIT}"
+}

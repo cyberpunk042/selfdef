@@ -684,3 +684,7 @@ EOF
 @test "INVARIANT (script's PCIe gate expects ≥2 LnkSta Width x8 matches — symmetric-lane attestation contract)" {
     grep -qE 'LnkSta.*x8|Width x8' "${SCRIPT}"
 }
+
+@test "INVARIANT (script's ZFS gate match string 'all pools are healthy' verbatim — operator-pattern-match contract)" {
+    grep -qE 'all pools are healthy' "${SCRIPT}"
+}

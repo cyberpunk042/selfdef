@@ -563,3 +563,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer's WantedBy=timers.target — timer-enable-graph reachability)" {
     grep -qE '^WantedBy=timers.target' "${TIMER}"
 }
+
+@test "INVARIANT (.service Documentation field present — operator-doc-trail contract)" {
+    grep -qE '^Documentation=' "${SERVICE}"
+}
