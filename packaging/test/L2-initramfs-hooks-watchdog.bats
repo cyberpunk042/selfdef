@@ -367,3 +367,16 @@ seed_benign() {
     ! grep -qE 'find[[:space:]].*-delete' "${WD}"
     ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(HOOKD|HOOK)' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # initramfs-hooks-watchdog runs ON the timer's scheduled
+    # fire — scans /usr/share/initramfs-tools/hooks for
+    # injection patterns, emits a verdict, then exits. Type=
+    # simple would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the initramfs-hooks-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/initramfs-hooks-watchdog/systemd/selfdef-initramfs-hooks.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
