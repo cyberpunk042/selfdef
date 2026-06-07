@@ -341,3 +341,14 @@ TOMLEOF
     run_wd
     grep -qE '^log_file[[:space:]]*=' "${AUDITD_CONF}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on auditd-tune installer surface
+    # across config-render + backup + restart phases.
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"auditd-tune"')
+    [ "${count}" = "1" ]
+}
