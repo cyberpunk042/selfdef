@@ -293,3 +293,18 @@ TOMLEOF
     run_wd
     bash -n "${SCRIPT_DST}"
 }
+
+@test "INVARIANT (timer unit carries OnUnitActiveSec — recurrent re-armed cadence beyond OnBootSec one-shot)" {
+    # Sister to doctor-timer + entropy-baseline + secure-boot-
+    # status OnUnitActiveSec INVARIANTs already locked. A one-
+    # shot timer that fires only on OnBootSec would let a long-
+    # uptime host run for weeks without swap-encryption check.
+    # The selfdef-swap-encryption.timer MUST carry
+    # OnUnitActiveSec=<period> so the unencrypted-swap RAM-to-
+    # disk-exfil surveillance runs recurrently across long
+    # uptimes (operator-resume from suspend or runtime swap
+    # add could change the encryption state mid-uptime).
+    write_config "report"
+    run_wd
+    grep -qE '^OnUnitActiveSec=' "${TIMER_DST}"
+}
