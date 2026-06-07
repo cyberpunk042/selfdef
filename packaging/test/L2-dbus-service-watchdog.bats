@@ -288,3 +288,27 @@ EOF
     cap | grep -q '"severity":"alert"'
     cap | grep -q '"event":"dbus_service_suspicious"'
 }
+
+@test "INVARIANT (SystemdService directive surveillance: a D-Bus activation pointing at attacker-controlled systemd unit also surfaces — alternate-mechanism axis)" {
+    # Sister to the Exec= axis already locked. Modern D-Bus
+    # activation supports the alternative SystemdService= directive
+    # that hands off activation to systemd (instead of dbus-daemon
+    # forking the Exec= directly). An attacker may plant a
+    # SystemdService=evil-callback.service descriptor that systemd
+    # then runs AS WHATEVER the unit declares (defaults to root).
+    # Locks coverage of the alternate-mechanism axis on the dbus-
+    # service activation surface alongside the direct Exec= path.
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SVC}" <<EOF
+[D-BUS Service]
+Name=com.example.A
+SystemdService=attacker-callback.service
+User=root
+EOF
+    run_wd
+    # Severity should be at least warn (config changed); ideally
+    # alert if the watchdog tracks SystemdService= specifically.
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
