@@ -350,3 +350,16 @@ seed_benign() {
     run_wd
     cap | grep -qE 'distinctive-attacker-initd-script|"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: rc.local invoking binary from /tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1037
+    # boot-time persistence — rc.local runs AS ROOT at every
+    # boot. Attacker stages benign-looking rc.local that invokes
+    # binary in /tmp.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/tmp/staged_payload\nexit 0\n' > "${RCFILE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
