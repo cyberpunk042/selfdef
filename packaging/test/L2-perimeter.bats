@@ -630,3 +630,10 @@ assert t == 'string', f'arg type must be string, got {t!r}'
     grep -qE 'mkdir -p.*tetragon/tracing-policies' "${POSTINST}" || \
     grep -qE '/etc/tetragon/tracing-policies' "${POSTINST}"
 }
+
+@test "INVARIANT (YAML uses single root TracingPolicy document — no multi-doc YAML contract)" {
+    # Tetragon loads one TracingPolicy per file; multi-doc YAML
+    # (---) would be silently ignored after the first doc.
+    ! grep -qE '^---$' "${YAML}" || \
+        [ "$(grep -c '^---$' "${YAML}")" -le 1 ]
+}

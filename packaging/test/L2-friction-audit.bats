@@ -676,3 +676,7 @@ EOF
     grep -qE 'CRITICAL ARCHITECTURAL FRICTION ERROR' "${SCRIPT}"
     grep -qE 'emit_ocsf' "${SCRIPT}"
 }
+
+@test "INVARIANT (script's emit_ocsf appends to OCSF jsonl with > redirect — newline-delimited JSONL contract)" {
+    grep -qE '>>.*OCSF_PATH|>>.*ocsf' "${SCRIPT}"
+}

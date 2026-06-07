@@ -554,3 +554,8 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service [Unit] section comment block reference selfdef-doctor purpose — derivation-source audit-trail)" {
     head -10 "${SERVICE}" | grep -qE 'doctor|health|periodic'
 }
+
+@test "INVARIANT (cargo-deb manifest carries selfdef-doctor.timer asset entry distinct from .service — separate-file asset contract)" {
+    grep -qE 'selfdef-doctor\.timer' "${DAEMON_CARGO}"
+    grep -qE 'selfdef-doctor\.service' "${DAEMON_CARGO}"
+}

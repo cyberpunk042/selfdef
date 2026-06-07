@@ -768,3 +768,7 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
     apply="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/install/apply.sh"
     [ -x "${apply}" ]
 }
+
+@test "INVARIANT (hardware-tune-cache install/check.sh exists as file — check-script existence contract)" {
+    [ -f "${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/install/check.sh" ]
+}
