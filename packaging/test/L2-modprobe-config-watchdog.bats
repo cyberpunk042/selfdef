@@ -332,3 +332,13 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: install directive invoking binary from /var/tmp → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1547.006
+    # module-autoload-trigger root-exec — modprobe install
+    # directive fires AS ROOT on auto-load (network packets, /dev/*
+    # access, ld.so dep).
+    printf 'install evilmod /var/tmp/staged_payload\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
