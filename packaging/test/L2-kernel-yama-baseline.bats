@@ -326,3 +326,12 @@ TOMLEOF
     [ ! -f "${DROPIN}" ]
     ! grep -qE 'sysctl -w kernel.yama.ptrace_scope' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (paranoid ptrace_scope = 3 — strictest mode)" {
+    # Sister to ssh-hardening + many other profile-rank
+    # INVARIANTs. ptrace_scope=3 is the strictest YAMA mode
+    # (no ptrace from anywhere). Paranoid MUST hit this value.
+    write_config "paranoid" "true"
+    run_wd
+    grep -qE '^kernel\.yama\.ptrace_scope[[:space:]]*=[[:space:]]*3' "${DROPIN}"
+}
