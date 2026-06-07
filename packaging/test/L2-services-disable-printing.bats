@@ -933,3 +933,14 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     uni="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/install/uninstall.sh"
     [ -s "${uni}" ]
 }
+
+@test "INVARIANT (services-disable-printing module.toml has TOML parser-safe structure — Python tomllib parse-success contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert isinstance(data, dict), 'TOML root must be table'
+"
+}

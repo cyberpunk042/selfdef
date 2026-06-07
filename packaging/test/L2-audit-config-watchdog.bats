@@ -1104,3 +1104,11 @@ setup_baseline_state() {
         [ "${lines}" -gt 5 ]
     done
 }
+
+@test "INVARIANT (audit-config-watchdog .service unit ExecStart references /usr/local/libexec/selfdef/ path — canonical-binary-path contract)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/audit-config-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^ExecStart=/usr/local/libexec/selfdef/' "${s}"
+    done
+}

@@ -915,3 +915,15 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     uni="${BATS_TEST_DIRNAME}/../../modules/secure-boot-status/install/uninstall.sh"
     [ -s "${uni}" ]
 }
+
+@test "INVARIANT (secure-boot-status module.toml [install_paths].paths includes at least one /usr/ path — binary-staging-target contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/secure-boot-status/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ target, got {ps!r}'
+"
+}

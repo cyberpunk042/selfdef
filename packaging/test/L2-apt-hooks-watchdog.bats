@@ -1011,3 +1011,11 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         [ "${lines}" -gt 5 ]
     done
 }
+
+@test "INVARIANT (apt-hooks-watchdog .service unit ExecStart references /usr/local/libexec/selfdef/ path — canonical-binary-path contract)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^ExecStart=/usr/local/libexec/selfdef/' "${s}"
+    done
+}

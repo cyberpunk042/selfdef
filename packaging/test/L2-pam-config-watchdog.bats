@@ -1050,3 +1050,11 @@ assert 'install' in data, 'install missing'
         [ "${lines}" -gt 5 ]
     done
 }
+
+@test "INVARIANT (pam-config-watchdog .service unit ExecStart references /usr/local/libexec/selfdef/ path — canonical-binary-path contract)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/pam-config-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^ExecStart=/usr/local/libexec/selfdef/' "${s}"
+    done
+}
