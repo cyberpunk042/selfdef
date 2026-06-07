@@ -247,3 +247,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (action under /home: user-writable hijack coverage — sister axis to rsyslog-exec/syslog-ng /home)" {
+    # Sister to many other watchdog's /home user-writable
+    # INVARIANT across the brain. /home is the user-writable
+    # surface — an attacker with a regular user account can
+    # drop a malicious binary into their home and have fail2ban
+    # exec it AS ROOT on every ban/unban event. Lock axis-
+    # symmetry on /home for the fail2ban action surface (T1546
+    # — fail2ban runs action commands AS ROOT; attacker self-
+    # induces ban from throwaway IP to fire planted action).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Definition]\nactionban = /home/user/.evil <ip>\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
