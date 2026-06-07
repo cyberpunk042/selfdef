@@ -494,3 +494,17 @@ v = data.get('provides', [])
 assert isinstance(v, list), f'provides must be list, got {type(v).__name__}'
 "
 }
+
+@test "INVARIANT (module.toml requires field is a TOML list — anti-string-malformation contract on requires)" {
+    # Sister to brain-wide module.toml list-vs-string family.
+    # Locks list discipline on requires.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('requires', [])
+assert isinstance(v, list), f'requires must be list, got {type(v).__name__}'
+"
+}
