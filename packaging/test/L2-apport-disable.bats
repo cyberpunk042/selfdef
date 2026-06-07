@@ -309,3 +309,22 @@ TOMLEOF
     grep -q 'systemctl mask whoopsie.service' "${SYSEOF_LOG}"
     grep -q 'sysctl -w kernel.core_pattern=core' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (idempotent re-apply: mask twice fires systemctl mask twice — current behavior, no internal skip-detect on already-masked)" {
+    # Sister to many other installer module's idempotency
+    # INVARIANT across the brain. The apport-disable module's
+    # systemctl mask is the idempotent operation (systemd
+    # already detects already-masked + returns 0). The wrapper
+    # does NOT internally skip — locks current behavior so
+    # operator-dashboard count reflects intended re-arm intent
+    # (operator running apply twice intentionally re-asserts
+    # the mask) rather than silent skip that would hide drift
+    # detection. Locks the re-apply contract.
+    write_config "mask"
+    printf '|/usr/share/apport/apport %%p\n' > "${COREPAT}"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    run_wd
+    # Second apply re-issues mask command (no internal skip-detect).
+    grep -q 'systemctl mask apport.service' "${SYSEOF_LOG}"
+}
