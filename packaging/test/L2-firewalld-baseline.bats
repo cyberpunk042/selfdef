@@ -334,3 +334,21 @@ TOMLEOF
     grep -q -- '--permanent --zone=selfdef --add-service=https' "${FW_LOG}"
     grep -q -- '--permanent --zone=selfdef --add-port=8080/tcp' "${FW_LOG}"
 }
+
+@test "INVARIANT (zone name 'selfdef' is the uninstall identification marker — anti-orphan-zone contract)" {
+    # Sister to many other installer module's self-identifying-
+    # artifact INVARIANTs across the brain. The created zone MUST
+    # be named 'selfdef' (not a randomly-generated zone name).
+    # uninstall.sh identifies our zone via that exact name and
+    # rolls it back; a generated name would orphan the zone on
+    # uninstall (operator's firewalld would carry a permanent
+    # zone of unknown provenance, no rollback path). Locks the
+    # naming contract on the operator-audit-trail axis.
+    write_config "baseline"
+    run_wd
+    # Every relevant firewall-cmd invocation uses --zone=selfdef,
+    # never a random/dynamic zone name.
+    grep -qE -- '--permanent.*--new-zone=selfdef|--new-zone selfdef' "${FW_LOG}"
+    grep -q -- '--permanent --zone=selfdef --add-service=ssh' "${FW_LOG}"
+    grep -q -- '--set-default-zone=selfdef' "${FW_LOG}"
+}
