@@ -338,3 +338,17 @@ run_wd() {
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"proc-hidepid"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (proc.mount unit carries nosuid+nodev+noexec — defense-in-depth on /proc remount)" {
+    # Sister to brain-wide mount-options INVARIANTs. /proc.mount
+    # MUST carry nosuid + nodev + noexec as defense-in-depth even
+    # though /proc is virtual — these flags are systemd-mount best
+    # practice and reject any attacker attempt to remount /proc
+    # with relaxed options as a downgrade attack.
+    write_config "noaccess" "false"
+    run_wd
+    [ -f "${SYSTEMD_DIR}/proc.mount" ]
+    grep -qE '^Options=.*nosuid' "${SYSTEMD_DIR}/proc.mount"
+    grep -qE '^Options=.*nodev' "${SYSTEMD_DIR}/proc.mount"
+    grep -qE '^Options=.*noexec' "${SYSTEMD_DIR}/proc.mount"
+}
