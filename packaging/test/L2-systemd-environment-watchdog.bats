@@ -326,3 +326,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (NODE_PATH injection — sister axis to PYTHONPATH/PERL5LIB on node-loader family)" {
+    # Sister to LD_PRELOAD / LD_AUDIT / LD_LIBRARY_PATH /
+    # PYTHONPATH / PERL5LIB env-var injection INVARIANTs. The
+    # NODE_PATH environment variable is consulted by Node.js
+    # require() module-resolution algorithm BEFORE node_modules
+    # search. Attacker who sets NODE_PATH=/tmp/.evil-node-libs
+    # in the systemd DefaultEnvironment can hijack require()
+    # of any module name not already loaded — node loads the
+    # attacker's malicious version with priority over the
+    # legitimate one. T1574 Hijack Execution Flow via runtime-
+    # module-loader substitution on node ecosystem.
+    printf '[Manager]\nDefaultEnvironment=LANG=en_US.UTF-8\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Manager]\nDefaultEnvironment=NODE_PATH=/tmp/.evil-node-libs\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
