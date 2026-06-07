@@ -314,3 +314,22 @@ TOMLEOF
     grep -qE '^\[sshd\]' "${JAIL_D}/50-selfdef.conf"
     grep -qE '^\[recidive\]' "${JAIL_D}/60-selfdef-recidive.conf"
 }
+
+@test "INVARIANT (asymmetric profile content: standard does NOT install recidive drop-in — recidive is broad-only)" {
+    # Sister to many other installer module's asymmetric-profile
+    # INVARIANT across the brain (ssh-hardening AllowGroups,
+    # selinux-baseline autorelabel, tmpfs-baseline /tmp-only,
+    # wireless-disable rfkill-vs-mask, coredump-suid-restrict
+    # limits.d). The standard profile narrows to the sshd jail
+    # only (the most common brute-force surface); the broad
+    # profile widens to recidive (long-term repeat-offender ban)
+    # plus apache/nginx jails. If standard silently installed
+    # recidive, it would over-reach (operator who chose standard
+    # to keep recidive as a later-deployment option would lose
+    # the asymmetry). Locks the boundary: standard sshd-only,
+    # broad both.
+    write_config "standard"
+    run_wd
+    [ -f "${JAIL_D}/50-selfdef.conf" ]
+    ! [ -f "${JAIL_D}/60-selfdef-recidive.conf" ]
+}
