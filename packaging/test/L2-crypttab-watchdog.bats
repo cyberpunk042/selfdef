@@ -319,3 +319,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-vol'
 }
+
+@test "INVARIANT (keyfile under /dev/shm — tmpfs writable-root axis-symmetric expansion on keyfile axis)" {
+    # Sister to /tmp + /var/tmp + /home keyfile writable-root
+    # INVARIANTs. /dev/shm is tmpfs writable by ALL users + RAM-
+    # resident; attacker plants keyfile in /dev/shm, gets LUKS
+    # unlock-key replacement primitive on every boot (anti-
+    # encryption-at-rest defense).
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'data /dev/sda2 /dev/shm/.lukskey luks\n' > "${CRYPTTAB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
