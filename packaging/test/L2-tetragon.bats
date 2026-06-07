@@ -272,3 +272,16 @@ EOF
         || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
         || skip "no tomllib/tomli available; parser-contract check skipped"
 }
+
+@test "INVARIANT (no auto-uninstall of CONFIG_BPF dependency: tetragon installer NEVER emits kernel/bpf removal commands)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANT family.
+    # tetragon requires CONFIG_BPF + the tetragon binary; the
+    # installer wires policy + service config but NEVER uninstalls
+    # tetragon-bpf, the kernel BPF subsystem, or the bpftool
+    # package — those are operator-domain (substrate not owned
+    # by this module). Locks no-auto-uninstall-of-substrate on
+    # the tetragon module substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(bpftool|linux-headers|kernel-headers)' "${f}"
+    done
+}
