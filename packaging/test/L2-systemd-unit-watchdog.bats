@@ -573,3 +573,16 @@ EOF
     # contract on the systemd-unit surveillance substrate.
     ! grep -qE 'systemctl[[:space:]]+(disable|mask|stop)' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # systemd-unit-watchdog runs ON the timer's scheduled fire —
+    # diffs enabled-unit set against baseline, emits a verdict
+    # on persistence-vector additions (.service/.timer/.path/
+    # .socket/.mount), then exits. Type=simple would break
+    # timer OnUnitActiveSec semantics. Locks oneshot-probe
+    # contract on the systemd-unit-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/systemd-unit-watchdog/systemd/selfdef-systemd-units.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
