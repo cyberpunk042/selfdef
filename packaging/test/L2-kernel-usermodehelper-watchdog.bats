@@ -311,3 +311,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on kernel-usermodehelper surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The kernel-usermodehelper-watchdog MUST only emit severity
+    # values from the closed set {ok,warn,alert} — never custom
+    # values (critical, error, fatal, notice, info). Operator
+    # dashboard parsers branch on the literal severity string;
+    # an out-of-set value silently falls through routing and
+    # the operator never sees the T1547 kernel-usermode-helper
+    # persistence alert. Locks parser contract on the kernel.
+    # modprobe/poweroff_cmd/hotplug/usermodehelper detection
+    # surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    helper modprobe /sbin/modprobe
+    run_wd                                              # ok / baseline
+    helper modprobe /tmp/.evil
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
