@@ -660,3 +660,12 @@ EOF
 @test "INVARIANT (script uses bash -c invocation OR /bin/bash shebang — bash-only-not-sh contract)" {
     head -3 "${SCRIPT}" | grep -qE '#!/.*bash|^#!/usr/bin/env bash'
 }
+
+@test "INVARIANT (script emits emit_ring with \"skip\" status when backend tool absent — operator-extension graceful-skip contract)" {
+    # Sister to brain-wide graceful-skip INVARIANT family. When zpool
+    # or dmidecode is absent (containers, VMs, non-ZFS hosts), the
+    # script MUST emit a skip-status ring entry rather than fail —
+    # so operators see "module ran + gracefully degraded" rather than
+    # "module crashed".
+    grep -qE 'emit_ring.*"skip"' "${SCRIPT}"
+}

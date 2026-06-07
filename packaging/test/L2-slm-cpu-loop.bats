@@ -785,3 +785,7 @@ import os
 chk_path = os.path.join('${BATS_TEST_DIRNAME}', '..', '..', 'modules', 'slm-cpu-loop', 'install', 'check.sh')
 " || [ -f "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/check.sh" ]
 }
+
+@test "INVARIANT (slm-cpu-loop install/uninstall.sh exists as file — uninstall-script existence contract)" {
+    [ -f "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh" ]
+}

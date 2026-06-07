@@ -620,3 +620,8 @@ t = data['spec']['kprobes'][0]['args'][0]['type']
 assert t == 'string', f'arg type must be string, got {t!r}'
 "
 }
+
+@test "INVARIANT (postrm has BOTH purge AND remove cases — Debian package-lifecycle symmetry contract)" {
+    grep -qE '^[[:space:]]*purge\)' "${POSTRM}"
+    grep -qE '^[[:space:]]*remove\)' "${POSTRM}"
+}

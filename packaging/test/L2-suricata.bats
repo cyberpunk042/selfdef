@@ -675,3 +675,9 @@ assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninsta
     [ -f "${inst_dir}/check.sh" ]
     [ -f "${inst_dir}/uninstall.sh" ]
 }
+
+@test "INVARIANT (suricata README.md exists in module dir — operator-doc-trail contract)" {
+    readme="${BATS_TEST_DIRNAME}/../../modules/suricata/README.md"
+    [ -f "${readme}" ]
+}
+

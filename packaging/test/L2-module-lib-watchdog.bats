@@ -620,3 +620,7 @@ setup() {
 @test "INVARIANT (lib selfdef_is_writable_dir returns true for /tmp — known-writable-dir coverage)" {
     selfdef_is_writable_dir /tmp
 }
+
+@test "INVARIANT (lib selfdef_scan_injection returns NON-ZERO rc when no match — pure-filter rc contract)" {
+    ! selfdef_scan_injection 'iptables -A INPUT -j ACCEPT' >/dev/null
+}

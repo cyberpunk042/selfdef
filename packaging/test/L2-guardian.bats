@@ -377,3 +377,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst is idempotent: re-run does NOT re-create existing dirs — mkdir -p safety contract)" {
     grep -qE 'mkdir -p' "${POSTINST}"
 }
+
+@test "INVARIANT (guardian unit Wants=tetragon.service — soft-dependency contract: starts even without tetragon)" {
+    grep -qE '^Wants=tetragon\.service' "${UNIT}"
+}

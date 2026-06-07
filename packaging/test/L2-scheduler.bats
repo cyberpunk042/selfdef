@@ -561,3 +561,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler unit declares After=tetragon.service — eBPF-substrate ordering contract)" {
     grep -qE '^After=.*tetragon\.service' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler unit declares Wants=selfdef-guardian.service — soft-dependency contract)" {
+    grep -qE '^Wants=selfdef-guardian\.service' "${UNIT}"
+}

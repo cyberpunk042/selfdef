@@ -546,3 +546,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qE '^OnBootSec=' "${TIMER}"
     grep -qE '^OnUnitActiveSec=' "${TIMER}"
 }
+
+@test "INVARIANT (cargo-deb maintainer-scripts manifest references postinst — Debian-package-lifecycle wiring contract)" {
+    grep -qE 'maintainer-scripts|postinst' "${DAEMON_CARGO}"
+}
