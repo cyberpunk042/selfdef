@@ -278,3 +278,15 @@ teardown_real_run() {
     grep -qE 'set[[:space:]]+-euo[[:space:]]+pipefail' "${INSTALL_DIR}/apply.sh" \
         || (grep -qE 'set[[:space:]]+-eu' "${INSTALL_DIR}/apply.sh" && grep -qE 'set[[:space:]]+-o[[:space:]]+pipefail' "${INSTALL_DIR}/apply.sh")
 }
+
+@test "INVARIANT (check.sh + uninstall.sh use set -euo pipefail — full lifecycle fail-loud invariant)" {
+    # Sister to apply.sh fail-loud INVARIANT just locked. Full
+    # lifecycle (check/uninstall) MUST also be fail-loud — half-
+    # cleanup of tune-env during operator MTTR leaves downstream
+    # modules (slm-cpu-loop, wasm-aot-cache, tensor-parallel-
+    # inference) consuming broken state.
+    grep -qE 'set[[:space:]]+-euo[[:space:]]+pipefail' "${INSTALL_DIR}/check.sh" \
+        || (grep -qE 'set[[:space:]]+-eu' "${INSTALL_DIR}/check.sh" && grep -qE 'set[[:space:]]+-o[[:space:]]+pipefail' "${INSTALL_DIR}/check.sh")
+    grep -qE 'set[[:space:]]+-euo[[:space:]]+pipefail' "${INSTALL_DIR}/uninstall.sh" \
+        || (grep -qE 'set[[:space:]]+-eu' "${INSTALL_DIR}/uninstall.sh" && grep -qE 'set[[:space:]]+-o[[:space:]]+pipefail' "${INSTALL_DIR}/uninstall.sh")
+}
