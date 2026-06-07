@@ -343,3 +343,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on krb5-plugins surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The krb5-plugins-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1574 Kerberos auth plugin dlopen Hijack
+    # Execution Flow alert. Locks parser contract on the krb5
+    # plugin module detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[plugins]\n  clpreauth = { module = pkinit:/usr/lib/krb5/plugins/preauth/pkinit.so }\n' > "${CONF}"
+    run_wd                                              # ok / baseline
+    printf '[plugins]\n  kdcpreauth = { module = evil:/tmp/.evil-krb5.so }\n' > "${CONF}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
