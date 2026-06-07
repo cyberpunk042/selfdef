@@ -312,3 +312,15 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: motd script invoking binary from /dev/shm → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546.004
+    # pam_motd-as-root persistence — /dev/shm tmpfs in-RAM:
+    # no on-disk forensic trace.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/dev/shm/staged_payload\n' > "${HOOKD}/00-header"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
