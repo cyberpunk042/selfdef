@@ -382,3 +382,21 @@ EOF
     run_wd
     cap | grep -qE '"severity":"alert"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named user to privileged group surfaces in priv_sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker adds a
+    # distinctively-named user to a privileged group (sudo /
+    # wheel / docker / adm), the user NAME MUST surface in the
+    # JSON sample so operator dashboard routes triage to the
+    # right account. Locks the operator-visibility contract on
+    # the group-membership privilege-grant surface (T1098 —
+    # Account Manipulation via group membership).
+    write_passwd_group
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add distinctive-attacker-grant to sudo group.
+    sed -i 's|^sudo:x:27:.*|sudo:x:27:distinctive-attacker-grant|' "${GROUP_FILE}"
+    run_wd
+    cap | grep -q 'distinctive-attacker-grant'
+}
