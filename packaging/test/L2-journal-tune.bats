@@ -380,3 +380,18 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: journal-tune installer NEVER deletes operator-pre-existing journald configs — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # journal-tune writes its own /etc/systemd/journald.conf.d/
+    # drop-in; it MUST NEVER rm/find-delete an operator's
+    # pre-existing /etc/systemd/journald.conf or journald.conf.d
+    # entries not owned by THIS module. Locks no-auto-delete on
+    # the journal-tune installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/journal-tune/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+/etc/systemd/journald\.conf' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/systemd/journald.*-delete' "${f}"
+    done
+}
