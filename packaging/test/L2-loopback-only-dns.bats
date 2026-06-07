@@ -284,6 +284,19 @@ TOMLEOF
     grep -qE '^DNSStubListener=yes' "${DST}" || grep -qE 'DNSStubListenerAddress.*127\.0\.0\.1' "${DST}" || grep -qE 'DNSStubListener=127\.0\.0\.1' "${DST}"
 }
 
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-logger
+    # INVARIANTs (SDD-062 consumer dispatch contract). One run of
+    # the installer must emit EXACTLY ONE emit_status JSON record —
+    # not zero (silent run = invisible to operator dashboard) and
+    # not multiple (duplicate records corrupt the dashboard's
+    # apply-count + last-status invariants).
+    write_config "loopback"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"loopback-only-dns"')
+    [ "${count}" = "1" ]
+}
+
 @test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in render AND NO systemctl restart fires when DRY_RUN=1)" {
     # Sister to every other installer module's DRY_RUN INVARIANT
     # across the brain. Operator's exploratory --dry-run MUST
