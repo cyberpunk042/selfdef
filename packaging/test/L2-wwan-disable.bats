@@ -316,3 +316,16 @@ TOMLEOF
     grep -q 'rfkill block wwan' "${RF_LOG}"
     ! [ -f "${MODPROBE_FILE}" ]
 }
+
+@test "INVARIANT (DRY_RUN does not fire rfkill or systemctl mask or write the modprobe blacklist)" {
+    # Sister to wireless-disable + many other installer module's
+    # DRY_RUN INVARIANT across the brain. The wwan-disable
+    # DRY_RUN path MUST be a no-op against live kernel state +
+    # systemd state + filesystem. Locks the dry-run side-effect-
+    # freedom contract.
+    write_config "mask"
+    DRY_RUN=1 run_wd
+    ! grep -qE 'rfkill block wwan' "${RF_LOG}"
+    ! grep -qE 'systemctl mask' "${SYSEOF_LOG}"
+    ! [ -f "${MODPROBE_FILE}" ]
+}
