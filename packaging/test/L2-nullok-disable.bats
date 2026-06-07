@@ -346,3 +346,21 @@ EOF
     grep -q 'try_first_pass'       "${PAM_D}/login"
     [ -f "${PAM_D}/login.selfdef-nullok-backup" ]
 }
+
+@test "INVARIANT (pam_unix2.so also covered — alternative legacy PAM module variant)" {
+    # Sister to pam_unix.so coverage already locked. PAM legacy
+    # supports the pam_unix2.so alternative (used historically on
+    # SUSE and some Slackware-derived distros). The nullok token on
+    # pam_unix2.so has identical semantics + must be removed under
+    # enforce. Locks coverage of the full pam_unix family on the
+    # nullok-removal surface.
+    cat > "${PAM_D}/login" <<'EOF'
+auth sufficient pam_unix2.so nullok try_first_pass
+account required pam_unix2.so
+EOF
+    write_config "enforce"
+    run_wd
+    ! grep -qE '\bnullok\b' "${PAM_D}/login"
+    grep -q 'pam_unix2\.so' "${PAM_D}/login"
+    [ -f "${PAM_D}/login.selfdef-nullok-backup" ]
+}
