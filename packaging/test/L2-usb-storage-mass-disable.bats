@@ -816,3 +816,15 @@ p = data.get('phase', '')
 assert p in {'main', 'early', 'late'}, f'phase must be canonical {main,early,late}, got {p!r}'
 "
 }
+
+@test "INVARIANT (usb-storage-mass-disable module.toml [install] block present as TOML table — top-level install-section contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/usb-storage-mass-disable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+inst = data.get('install')
+assert isinstance(inst, dict), f'[install] must be TOML table, got {type(inst).__name__}'
+"
+}

@@ -672,3 +672,15 @@ p = data.get('provides')
 assert isinstance(p, list), f'provides must be TOML list, got {type(p).__name__}'
 "
 }
+
+@test "INVARIANT (vpn-bridge module.toml [install] block present as TOML table — top-level install-section contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/vpn-bridge/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+inst = data.get('install')
+assert isinstance(inst, dict), f'[install] must be TOML table, got {type(inst).__name__}'
+"
+}

@@ -742,3 +742,17 @@ assert 'install' in data, 'install missing'
         grep -qE '^Persistent=' "${t}"
     done
 }
+
+@test "INVARIANT (dhcpd-exec-watchdog .sh script file exists in module systemd/ dir — ExecStart-target source-of-truth contract)" {
+    # Sister to brain-wide ExecStart-target INVARIANT family.
+    # The watchdog .service's ExecStart points at
+    # /usr/local/libexec/selfdef/<slug>-watchdog.sh which is
+    # the runtime install path; the source of truth lives at
+    # modules/<slug>-watchdog/systemd/<slug>-watchdog.sh.
+    # A regression that lost the script file would break
+    # the cargo-deb manifest install + leave ExecStart
+    # dangling. Locks the source-script-exists discipline
+    # on the dhcpd-exec-watchdog substrate.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/dhcpd-exec-watchdog/systemd"
+    [ -f "${script_dir}/dhcpd-exec-watchdog.sh" ] ||     [ -n "$(ls "${script_dir}"/*.sh 2>/dev/null)" ]
+}
