@@ -343,3 +343,16 @@ seed_benign() {
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs. Multi-
+    # rogue scenario locks consolidation discipline on T1556.001
+    # NSS module hijack surveillance.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'passwd: files evil1\ngroup: files evil2\nshadow: files evil3\nhosts: files dns evil4\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-nsswitch -- ')
+    [ "${main_count}" = "1" ]
+}
