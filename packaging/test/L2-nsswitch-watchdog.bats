@@ -375,3 +375,16 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # nsswitch-watchdog runs ON the timer's scheduled fire —
+    # diffs /etc/nsswitch.conf against baseline, emits a verdict
+    # on hosts:/passwd: line backdoor sources, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the nsswitch-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/nsswitch-watchdog/systemd/selfdef-nsswitch.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
