@@ -469,3 +469,18 @@ EOF
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger-line INVARIANTs.
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 198.51.100.42
+nameserver 198.51.100.43
+nameserver 198.51.100.44
+EOF
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-dns-resolver -- ')
+    [ "${main_count}" = "1" ]
+}
