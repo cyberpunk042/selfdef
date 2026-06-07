@@ -310,3 +310,19 @@ TOMLEOF
     [ -f "${DROPIN}" ]
     [ "$(stat -c '%a' "${DROPIN}")" = "644" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO drop-in written AND NO sysctl -w fired when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing the drop-in AND without firing
+    # sysctl -w. Silent dry-run could block legitimate debugger
+    # workflows (gdb -p, strace -p) on a host where operator was
+    # investigating ptrace_scope behavior. Locks dry-run-preserves-
+    # state on the kernel-yama-baseline substrate.
+    write_config "strict"
+    rm -f "${DROPIN}"
+    : > "${SCTL_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${DROPIN}" ]
+    ! grep -qE 'sysctl -w kernel.yama.ptrace_scope' "${SCTL_LOG}"
+}
