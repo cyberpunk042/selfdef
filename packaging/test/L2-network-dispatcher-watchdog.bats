@@ -325,3 +325,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: network-dispatcher script invoking binary from /var/tmp → alert)" {
+    # Sister to /dev/shm net-dispatcher writable-root-exec. /var/tmp
+    # persistent + writable.
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/var/tmp/staged_payload\n' > "${DISPD}/99-evil"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
