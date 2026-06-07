@@ -397,3 +397,21 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (rogue pam_*.so under /var/tmp — writable-root axis-symmetric expansion on PAM auth-stack dlopen surface)" {
+    # Sister to /home rogue PAM module INVARIANT already locked.
+    # /var/tmp is writable by ALL users (sticky-bit doesn't gate
+    # dlopen) AND persists across reboots (unlike /tmp /dev/shm
+    # tmpfs on most distros) — attackers prefer it for boot-
+    # survival persistence. Locks axis-symmetric writable-root
+    # coverage on the T1556 PAM module hijack surface symmetric
+    # to /home.
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${PAM_DIR}/99-evil-vartmp-mod" <<'EOF'
+auth sufficient /var/tmp/.evil-pam.so
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
