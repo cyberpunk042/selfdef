@@ -373,3 +373,20 @@ teardown_real_run() {
         ! grep -qE 'find[[:space:]]+/etc/selfdef.*-delete' "${f}"
     done
 }
+
+@test "INVARIANT (no auto-delete of operator-pre-existing /var/cache/selfdef contents — installer manages own files only)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # Distinct from the existing /etc/selfdef-side INVARIANT
+    # above — this locks the OUTPUT cache dir: tensor-parallel-
+    # inference writes per-config cache state into
+    # /var/cache/selfdef/tensor-parallel, but it MUST NEVER
+    # rm/find-delete an OPERATOR-pre-existing /var/cache/selfdef
+    # subdir not owned by THIS module (e.g. another model's
+    # cache dir). Locks no-auto-delete on the /var/cache/selfdef
+    # output substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/var/cache/selfdef([[:space:]]|/[[:space:]]|$)' "${f}"
+        ! grep -qE 'find[[:space:]]+/var/cache/selfdef[[:space:]].*-delete' "${f}"
+    done
+}

@@ -359,3 +359,17 @@ INSTALL_DIR="${MODULE_DIR}/install"
         ! grep -qE 'find[[:space:]]+/var/cache/selfdef.*-delete' "${f}"
     done
 }
+
+@test "INVARIANT (no auto-delete: wasm-aot-cache installer NEVER deletes /var/cache/selfdef or operator-pre-existing runtime configs — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # wasm-aot-cache writes its own env/cache files into
+    # /var/cache/selfdef + reads /etc/selfdef; it MUST NEVER
+    # rm/find-delete an operator's pre-existing runtime config
+    # not owned by THIS module. Locks no-auto-delete on the
+    # wasm-aot-cache installer substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/etc/selfdef[/[:space:]]' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/selfdef.*-delete' "${f}"
+    done
+}

@@ -324,3 +324,17 @@ teardown_real_run() {
         ! grep -qE '(apt-get|dpkg|dnf|rpm|yum|pip|pip3|cargo)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(cuda|llama-cpp|python3?)' "${f}"
     done
 }
+
+@test "INVARIANT (no auto-delete: bitnet-gpu-inference installer NEVER deletes /var/cache/selfdef or operator-pre-existing runtime configs — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # bitnet-gpu-inference writes its own env/cache files into
+    # /var/cache/selfdef + reads /etc/selfdef; it MUST NEVER
+    # rm/find-delete an operator's pre-existing runtime config
+    # not owned by THIS module. Locks no-auto-delete on the
+    # bitnet-gpu-inference installer substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/etc/selfdef[/[:space:]]' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/selfdef.*-delete' "${f}"
+    done
+}

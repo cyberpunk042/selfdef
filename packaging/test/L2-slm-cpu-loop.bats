@@ -383,3 +383,17 @@ INSTALL_DIR="${MODULE_DIR}/install"
         ! grep -qE 'find[[:space:]]+/etc/(selinux|cups|profile\.d|ssh|sudoers|sudoers\.d|suricata).*-delete' "${sh}"
     done
 }
+
+@test "INVARIANT (no auto-delete: slm-cpu-loop installer NEVER deletes /var/cache/selfdef or operator-pre-existing runtime configs — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # slm-cpu-loop writes its own env/cache files into
+    # /var/cache/selfdef + reads /etc/selfdef; it MUST NEVER
+    # rm/find-delete an operator's pre-existing runtime config
+    # not owned by THIS module. Locks no-auto-delete on the
+    # slm-cpu-loop installer substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/etc/selfdef[/[:space:]]' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/selfdef.*-delete' "${f}"
+    done
+}
