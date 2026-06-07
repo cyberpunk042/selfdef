@@ -370,3 +370,19 @@ TOMLEOF
     [ -f "${MODPROBE_FILE}" ]
     grep -qE '^#.*(selfdef|wwan-disable|managed)' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (no auto-uninstall: wwan-disable NEVER emits package-remove commands)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The wwan-disable installer writes a modprobe.d
+    # blacklist + masks ModemManager + fires rfkill but MUST
+    # NEVER emit shell commands that uninstall kernel/firmware
+    # packages (apt/dpkg/dnf/rpm/yum remove|purge|uninstall
+    # linux-image|linux-firmware|modemmanager). Auto-removal
+    # would be catastrophic at the kernel-substrate level.
+    # Locks anti-package-removal contract on the wwan-disable
+    # substrate.
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(linux-image|linux-firmware|modemmanager)'
+    [ ! -f "${MODPROBE_FILE}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${MODPROBE_FILE}"
+}
