@@ -501,3 +501,27 @@ EOF
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on dns-resolver surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The dns-resolver-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1071.004 DNS resolver MITM persistence
+    # alert. Locks parser contract on the /etc/resolv.conf
+    # nameserver delta detection surface.
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 1.1.1.1
+EOF
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+EOF
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
