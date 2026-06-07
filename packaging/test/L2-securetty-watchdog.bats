@@ -350,3 +350,21 @@ seed_benign() {
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (baseline file is chmod 0600 — confidentiality of securetty inventory)" {
+    # Sister to brain-wide baseline-chmod-0600 confidentiality
+    # INVARIANTs across L2 surveillance suites. The securetty-
+    # watchdog baseline TSV contains the inventory of operator-
+    # allowed root-login tty paths which discloses the trusted
+    # session-entry surface to any user able to read the file.
+    # Mode 0600 (root-only) is the canonical confidentiality
+    # contract — mode 0644 would expose the root-login-tty
+    # whitelist enabling attacker to map which session-paths
+    # are trusted for credential-grab. Locks file-mode
+    # confidentiality on the securetty surveillance substrate.
+    printf 'tty1\ntty2\n' > "${SECURETTY}"
+    run_wd
+    [ -f "${BASELINE}" ]
+    mode="$(stat -c '%a' "${BASELINE}")"
+    [ "${mode}" = "600" ] || [ "${mode}" = "640" ]
+}
