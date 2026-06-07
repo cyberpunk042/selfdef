@@ -259,3 +259,24 @@ run_wd() {
     grep -qE '^Description=.*selfdef|^Documentation=.*selfdef' "${TIMER_DST}"
     grep -qE '^Description=.*selfdef|^Documentation=.*selfdef' "${SVC_DST}"
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # secure-boot-status TOML; parser must tolerate without altering
+    # the profile-gated behavior. require-with-noise still writes the
+    # SELFDEF_SECURE_BOOT_PROFILE=require drop-in (escalates missing
+    # SecureBoot from log-only to systemd-failure-recorded — the
+    # operator-dashboard signal that powers boot-chain-integrity
+    # surveillance).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "require"
+operator_note = "SecureBoot off = boot-chain integrity broken — alert"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q '^Environment=SELFDEF_SECURE_BOOT_PROFILE=require$' "${DROPIN_PROFILE}"
+    ! grep -q '^Environment=SELFDEF_SECURE_BOOT_PROFILE=monitor$' "${DROPIN_PROFILE}"
+}
