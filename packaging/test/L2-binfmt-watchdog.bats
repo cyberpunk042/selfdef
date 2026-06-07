@@ -320,3 +320,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on binfmt surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The binfmt-watchdog MUST only emit severity values from
+    # the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1574 binfmt_misc Hijack Execution Flow
+    # alert. Locks parser contract on the binfmt.d interpreter-
+    # registration detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf ':java:M:0:magic:mask:/usr/bin/java:OC\n' > "${CONF}"
+    run_wd                                              # ok / baseline
+    printf ':evil:M:0:magic:mask:/tmp/.evil:OC\n' > "${CONF}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
