@@ -952,3 +952,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     lines=$(wc -l <"${apply}")
     [ "${lines}" -gt 5 ]
 }
+
+@test "INVARIANT (at-disable install/check.sh declares non-empty body — non-trivial-script contract)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/at-disable/install/check.sh"
+    [ -s "${chk}" ]
+}

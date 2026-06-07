@@ -971,3 +971,12 @@ seed_benign() {
         [ "${size}" -gt 100 ]
     done
 }
+
+@test "INVARIANT (capability-conf-watchdog .sh script has >20 lines — non-trivial-watchdog-body contract)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/capability-conf-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        lines=$(wc -l <"${s}")
+        [ "${lines}" -gt 20 ]
+    done
+}

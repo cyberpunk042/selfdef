@@ -933,3 +933,12 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         [ "${size}" -gt 100 ]
     done
 }
+
+@test "INVARIANT (time-skew-watchdog .sh script has >20 lines — non-trivial-watchdog-body contract)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        lines=$(wc -l <"${s}")
+        [ "${lines}" -gt 20 ]
+    done
+}
