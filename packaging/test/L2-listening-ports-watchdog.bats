@@ -374,3 +374,37 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -qE '"added":1'
     cap | grep -qE '"removed":1'
 }
+
+@test "INVARIANT (high-port-range 4444+ backdoor signature: classic reverse-shell port surfaces in alert)" {
+    # The classic metasploit / reverse-shell default port is 4444.
+    # Sister attacker ports: 1337, 31337, 6666, 9999. Lock that the
+    # watchdog surfaces these specifically — the value of the
+    # added_sample field is operator-triage gold.
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:31337')"
+    mk_ss "${tcp}" ""
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '31337'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "INVARIANT (3-add boundary lock: exactly 3 adds → alert mass_new_listeners; 2 → warn new_listener)" {
+    # The mass threshold is 3 (inclusive). Sister to the existing
+    # 1+2 warn tests and 3+ alert test — this case specifically
+    # locks the 3-vs-2 boundary so a regression that bumps to 4+
+    # would trip here.
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    # Exactly 3 added.
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:4444,0.0.0.0:5555,0.0.0.0:6666')"
+    mk_ss "${tcp}" ""
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"mass_new_listeners"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"added":3'
+}
