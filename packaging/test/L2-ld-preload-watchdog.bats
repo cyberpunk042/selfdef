@@ -276,3 +276,10 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (LD_PRELOAD under /tmp — tmpfs writable-root)" {
+    # Closes /tmp axis on T1574.006 Dynamic Linker Hijacking.
+    printf '/tmp/.evil-preload.so\n' > "${PRELOAD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
