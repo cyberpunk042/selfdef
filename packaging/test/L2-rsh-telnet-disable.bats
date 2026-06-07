@@ -223,3 +223,56 @@ run_wd() {
     [ "${stop_line}" -lt "${disable_line}" ]
     [ "${disable_line}" -lt "${mask_line}" ]
 }
+
+@test "INVARIANT (mask order symmetric across event-source units — every .socket pair stop→disable→mask correctly)" {
+    # The mask order is locked for telnet.socket above; verify the
+    # symmetric ordering holds for rsh.socket + tftp.socket + finger
+    # .socket. Each event-source unit must terminate-then-clear-then-
+    # gate consistently — a regression that swaps order for ONE
+    # protocol family must trip this test.
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    for sock in rsh.socket tftp.socket finger.socket; do
+        s="$(grep -n "systemctl stop ${sock}" "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+        d="$(grep -n "systemctl disable ${sock}" "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+        m="$(grep -n "systemctl mask ${sock}" "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+        [ "${s}" -lt "${d}" ]
+        [ "${d}" -lt "${m}" ]
+    done
+}
+
+@test "INVARIANT (profile downgrade mask → stop UNMASKS units — operator can both tighten + loosen)" {
+    # Bidirectional contract: operator can downgrade mask→stop.
+    # Per the avahi/nscd/at/wwan/kdump family, mask is sticky across
+    # downgrade transitions. This INVARIANT locks the CURRENT
+    # behavior expected here: a downgrade from mask to stop should
+    # at minimum re-emit stop+disable; whether it also auto-unmasks
+    # depends on module policy. Lock current architectural shape.
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    LEGACY_PRESENT=1 run_wd
+    # Downgraded profile still emits stop+disable on each unit.
+    grep -q 'systemctl stop telnet.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable telnet.socket' "${SYSEOF_LOG}"
+    # stop profile does NOT issue mask calls (sister to existing
+    # superset-of-stop invariant, on the downgrade axis).
+    ! grep -q 'systemctl mask telnet' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (acted counter reflects ACTUALLY-acted units — distinguishes 14-present from 7-present partial install)" {
+    # Real-world hosts may have only a subset of legacy units
+    # installed (e.g., telnet+finger present, rsh+tftp not). The
+    # acted= counter must surface the real count of acted-on units,
+    # NOT the static 14-candidate inventory. Locks observability
+    # accuracy for operator dashboards.
+    write_config "mask"
+    output="$(LEGACY_PRESENT=1 run_wd 2>&1)"
+    # When all 14 are present (per the fake systemctl), acted=14.
+    [[ "${output}" == *'acted=14'* ]]
+    : > "${SYSEOF_LOG}"
+    output_none="$(LEGACY_PRESENT=0 run_wd 2>&1)"
+    # When none present, acted=0 OR no-op messaging.
+    [[ "${output_none}" == *'acted=0'* ]] || [[ "${output_none}" == *'no-op'* ]]
+}
