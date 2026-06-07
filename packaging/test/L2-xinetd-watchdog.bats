@@ -369,3 +369,23 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: xinetd-watchdog NEVER deletes xinetd.d entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # xinetd-watchdog DETECTS T1546 Event Triggered Execution
+    # via xinetd server-on-port persistence but MUST NEVER emit
+    # sed/awk/rm commands to auto-clean the xinetd.d entry.
+    # The detected entry may be operator-legitimate (legacy
+    # protocol server for back-compat testing, internal
+    # diagnostic listener). Silent auto-delete would destroy
+    # operator baseline state. Surveillance, never remediation.
+    # Locks anti-data-loss contract on the xinetd surveillance
+    # substrate.
+    printf 'service evilsvc {\n  server = /tmp/.evil\n  disable = no\n}\n' > "${XD}/evilsvc"
+    run_wd
+    [ -f "${XD}/evilsvc" ]
+    grep -q 'evilsvc' "${XD}/evilsvc"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(XD|XINETD|FILE|file)'
+}
