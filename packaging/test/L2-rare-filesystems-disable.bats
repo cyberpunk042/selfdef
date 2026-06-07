@@ -240,3 +240,46 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=baseline'* ]]
 }
+
+@test "INVARIANT (downgrade preserves header-marker — downgrade does not strip ownership marker)" {
+    # When operator downgrades strict→baseline (which REMOVES modules
+    # per the removal invariant), the file is rewritten — but the
+    # managed-by header MUST still appear so future stale-detection
+    # head -1 still identifies the file as selfdef-owned.
+    write_config "strict"
+    run_wd
+    write_config "baseline"
+    run_wd
+    first_line="$(head -1 "${MODPROBE_FILE}")"
+    [ "${first_line}" = "# managed-by: selfdef rare-filesystems-disable" ]
+    grep -q 'profile=baseline' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (each strict-only module has BOTH blacklist + install lines — same hardening shape as baseline modules)" {
+    # The asymmetric tightening invariant locks profile rank by count.
+    # This invariant locks the per-module SHAPE — strict-only modules
+    # (squashfs/nfsd/gfs2) must receive the SAME canonical hardening
+    # treatment (blacklist + install /bin/false-or-true) as baseline
+    # modules. Otherwise strict is structurally weaker per-module.
+    write_config "strict"
+    run_wd
+    for m in squashfs nfsd gfs2; do
+        grep -q "blacklist ${m}" "${MODPROBE_FILE}"
+        grep -qE "^install[[:space:]]+${m}[[:space:]]+/bin/(true|false)" "${MODPROBE_FILE}"
+    done
+}
+
+@test "INVARIANT (asymmetric module-count: strict has strictly MORE blacklist lines than baseline — locks profile-rank invariant)" {
+    # If a future refactor accidentally inverts profile-rank (strict
+    # has fewer modules than baseline), or has equal count, the
+    # operator's tightening intent is silently violated. Lock that
+    # strict line count is STRICTLY greater than baseline.
+    write_config "baseline"
+    run_wd
+    baseline_count="$(grep -cE '^blacklist[[:space:]]' "${MODPROBE_FILE}")"
+    write_config "strict"
+    run_wd
+    strict_count="$(grep -cE '^blacklist[[:space:]]' "${MODPROBE_FILE}")"
+    [ "${baseline_count}" -gt 0 ]
+    [ "${strict_count}" -gt "${baseline_count}" ]
+}
