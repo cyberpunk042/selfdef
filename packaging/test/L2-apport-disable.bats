@@ -937,3 +937,9 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     [ -f "${apply}" ]
     grep -qE '^set -euo pipefail' "${apply}"
 }
+
+@test "INVARIANT (apport-disable install/check.sh uses set -euo pipefail — Bash strict-mode contract)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/apport-disable/install/check.sh"
+    [ -f "${chk}" ]
+    grep -qE '^set -euo pipefail' "${chk}"
+}

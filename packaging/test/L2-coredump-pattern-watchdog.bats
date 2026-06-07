@@ -833,3 +833,15 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         grep -qE '^Documentation=.*github.com/cyberpunk042/selfdef' "${s}"
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .sh script uses set -u flag — undefined-variable strict-mode contract)" {
+    # Sister to brain-wide Bash strict-mode INVARIANT family.
+    # Watchdog scripts MUST declare set -u (exit on
+    # undefined variable). Without -u, typos in env-var names
+    # silently expand to empty strings, masking bugs.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '^set -u' "${s}"
+    done
+}

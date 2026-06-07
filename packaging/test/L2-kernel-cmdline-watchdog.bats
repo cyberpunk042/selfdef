@@ -849,3 +849,15 @@ assert 'install' in data, 'install missing'
         grep -qE '^Documentation=.*github.com/cyberpunk042/selfdef' "${s}"
     done
 }
+
+@test "INVARIANT (kernel-cmdline-watchdog .sh script uses set -u flag — undefined-variable strict-mode contract)" {
+    # Sister to brain-wide Bash strict-mode INVARIANT family.
+    # Watchdog scripts MUST declare set -u (exit on
+    # undefined variable). Without -u, typos in env-var names
+    # silently expand to empty strings, masking bugs.
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/kernel-cmdline-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '^set -u' "${s}"
+    done
+}
