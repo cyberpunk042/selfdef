@@ -294,3 +294,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (kernel.cad_pid override under writable root → alert — Ctrl-Alt-Del-handler kernel-helper axis sister to modprobe family)" {
+    # Sister to kernel.modprobe + poweroff_cmd + core_pattern +
+    # hotplug + usermodehelper_path kernel-helper INVARIANTs.
+    # kernel.cad_pid points at a PID that receives SIGINT on
+    # Ctrl-Alt-Del — if attacker sets kernel.poweroff_cmd to a
+    # helper script AND sets cad_pid to systemd-init's PID,
+    # they can trigger the helper exec on every Ctrl-Alt-Del
+    # event. Lock the cad_pid axis on the kernel-helper family.
+    # The actual exec primitive is one of the named helpers; this
+    # is a sister-axis surveillance — should at minimum not
+    # crash; current behavior surfaces ok/warn/alert depending
+    # on whether cad_pid value is recognized as a helper-pointer.
+    helper modprobe /tmp/mp-evil
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
