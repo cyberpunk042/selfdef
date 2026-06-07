@@ -212,3 +212,37 @@ EOF
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${DST}"
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates drop-in)" {
+    write_config "standard"
+    run_wd
+    [ -f "${DST}" ]
+    rm -f "${DST}"
+    run_wd
+    [ -f "${DST}" ]
+    grep -qE '^# selfdef pam-pwquality' "${DST}"
+}
+
+@test "INVARIANT (emit_status JSON: module + status + profile surfaced for operator dashboard)" {
+    write_config "strict"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"pam-pwquality"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=strict'* ]]
+}
+
+@test "INVARIANT (header-marker is first non-blank line — stale-cleanup head -1 discipline)" {
+    write_config "standard"
+    run_wd
+    first_line="$(awk 'NF' "${DST}" | head -1)"
+    [[ "${first_line}" == *"selfdef pam-pwquality"* ]]
+}
+
+@test "INVARIANT (strict carries minclass — min number of character classes required)" {
+    # minclass is the count-of-distinct-classes constraint
+    # (e.g. minclass=3 = at least 3 of {upper, lower, digit, special}).
+    # Strict profile should have this directive.
+    write_config "strict"
+    run_wd
+    grep -qE '^minclass[[:space:]]*=[[:space:]]*[2-9]' "${DST}"
+}
