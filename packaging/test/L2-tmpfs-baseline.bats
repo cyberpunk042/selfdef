@@ -361,3 +361,18 @@ TOMLEOF
     [[ "${output}" == *"acknowledge_tmpfs"* ]]
     ! [ -f "${SYSTEMD_DIR}/tmp.mount" ]
 }
+
+@test "INVARIANT (DRY_RUN does not write drop-ins or tmp.mount)" {
+    # Sister to many other installer module's DRY_RUN INVARIANT
+    # across the brain. The tmpfs-baseline DRY_RUN path MUST be
+    # a no-op against the live filesystem — operator using
+    # --dry-run to preview expects ZERO mutations. Locks the
+    # dry-run side-effect-freedom contract so a regression that
+    # writes drop-ins or tmp.mount through DRY_RUN would be
+    # caught (silent flip to tmpfs-on-/tmp during preview would
+    # lose every file under /tmp at next reboot).
+    write_config "noexec"
+    DRY_RUN=1 run_wd
+    ! [ -f "${SYSTEMD_DIR}/tmp.mount.d/50-selfdef.conf" ]
+    ! [ -f "${SYSTEMD_DIR}/var-tmp.mount.d/50-selfdef.conf" ]
+}
