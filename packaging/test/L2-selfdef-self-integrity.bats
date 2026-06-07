@@ -436,3 +436,16 @@ seed_trust_root() {
     ! grep -qE 'cp[[:space:]]+(-[a-z]+[[:space:]]+)?"?\$\{?(MANIFEST|BASELINE)' "${WD}"
     ! grep -qE '(install -m|tee)[[:space:]]+.*\$\{?(TARGET|TRACKED)' "${WD}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # selfdef-self-integrity runs ON the timer's scheduled fire
+    # — verifies sha256 of selfdef-owned files against pinned
+    # baseline, emits a verdict on tamper detection, then exits.
+    # Type=simple would break timer OnUnitActiveSec semantics.
+    # Locks oneshot-probe contract on the selfdef-self-integrity
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/systemd/selfdef-self-integrity.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
