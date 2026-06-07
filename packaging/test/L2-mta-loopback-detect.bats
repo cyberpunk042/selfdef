@@ -344,3 +344,20 @@ TOMLEOF
     run_wd
     grep -qE '^OnUnitActiveSec=' "${TIMER_DST}"
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family
+    # for timer-driven scheduled probes (entropy-baseline,
+    # secure-boot-status, swap-encryption-detect, doctor-timer,
+    # bootloader-password-detect). The mta-loopback-detect probe
+    # runs ON the timer's scheduled fire — executes ONCE, reads
+    # SMTP listener state, emits a verdict, then exits. Type=
+    # simple would leave systemd thinking the probe is a long-
+    # running daemon, breaking timer's OnSuccess /
+    # OnUnitActiveSec semantics. Locks oneshot-probe contract
+    # on the mta-loopback-detect substrate.
+    write_config "report"
+    run_wd
+    [ -f "${SVC_DST}" ]
+    grep -qE '^Type=oneshot' "${SVC_DST}"
+}
