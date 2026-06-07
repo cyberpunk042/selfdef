@@ -335,3 +335,50 @@ EOF
     cap | grep -q 'sudo:evil1'
     cap | grep -q 'sudo:evil2'
 }
+
+@test "INVARIANT (kvm group privileged add → alert — VM-launch axis to root-equivalence)" {
+    # kvm group lets a user launch VMs with hypervisor access — a
+    # canonical privesc vector via VM escape or guest-driver
+    # exploitation. Sister axis to docker/lxd privileged-group
+    # tests already locked.
+    write_passwd_group
+    cat >> "${GROUP_FILE}" <<'EOF'
+kvm:x:36:bob
+EOF
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    sed -i 's|^kvm:x:36:bob|kvm:x:36:bob,evil|' "${GROUP_FILE}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (multi-privileged-group same scan: docker+sudo grants in one delta → BOTH surface in priv_sample)" {
+    # Compound privileged-grant scenario: attacker grants user
+    # to BOTH docker AND sudo in same scan. Both must surface in
+    # priv_sample for forensics. Sister to multi-priv-add but
+    # across DIFFERENT groups.
+    write_passwd_group
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    sed -i 's|^sudo:x:27:alice|sudo:x:27:alice,evil|' "${GROUP_FILE}"
+    sed -i 's|^docker:x:998:bob|docker:x:998:bob,evil|' "${GROUP_FILE}"
+    run_wd
+    cap | grep -q '"event":"privileged_group_member_added"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q 'sudo:evil'
+    cap | grep -q 'docker:evil'
+}
+
+@test "INVARIANT (root user pgid change to privileged group is FLAGGED — privilege-shift axis)" {
+    # If an attacker MODIFIES an existing user's /etc/passwd pgid
+    # to point at a privileged group (e.g. changes alice's pgid
+    # from 1000 to 998=docker), that's a primary-gid privilege
+    # grant. Sister axis to existing primary-gid INVARIANT.
+    write_passwd_group
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Change alice's pgid from 1000 to 998 (docker's gid).
+    sed -i 's|^alice:x:1000:1000:|alice:x:1000:998:|' "${PASSWD_FILE}"
+    run_wd
+    cap | grep -qE '"severity":"alert"'
+}
