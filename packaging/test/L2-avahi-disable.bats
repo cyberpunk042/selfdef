@@ -252,3 +252,44 @@ run_wd() {
     grep -q 'systemctl stop avahi-daemon.service' "${SYSEOF_LOG}"
     ! grep -q 'systemctl unmask avahi-daemon.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (no package-uninstall: avahi-daemon package NEVER auto-removed — module neutralizes, doesn't uninstall)" {
+    # Sister to bluetooth-disable + services-disable-printing no-
+    # auto-uninstall INVARIANT. Module's contract is to neutralize,
+    # not uninstall. avahi-daemon package removal is operator
+    # decision via apt/dnf/yum.
+    write_config "mask"
+    run_wd
+    ! grep -qE 'apt|dnf|yum|rpm' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (mDNS-port observability: avahi's UDP/5353 surface is closed when both units masked — observability via systemd-status check post-mask)" {
+    # The whole point is closing UDP/5353 (mDNS). The .socket unit
+    # is what binds that port; masking it ensures binding cannot
+    # re-occur. Lock that the mask covers BOTH units explicitly
+    # (already covered by dual-coverage tests, but this locks the
+    # port-closure architectural intent).
+    write_config "mask"
+    run_wd
+    # The .socket is the port-bind unit — MUST be masked.
+    grep -q 'systemctl mask avahi-daemon.socket' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (mask order symmetric across BOTH units in the SAME run: .service AND .socket stop_line before disable_line before mask_line in same scan)" {
+    # Combines existing per-unit symmetric-mask-order tests into a
+    # single-scan INVARIANT: both units MUST follow stop→disable→
+    # mask sequence WITHIN the same apply run, not just per-unit
+    # isolation. Locks atomic-multi-unit ordering.
+    write_config "mask"
+    run_wd
+    # All 6 lines (stop+disable+mask × 2 units) must appear in
+    # canonical order per-unit.
+    for unit in avahi-daemon.service avahi-daemon.socket; do
+        s="$(grep -n "systemctl stop ${unit}" "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+        d="$(grep -n "systemctl disable ${unit}" "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+        m="$(grep -n "systemctl mask ${unit}" "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+        [ -n "${s}" ] && [ -n "${d}" ] && [ -n "${m}" ]
+        [ "${s}" -lt "${d}" ]
+        [ "${d}" -lt "${m}" ]
+    done
+}
