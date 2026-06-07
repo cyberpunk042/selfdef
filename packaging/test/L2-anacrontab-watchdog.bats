@@ -1091,3 +1091,11 @@ EOF
         head -1 "${s}" | grep -qE '^#!'
     done
 }
+
+@test "INVARIANT (anacrontab-watchdog .sh script declares set flag in first 50 lines — strict-mode-prologue 80)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/anacrontab-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        head -50 "${s}" | grep -qE '^set -'
+    done
+}

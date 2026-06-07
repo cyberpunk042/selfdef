@@ -1004,3 +1004,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     apply="${BATS_TEST_DIRNAME}/../../modules/sudo-tune/install/apply.sh"
     head -1 "${apply}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (sudo-tune install/check.sh has shebang line — POSIX-conformant 80)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/sudo-tune/install/check.sh"
+    head -1 "${chk}" | grep -qE '^#!'
+}

@@ -895,3 +895,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     apply="${BATS_TEST_DIRNAME}/../../modules/agent-guard/install/apply.sh"
     head -1 "${apply}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (agent-guard install/check.sh has shebang line — POSIX-conformant 80)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/agent-guard/install/check.sh"
+    head -1 "${chk}" | grep -qE '^#!'
+}

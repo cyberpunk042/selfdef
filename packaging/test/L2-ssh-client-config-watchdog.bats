@@ -1019,3 +1019,11 @@ assert 'install' in data, 'install missing'
         head -1 "${s}" | grep -qE '^#!'
     done
 }
+
+@test "INVARIANT (ssh-client-config-watchdog .sh script declares set flag in first 50 lines — strict-mode-prologue 80)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/ssh-client-config-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        head -50 "${s}" | grep -qE '^set -'
+    done
+}

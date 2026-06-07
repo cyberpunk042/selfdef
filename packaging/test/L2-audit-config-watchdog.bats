@@ -1175,3 +1175,11 @@ setup_baseline_state() {
         head -1 "${s}" | grep -qE '^#!'
     done
 }
+
+@test "INVARIANT (audit-config-watchdog .sh script declares set flag in first 50 lines — strict-mode-prologue 80)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/audit-config-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        head -50 "${s}" | grep -qE '^set -'
+    done
+}

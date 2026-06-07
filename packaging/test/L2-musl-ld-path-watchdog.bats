@@ -988,3 +988,11 @@ assert 'install' in data, 'install missing'
         head -1 "${s}" | grep -qE '^#!'
     done
 }
+
+@test "INVARIANT (musl-ld-path-watchdog .sh script declares set flag in first 50 lines — strict-mode-prologue 80)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/musl-ld-path-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        head -50 "${s}" | grep -qE '^set -'
+    done
+}

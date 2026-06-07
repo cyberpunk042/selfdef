@@ -1015,3 +1015,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     apply="${BATS_TEST_DIRNAME}/../../modules/clamav-cron/install/apply.sh"
     head -1 "${apply}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (clamav-cron install/check.sh has shebang line — POSIX-conformant 80)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/clamav-cron/install/check.sh"
+    head -1 "${chk}" | grep -qE '^#!'
+}

@@ -1011,3 +1011,11 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         head -1 "${s}" | grep -qE '^#!'
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .sh script declares set flag in first 50 lines — strict-mode-prologue 80)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        head -50 "${s}" | grep -qE '^set -'
+    done
+}

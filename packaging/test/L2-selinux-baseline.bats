@@ -1100,3 +1100,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     apply="${BATS_TEST_DIRNAME}/../../modules/selinux-baseline/install/apply.sh"
     head -1 "${apply}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (selinux-baseline install/check.sh has shebang line — POSIX-conformant 80)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/selinux-baseline/install/check.sh"
+    head -1 "${chk}" | grep -qE '^#!'
+}

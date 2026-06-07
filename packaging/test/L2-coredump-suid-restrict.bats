@@ -1009,3 +1009,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     apply="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/install/apply.sh"
     head -1 "${apply}" | grep -qE '^#!'
 }
+
+@test "INVARIANT (coredump-suid-restrict install/check.sh has shebang line — POSIX-conformant 80)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/install/check.sh"
+    head -1 "${chk}" | grep -qE '^#!'
+}

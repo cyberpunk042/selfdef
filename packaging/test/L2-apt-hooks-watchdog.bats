@@ -1082,3 +1082,11 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         head -1 "${s}" | grep -qE '^#!'
     done
 }
+
+@test "INVARIANT (apt-hooks-watchdog .sh script declares set flag in first 50 lines — strict-mode-prologue 80)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        head -50 "${s}" | grep -qE '^set -'
+    done
+}
