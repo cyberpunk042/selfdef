@@ -1005,3 +1005,11 @@ assert 'install' in data, 'install missing'
         grep -qE '^Documentation=(http|https)://' "${s}"
     done
 }
+
+@test "INVARIANT (request-key-watchdog .sh script has shebang line — POSIX-conformant 79)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/request-key-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        head -1 "${s}" | grep -qE '^#!'
+    done
+}

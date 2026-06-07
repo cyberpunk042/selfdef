@@ -1075,3 +1075,11 @@ seed_benign() {
         grep -qE '^Documentation=(http|https)://' "${s}"
     done
 }
+
+@test "INVARIANT (boot-script-watchdog .sh script has shebang line — POSIX-conformant 79)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/boot-script-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        head -1 "${s}" | grep -qE '^#!'
+    done
+}

@@ -1016,3 +1016,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge/module.toml"
     head -1 "${mtoml}" | grep -qE '^#|^name'
 }
+
+@test "INVARIANT (fail2ban-bridge install/apply.sh has shebang line — POSIX-conformant 79)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge/install/apply.sh"
+    head -1 "${apply}" | grep -qE '^#!'
+}

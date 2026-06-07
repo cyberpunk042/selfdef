@@ -1117,3 +1117,11 @@ assert 'install' in data, 'install missing'
         grep -qE '^Documentation=(http|https)://' "${s}"
     done
 }
+
+@test "INVARIANT (sudoers-integrity-watchdog .sh script has shebang line — POSIX-conformant 79)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/sudoers-integrity-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        head -1 "${s}" | grep -qE '^#!'
+    done
+}

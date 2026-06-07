@@ -976,3 +976,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/sysctl-network-baseline/module.toml"
     head -1 "${mtoml}" | grep -qE '^#|^name'
 }
+
+@test "INVARIANT (sysctl-network-baseline install/apply.sh has shebang line — POSIX-conformant 79)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/sysctl-network-baseline/install/apply.sh"
+    head -1 "${apply}" | grep -qE '^#!'
+}

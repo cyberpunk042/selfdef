@@ -966,3 +966,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/rare-network-protocols-disable/module.toml"
     head -1 "${mtoml}" | grep -qE '^#|^name'
 }
+
+@test "INVARIANT (rare-network-protocols-disable install/apply.sh has shebang line — POSIX-conformant 79)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/rare-network-protocols-disable/install/apply.sh"
+    head -1 "${apply}" | grep -qE '^#!'
+}

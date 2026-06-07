@@ -988,3 +988,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     mtoml="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect/module.toml"
     head -1 "${mtoml}" | grep -qE '^#|^name'
 }
+
+@test "INVARIANT (mta-loopback-detect install/apply.sh has shebang line — POSIX-conformant 79)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect/install/apply.sh"
+    head -1 "${apply}" | grep -qE '^#!'
+}
