@@ -434,3 +434,13 @@ setup_baseline_state() {
     cap | grep -qE '"baseline_rules":[1-9]'
     cap | grep -q '"event":"audit_rules_flushed"'
 }
+
+@test "INVARIANT (baseline file is chmod 0600 — confidentiality of audit-config inventory)" {
+    # Sister to brain-wide baseline-confidentiality INVARIANTs.
+    # The audit-config baseline enumerates rule structure;
+    # operator-private (0600) prevents reconnaissance.
+    setup_baseline_state
+    run_wd
+    [ -f "${BASELINE}" ]
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
