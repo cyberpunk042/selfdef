@@ -286,3 +286,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-libs'
 }
+
+@test "INVARIANT (baseline re-establish on operator out-of-band deletion: missing baseline re-creates cleanly + emits baseline_initial)" {
+    # Sister to brain-wide baseline-re-establish INVARIANTs.
+    # Operator may wipe /var/lib/selfdef/musl-baseline.tsv
+    # during host triage to force a fresh inventory. The
+    # watchdog MUST re-create the baseline cleanly on the
+    # next scan AND emit baseline_initial (not crash with
+    # read-error AND not silently no-op). Locks state-
+    # resilience on the musl ld.so library-search-path
+    # surveillance surface (T1574 hijack execution flow).
+    printf '/lib\n/usr/lib\n' > "${CONF}"
+    run_wd                                              # establishes baseline
+    [ -f "${BASELINE}" ]
+    rm -f "${BASELINE}"                                  # operator wipe
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # must re-establish
+    [ -f "${BASELINE}" ]
+    cap | grep -qE '"event":"baseline_initial"'
+}
