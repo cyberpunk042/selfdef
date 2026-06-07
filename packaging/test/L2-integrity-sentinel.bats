@@ -395,3 +395,23 @@ EOF
     ! grep -qE 'cp[[:space:]]+.*\$\{?BASELINE_DIR\}?/.*[[:space:]]+\$' "${INSTALL_DIR}/check.sh" 2>/dev/null || true
     ! grep -qE '(install -m|cat[[:space:]]+>|tee).*\$\{?(MONITORED|TARGET|PATH)' "${INSTALL_DIR}/check.sh" 2>/dev/null || true
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. integrity-sentinel manifest declares install +
+    # profile gating (lenient / strict) the resolver enforces;
+    # malformed manifest wedges the SHA256 baseline integrity
+    # verification. Python's tomllib is the canonical parser.
+    # Locks anti-malformed-manifest on the integrity-sentinel
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/integrity-sentinel/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'integrity-sentinel', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
