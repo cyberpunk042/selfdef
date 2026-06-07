@@ -289,3 +289,14 @@ INSTALL_DIR="${MODULE_DIR}/install"
         || grep -qE 'mkdir[[:space:]].*-m[[:space:]]+0?7[57][05]' "${INSTALL_DIR}/apply.sh" \
         || true
 }
+
+@test "INVARIANT (apply.sh uses set -euo pipefail — fail-loud invariant)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # wasm-aot-cache prepares the AOT cache dir consumed by WASM
+    # runtimes; silent apply.sh failure (e.g. missing tune-env
+    # env file in unexpected mode) would leave the cache dir
+    # half-initialized — WASM runtimes would write AOT objects
+    # to a partial path and downstream runtime would fail to
+    # locate cached compilations on second invocation.
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/apply.sh"
+}
