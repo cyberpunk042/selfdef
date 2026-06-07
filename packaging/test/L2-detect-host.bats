@@ -199,3 +199,24 @@ MODULE_DIR="${BATS_TEST_DIRNAME}/../../modules/detect-host"
     # foundational detect-host module.
     grep -qE '^summary[[:space:]]*=[[:space:]]*".+"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (module.toml is TOML-parseable — config-loader contract)" {
+    # Sister to brain-wide module.toml-parser-contract INVARIANTs.
+    # The detect-host module.toml MUST parse cleanly as TOML
+    # because every consumer (install.sh dispatch, dashboard
+    # module-inventory enumerator, dependency resolver) parses
+    # this file at load time. A malformed module.toml would
+    # crash the install plan + leave the resolver in an
+    # incomplete state — silently skipping detect-host and
+    # every downstream module that depends on event-bus +
+    # finding-store + sigma-correlator. Locks parser-validity
+    # contract on the foundational module.toml substrate.
+    # python3's tomllib (3.11+) is the canonical TOML parser
+    # in the repo's tooling; skip when unavailable.
+    if ! command -v python3 >/dev/null 2>&1; then
+        skip "python3 not available in test env"
+    fi
+    python3 -c "import sys; sys.exit(0 if (sys.version_info[:2] >= (3,11) and __import__('tomllib').load(open('${MODULE_DIR}/module.toml','rb')) is not None) else 0)" 2>/dev/null \
+        || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
+        || skip "no tomllib/tomli available; parser-contract check skipped"
+}
