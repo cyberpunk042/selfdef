@@ -312,3 +312,22 @@ seed_benign() {
     run_wd
     cap | grep -q 'distinctive-attacker-export'
 }
+
+@test "INVARIANT (wildcard client-pattern '*' export → alert above CIDR-bound export — anyone-from-anywhere unrestricted access axis)" {
+    # Sister to no_root_squash + no_subtree_check + insecure
+    # dangerous-flag INVARIANTs already locked. The client-
+    # pattern '*' (literal asterisk match-everyone) is itself a
+    # severity-grade flag — combined with rw makes the export
+    # writable by ANY host on any network reachable to the
+    # server. Even with root_squash (the default safe flag),
+    # match-everyone is a multi-tenant network-segregation
+    # failure surface. Locks detection of the wildcard-client-
+    # pattern axis alongside the dangerous-flag family on the
+    # T1199 trusted-relationship NFS surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/srv/sensitive *(rw,no_root_squash)\n' > "${EXPORTS}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
