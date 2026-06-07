@@ -450,3 +450,18 @@ EOF
     run_wd
     cap | grep -qE '"added":[1-9]'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs. Multi-
+    # add scenario locks consolidation discipline on T1053.003
+    # cron-scheduled-task surveillance.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '@daily root /tmp/.daily-evil-a' > "${CRON_D}/99-evil-a"
+    echo '@hourly root /tmp/.hourly-evil-b' > "${CRON_D}/99-evil-b"
+    echo '*/1 * * * * root /tmp/.minute-evil-c' > "${CRON_D}/99-evil-c"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-cron-jobs -- ')
+    [ "${main_count}" = "1" ]
+}
