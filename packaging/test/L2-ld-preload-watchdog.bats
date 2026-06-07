@@ -192,3 +192,47 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-ld-preload -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (stateless re-evaluation: ld_preload alert STAYS visible on every run until operator cleans)" {
+    # ld-preload-watchdog is stateless (no baseline-refresh required) —
+    # re-evaluates live config on every run. A suspicious entry that
+    # stays must re-fire alert every run.
+    printf '/tmp/evil.so\n' > "${PRELOAD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"suspicious_ld_preload"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file env scan: bash + zsh + fish env files all scanned for LD_PRELOAD)" {
+    # Operator may use multiple shells. LD_PRELOAD planted in any
+    # global env file MUST be flagged.
+    ENVF2="${TMP}/zshenv"
+    : > "${PRELOAD}"
+    printf 'export PATH=/usr/bin\n' > "${ENVF}"
+    printf 'export LD_PRELOAD=/tmp/zsh-evil.so\n' > "${ENVF2}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_LDPRELOAD_PROFILE="report" \
+    SELFDEF_LDPRELOAD_FILE="${PRELOAD}" \
+    SELFDEF_LDPRELOAD_ENV_FILES="${ENVF} ${ENVF2}" \
+    SELFDEF_LDPRELOAD_PAMENV_FILES="${PAMF}" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (current-behavior: commented LD_PRELOAD line is scanned — # prefix NOT filtered by ld-preload-watchdog)" {
+    # Current behavior locks: ld-preload-watchdog scans every line of the
+    # env file (substring grep for LD_PRELOAD=) regardless of # prefix.
+    # Rationale: a planted attacker may use a leading-# trick to hide
+    # from naive operator inspection while a sloppy shell still sources
+    # the line in some contexts. Refinement opportunity tracked: tighten
+    # to filter pure-comment lines if/when the false-positive cost
+    # warrants. Lock current architectural boundary.
+    : > "${PRELOAD}"
+    printf '# export LD_PRELOAD=/tmp/example-attacker.so\nexport PATH=/usr/bin\n' > "${ENVF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
