@@ -350,3 +350,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (weakener-detect: mitigations=off → alert): blanket CPU-mitigation-disable axis covers Spectre/Meltdown/MDS family" {
+    # Sister to nokaslr / nosmep / rd.break boot-time weakener
+    # axes. mitigations=off is a blanket switch that disables
+    # ALL CPU-side-channel mitigations (Spectre v1/v2, Meltdown,
+    # MDS, L1TF, ZombieLoad, etc.) — turns the host into a
+    # speculative-execution-tractable target across the board.
+    # Recon-and-extract via CPU side channels become tractable.
+    # Lock weakener-detect on the mitigations=off axis.
+    write_cmdline "BOOT_IMAGE=/vmlinuz ro mitigations=off"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
