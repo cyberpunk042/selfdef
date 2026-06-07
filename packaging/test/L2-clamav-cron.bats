@@ -381,3 +381,22 @@ Scanned files: 1"
     [ -f "${svc}" ]
     grep -qE '^Type=oneshot' "${svc}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. clamav-cron manifest declares install + profile
+    # gating the resolver enforces; malformed manifest wedges
+    # the ClamAV scan wrapper. Python's tomllib is the canonical
+    # parser. Locks anti-malformed-manifest on the clamav-cron
+    # substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/clamav-cron/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'clamav-cron', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
