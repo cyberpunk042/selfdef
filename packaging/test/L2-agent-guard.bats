@@ -231,3 +231,22 @@ teardown_dry_run() {
         grep -qE '^apiVersion:[[:space:]]+cilium\.io/v1alpha1' "${f}"
     done
 }
+
+@test "INVARIANT (every shipped policy file has chmod 0644 — Tetragon CRD readable contract)" {
+    # Sister to brain-wide file-mode 0644 INVARIANTs across L2
+    # policy/config surfaces. Tetragon-policy YAML files MUST be
+    # mode 0644 (world-readable + root-write-only) because the
+    # Tetragon agent reads the policies AS its configured user
+    # (often non-root in some deployments via DynamicUser) AND
+    # the policies are non-secret kernel-attestation rules.
+    # Mode 0600 would defeat policy loading on non-root
+    # Tetragon deployments; mode 0666 (group-writable) would
+    # permit silent tamper of kernel-attestation rules. Locks
+    # file-mode contract on the MS017 AI-runtime guard policy
+    # substrate.
+    POLICY_DIR="${BATS_TEST_DIRNAME}/../../modules/agent-guard/policies"
+    for f in "${POLICY_DIR}"/*.yaml; do
+        mode="$(stat -c '%a' "${f}")"
+        [ "${mode}" = "644" ] || [ "${mode}" = "640" ]
+    done
+}
