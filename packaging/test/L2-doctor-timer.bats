@@ -333,3 +333,13 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     # discipline on the doctor service substrate.
     grep -qE '^Documentation=man:selfdefctl' "${SERVICE}"
 }
+
+@test "INVARIANT (timer Unit=selfdef-doctor.service — explicit-binding contract)" {
+    # Sister to brain-wide systemd timer-Unit binding INVARIANT
+    # family. The .timer file MUST declare Unit=selfdef-doctor.
+    # service so systemd binds the timer to the service even
+    # if a future refactor renames the .timer file without
+    # renaming the .service. Locks the explicit-binding
+    # discipline on the doctor timer substrate.
+    grep -qE '^Unit=selfdef-doctor\.service' "${TIMER}"
+}

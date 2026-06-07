@@ -480,3 +480,15 @@ EOF
     # contract on the friction-audit ring substrate.
     grep -qE '\$\{ts_ms\}-\$\{gate\}\.json' "${SCRIPT}"
 }
+
+@test "INVARIANT (script declares SELFDEF_FRICTION_AUDIT_MIN_STICKS — operator-configurable memory threshold)" {
+    # Sister to brain-wide operator-config INVARIANT family.
+    # The memory-stick threshold is operator-policy (test/CI
+    # hosts may have fewer DIMMs than production hosts). The
+    # SELFDEF_FRICTION_AUDIT_MIN_STICKS env var lets operators
+    # override the default per-host. A regression hard-coding
+    # a value would break CI runners with single DIMMs. Locks
+    # operator-configurable memory-threshold discipline on the
+    # friction-audit substrate.
+    grep -qE 'SELFDEF_FRICTION_AUDIT_MIN_STICKS' "${SCRIPT}"
+}

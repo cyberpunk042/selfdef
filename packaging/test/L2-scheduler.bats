@@ -373,3 +373,16 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # path discipline on the scheduler service substrate.
     grep -qE '^ExecStart=/usr/local/bin/selfdef-scheduler' "${UNIT}"
 }
+
+@test "INVARIANT (.service User=root + Group=root — Ring-0 audit-log append privilege contract)" {
+    # Sister to brain-wide systemd User= INVARIANT family.
+    # Scheduler appends to /mnt/vault/context/scheduler_audit.log
+    # (ZFS-backed Ring-0 substrate per MS039); only root has
+    # the append-on-ZFS privilege guaranteed by the trust
+    # topology. A regression dropping User=root would break the
+    # audit-log append + leave silently-truncated entries.
+    # Locks Ring-0 privilege discipline on the scheduler unit
+    # substrate.
+    grep -qE '^User=root$' "${UNIT}"
+    grep -qE '^Group=root$' "${UNIT}"
+}

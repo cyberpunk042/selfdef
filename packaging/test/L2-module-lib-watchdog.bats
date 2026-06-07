@@ -401,3 +401,17 @@ setup() {
     ! grep -qE '^logger\(\)' "${LIB}"
     ! type -t logger | grep -q '^function$' || true
 }
+
+@test "INVARIANT (lib is sourced-not-executed — shebang line is shellcheck-marker, NOT executable)" {
+    # Sister to brain-wide library-vs-script INVARIANT family.
+    # packaging/lib/module-lib.sh is a SOURCED library — callers
+    # do `source module-lib.sh`, not `bash module-lib.sh`. The
+    # file MUST start with a shellcheck-marker (shellcheck shell=bash)
+    # rather than a shebang that would suggest direct execution.
+    # A regression adding #!/usr/bin/env bash + chmod +x would
+    # let an operator mistakenly invoke the lib directly,
+    # which would fail because MODULE/DRY_RUN preconditions
+    # aren't set. Locks the sourced-not-executed discipline on
+    # the module-lib substrate.
+    head -3 "${LIB}" | grep -qE 'shellcheck shell=bash|sourced'
+}

@@ -378,3 +378,21 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert data['spec']['kprobes'][0]['syscall'] is True, 'kprobe must attach at syscall layer'
 "
 }
+
+@test "INVARIANT (YAML spec.kprobes[0].args[0] declares index=0 — first-arg attestation contract)" {
+    # Sister to brain-wide kprobe-args INVARIANT family. The
+    # perimeter MUST inspect arg-index 0 (the execve filename
+    # argument) — not arg-index 1+ (which are argv/envp pointers
+    # that need page-table walks to resolve). A regression
+    # bumping the index to 1 would attach the policy to
+    # untranslatable pointers + silently fail the allowlist
+    # match. Locks the first-arg attestation discipline on the
+    # perimeter YAML substrate.
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+arg = data['spec']['kprobes'][0]['args'][0]
+assert arg['index'] == 0, f'arg index must be 0, got {arg[\"index\"]}'
+assert arg['type'] == 'string', f'arg type must be string, got {arg[\"type\"]}'
+"
+}

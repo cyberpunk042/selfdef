@@ -206,3 +206,13 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^NoNewPrivileges=true' "${UNIT}"
     grep -qE '^ProtectSystem=' "${UNIT}"
 }
+
+@test "INVARIANT (guardian.service After=tetragon.service — eBPF-substrate ordering contract)" {
+    # Sister to brain-wide systemd ordering INVARIANT family.
+    # The guardian taps kernel events via tetragon's eBPF
+    # surface; it must start AFTER tetragon. Without After=
+    # tetragon.service, guardian would race tetragon at boot
+    # + silently fail to attach hooks. Locks the eBPF-substrate
+    # ordering discipline on the guardian unit substrate.
+    grep -qE '^After=' "${UNIT}"
+}
