@@ -775,3 +775,15 @@ ch = (data.get('install') or {}).get('check', '')
 assert ch == 'install/check.sh', f'install.check must be install/check.sh, got {ch!r}'
 "
 }
+
+@test "INVARIANT (tensor-parallel-inference module.toml [install] uninstall = \"install/uninstall.sh\" — install uninstall path canonical contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+un = (data.get('install') or {}).get('uninstall', '')
+assert un == 'install/uninstall.sh', f'install.uninstall must be install/uninstall.sh, got {un!r}'
+"
+}

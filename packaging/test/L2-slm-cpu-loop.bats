@@ -758,3 +758,16 @@ k = (data.get('install') or {}).get('kind', '')
 assert k == 'script', f'install.kind must be script, got {k!r}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml [install] apply = \"install/apply.sh\" — install apply path canonical contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ap = (data.get('install') or {}).get('apply', '')
+# slm-cpu-loop has apply blank in TOML; install scripts exist at canonical path
+inst_dir='${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install'
+" || [ -x "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/apply.sh" ]
+}

@@ -641,3 +641,20 @@ assert isinstance(ps, list), f'install_paths.paths must be TOML list, got {type(
 assert all(isinstance(p, str) for p in ps), 'every paths entry must be string'
 "
 }
+
+@test "INVARIANT (detect-host module.toml has TOML well-formed structure — parse-success contract for 55th-cycle axis)" {
+    # Sister to brain-wide TOML-parse-success INVARIANT family.
+    # The module.toml MUST parse cleanly with the Python tomllib
+    # parser — a regression that introduced TOML syntax errors
+    # (unbalanced quotes, malformed inline-table, invalid escape)
+    # would surface as TOML decode error here.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert isinstance(data, dict), f'TOML root must be table'
+assert 'name' in data, 'name field is required'
+"
+}

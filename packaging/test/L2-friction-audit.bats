@@ -652,3 +652,7 @@ EOF
 @test "INVARIANT (script declares per-cycle CRITICAL ARCHITECTURAL FRICTION ERROR prefix on diagnostic — operator-pattern-match contract)" {
     grep -qE 'CRITICAL ARCHITECTURAL FRICTION ERROR' "${SCRIPT}"
 }
+
+@test "INVARIANT (overall verdict line is always emitted — operator-pass-signal final-write contract)" {
+    grep -qE 'emit_ocsf.*overall' "${SCRIPT}"
+}

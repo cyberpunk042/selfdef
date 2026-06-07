@@ -602,3 +602,12 @@ k = data['spec'].get('kprobes', [])
 assert isinstance(k, list) and len(k) > 0, f'kprobes must be non-empty list, got {k!r}'
 "
 }
+
+@test "INVARIANT (YAML uses 4 default allowlist entries — sain-01 §6 verbatim count)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+vals = data['spec']['kprobes'][0]['selectors'][0]['matchArgs'][0]['values']
+assert len(vals) == 4, f'allowlist must have 4 entries per sain-01 §6, got {len(vals)}'
+"
+}

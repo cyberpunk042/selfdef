@@ -553,3 +553,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler unit comment block references avx-plus-plus dump line range — derivation-source audit-trail)" {
     grep -qE 'avx-plus-plus|sain-01|MS04[89]' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler unit declares After=zfs-mount.service — ZFS-substrate ordering contract)" {
+    grep -qE '^After=.*zfs-mount\.service' "${UNIT}"
+}

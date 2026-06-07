@@ -369,3 +369,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^[[:space:]]*purge\)' "${POSTRM}"
     grep -qE '^[[:space:]]*remove\)' "${POSTRM}"
 }
+
+@test "INVARIANT (guardian unit Documentation references SDD-029 design document — operator-spec-link)" {
+    grep -qE '^Documentation=.*sdd/029' "${UNIT}"
+}

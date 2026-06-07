@@ -612,3 +612,7 @@ setup() {
 @test "INVARIANT (lib emit_status() JSON record carries module field — multi-module aggregation routing contract)" {
     awk '/^emit_status\(\)/,/^}/' "${LIB}" | grep -qE 'MODULE|module'
 }
+
+@test "INVARIANT (lib selfdef_is_writable_path returns true for /tmp/* — known-writable-path coverage)" {
+    selfdef_is_writable_path /tmp/foo
+}

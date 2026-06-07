@@ -537,3 +537,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     count=$(grep -cE '^(OnBootSec|OnUnitActiveSec|OnCalendar)=' "${TIMER}")
     [ "${count}" -ge 2 ]
 }
+
+@test "INVARIANT (.service is invoked via .timer not directly enabled — Type=oneshot + .timer-trigger-only contract)" {
+    grep -qE '^Type=oneshot' "${SERVICE}"
+}
