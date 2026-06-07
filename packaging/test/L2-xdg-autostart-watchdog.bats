@@ -317,3 +317,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on xdg-autostart surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The xdg-autostart-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1547.013 XDG Autostart per-graphical-login
+    # persistence alert. Locks parser contract on the .desktop
+    # Exec= detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Desktop Entry]\nType=Application\nExec=/usr/bin/gnome-keyring\n' > "${AUTOD}/benign.desktop"
+    run_wd                                              # ok path
+    printf '[Desktop Entry]\nType=Application\nExec=/tmp/.evil\n' > "${AUTOD}/evil.desktop"
+    run_wd                                              # alert path
+    # Every severity value emitted MUST be one of {ok,warn,alert}.
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
