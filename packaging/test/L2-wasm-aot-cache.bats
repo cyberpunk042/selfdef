@@ -722,3 +722,15 @@ c = data.get('consumes')
 assert isinstance(c, list), f'consumes must be TOML list, got {type(c).__name__}'
 "
 }
+
+@test "INVARIANT (wasm-aot-cache module.toml summary field present + non-empty — module-doc-trail contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+s = data.get('summary', '')
+assert s, f'summary must be non-empty, got {s!r}'
+"
+}

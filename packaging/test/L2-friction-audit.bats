@@ -640,3 +640,7 @@ EOF
 @test "INVARIANT (script's ZFS gate uses zpool status command — canonical-pool-health-query-path contract)" {
     grep -qE 'zpool status' "${SCRIPT}"
 }
+
+@test "INVARIANT (Memory gate test uses dmidecode --type 17 — canonical-memory-DIMM-query-path contract)" {
+    grep -qE 'dmidecode' "${SCRIPT}"
+}

@@ -720,3 +720,15 @@ p = data.get('provides')
 assert isinstance(p, list), f'provides must be TOML list, got {type(p).__name__}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml category field present + non-empty — module-taxonomy contract)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+c = data.get('category', '')
+assert c, f'category must be non-empty, got {c!r}'
+"
+}

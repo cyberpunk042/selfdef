@@ -599,3 +599,7 @@ setup() {
     # Allow only the version-gate exit (1) — this is intentional
     [ "${bare_exits}" -le 1 ]
 }
+
+@test "INVARIANT (lib's run() helper handles DRY_RUN=1 by logging instead of executing — anti-side-effect dry-run contract)" {
+    awk '/^run\(\)/,/^}/' "${LIB}" | grep -qE 'DRY_RUN.*1|\[\[ *.DRY_RUN'
+}

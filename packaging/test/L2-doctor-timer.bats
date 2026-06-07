@@ -523,3 +523,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     [ -f "${DAEMON_CARGO}" ]
     grep -qE 'package.metadata.deb|\[\[package.metadata.deb.assets\]\]|maintainer-scripts' "${DAEMON_CARGO}"
 }
+
+@test "INVARIANT (init checklist Step 11 references --now on enable — boot-and-fire-immediately contract)" {
+    grep -qE 'systemctl enable --now selfdef-doctor.timer' "${INIT}"
+}

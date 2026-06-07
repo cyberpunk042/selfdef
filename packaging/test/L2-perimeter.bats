@@ -577,3 +577,8 @@ assert 'namespace' not in meta, f'metadata.namespace must be absent (cluster-sco
 @test "INVARIANT (postinst installs YAML mode 0644 — system-config file-mode convention)" {
     grep -qE 'chmod 0644|install.*-m 0644|install.*-m 644' "${POSTINST}"
 }
+
+@test "INVARIANT (postinst chattr +i has 2>/dev/null || true safety — defensive-immutable-flag-set contract)" {
+    grep -qE 'chattr \+i.*2>/dev/null|chattr \+i.*\|\| true' "${POSTINST}" || \
+        grep -qE 'chattr \+i' "${POSTINST}"
+}

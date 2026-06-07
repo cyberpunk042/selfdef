@@ -541,3 +541,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qE 'selfdef-scheduler\.service.*usr/share/selfdef' "${DAEMON_CARGO}"
 }
+
+@test "INVARIANT (scheduler.service After= chain includes selfdef-guardian.service — Ring-0 ordering contract)" {
+    grep -qE '^After=.*selfdef-guardian' "${UNIT}"
+}

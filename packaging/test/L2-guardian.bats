@@ -356,3 +356,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst pre-creates /var/log/selfdef directory — operator-log-dir staging contract)" {
     grep -qE '/var/log/selfdef' "${POSTINST}"
 }
+
+@test "INVARIANT (postinst pre-creates /var/cache/selfdef/guardian/ring — ring-buffer staging contract)" {
+    grep -qE '/var/cache/selfdef/guardian/ring' "${POSTINST}"
+}
