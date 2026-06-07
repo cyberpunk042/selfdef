@@ -234,3 +234,22 @@ run_wd() {
     first_line="$(awk 'NF' "${DNF_AUTO_CONF}" | head -1)"
     [[ "${first_line}" == *"selfdef dnf-automatic-config"* ]]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # dnf-automatic-config TOML; parser must tolerate without
+    # altering the profile-gated behavior. security-and-reboot-with-
+    # noise still installs the reboot-enabled body (foundational
+    # CVE-defense auto-update mechanism on RHEL/Fedora hosts).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "security-and-reboot"
+operator_note = "kernel-update auto-reboot = CVE-defense substrate"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q 'profile=security-and-reboot' "${DNF_AUTO_CONF}"
+    grep -qE 'reboot\s*=\s*(when-needed|when-changed|yes)' "${DNF_AUTO_CONF}"
+}
