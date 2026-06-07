@@ -396,3 +396,13 @@ TOMLEOF
     mode="$(stat -c '%a' "${HOSTS_FILE}")"
     [ "${mode}" = "644" ] || [ "${mode}" = "640" ] || [ "${mode}" = "600" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on dns-shield installer surface.
+    write_config "base"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"dns-shield"')
+    [ "${count}" = "1" ]
+}
