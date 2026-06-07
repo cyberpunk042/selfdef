@@ -369,3 +369,19 @@ TOMLEOF
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(auditd|audit)'
     ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${AUDITD_CONF}"
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on auditd-tune surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The auditd-tune installer MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the auditd-tune apply status alert. Locks
+    # parser contract on the auditd-tune installer JSON
+    # surface (consistency-with-watchdog-family discipline).
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    bad=$(printf '%s\n' "${output}" | grep -oE '"severity":"[^"]+"' | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
