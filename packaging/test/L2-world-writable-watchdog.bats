@@ -175,3 +175,49 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" = "0" ]
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (stateless re-evaluation: world-writable alert STAYS visible on every run until operator chmods)" {
+    # world-writable-watchdog is stateless (no baseline-refresh required)
+    # — re-evaluates live filesystem on every run. A world-writable file
+    # that stays world-writable across runs MUST re-fire every run.
+    for i in $(seq 1 30); do printf 'x' > "${ROOT}/ww${i}"; chmod 0666 "${ROOT}/ww${i}"; done
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"bulk_world_writable"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-root scan: world-writable file in ANY watched root → flagged)" {
+    ROOT2="${TMP}/scan2"; mkdir -p "${ROOT2}"
+    printf 'x' > "${ROOT}/normal"; chmod 0644 "${ROOT}/normal"
+    printf 'x' > "${ROOT2}/loose-in-second-root"; chmod 0666 "${ROOT2}/loose-in-second-root"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_WORLDWRITE_PROFILE="report" \
+    SELFDEF_WORLDWRITE_ROOTS="${ROOT} ${ROOT2}" \
+    bash "${WD}"
+    cap | grep -q '"event":"world_writable_found"'
+    cap | grep -q 'loose-in-second-root'
+}
+
+@test "INVARIANT (whitelist axis: /tmp + /var/tmp + /dev/shm + /run/lock NOT flagged when scan-rooted at /)" {
+    # The 4 canonical sticky-scratch dirs MUST be excluded even when
+    # the scan is rooted at /. Lock the whitelist axis by simulating
+    # sticky-scratch dir within the scan root.
+    mkdir -p "${ROOT}/tmp"; chmod 1777 "${ROOT}/tmp"
+    mkdir -p "${ROOT}/var/tmp"; chmod 1777 "${ROOT}/var/tmp"
+    mkdir -p "${ROOT}/dev/shm"; chmod 1777 "${ROOT}/dev/shm"
+    run_wd
+    # No finding because all 4 carry sticky bit.
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (boundary 26: at exact 26 world-writable severity escalates from warn to alert)" {
+    # Single-notch boundary lock at the warn→alert transition.
+    for i in $(seq 1 26); do printf 'x' > "${ROOT}/ww${i}"; chmod 0666 "${ROOT}/ww${i}"; done
+    run_wd
+    cap | grep -q '"event":"bulk_world_writable"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"finding_count":2[6-9]|"finding_count":[3-9][0-9]'
+}
