@@ -273,3 +273,20 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (membership-into-systemd-journal: 'm myapp systemd-journal' → alert — journal read = audit-trail exfil axis)" {
+    # Sister to disk + shadow + sudo + wheel + docker privileged-
+    # group membership axes already locked. The systemd-journal
+    # group has read access to /var/log/journal/* — the audit-trail
+    # forensics surface. Membership lets an attacker read every
+    # privileged-process journal entry (including kernel messages
+    # that may contain memory-protection-failure addresses, sudo
+    # invocations with command line args, ssh login attempts).
+    # T1005 — Data from Local System via journal-read privilege.
+    seed_benign
+    run_wd
+    printf 'u myapp 999 "My App Daemon"\nm myapp systemd-journal\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
