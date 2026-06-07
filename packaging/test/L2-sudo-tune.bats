@@ -292,3 +292,24 @@ run_wd() {
     # And the drop-in lands at the final destination.
     [ -f "${DST}" ]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # sudo-tune TOML; parser must tolerate without altering the
+    # profile-gated behavior. paranoid-with-noise still installs
+    # the paranoid drop-in (Defaults log_input/log_output +
+    # timestamp_timeout tighter + lecture file) — the full
+    # paranoid sudo session-discipline substrate.
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "paranoid"
+operator_note = "tight sudo discipline + iolog audit trail"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${DST}" ]
+    [ -f "${LECTURE_FILE}" ]
+    grep -qE 'timestamp_timeout' "${DST}"
+}
