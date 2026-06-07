@@ -190,3 +190,19 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # level write-isolation are complementary defense layers).
     grep -qE '^ProtectSystem=(strict|full)' "${UNIT}"
 }
+
+@test "INVARIANT (unit declares NoNewPrivileges=true — privilege-escalation containment via setuid/setgid path)" {
+    # Sister to Ring-0 hardening + ProtectSystem strict
+    # INVARIANTs already locked. NoNewPrivileges=true blocks
+    # the unit from gaining new privileges via setuid binaries
+    # OR file capabilities (the standard Linux escalation
+    # gates). Without it, a compromised unit-process could
+    # exec sudo / a setuid binary / a binary with cap_setuid+ep
+    # and elevate to root (escaping the Ring-0 hardening
+    # containment). NoNewPrivileges is the systemd surface
+    # that locks the no_new_privs prctl flag for the entire
+    # unit lifetime. Locks the privilege-escalation-blocking
+    # contract on the Ring-0 hardening substrate (T1548 Abuse
+    # Elevation Control Mechanism).
+    grep -qE '^NoNewPrivileges=true' "${UNIT}"
+}
