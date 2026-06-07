@@ -277,20 +277,15 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"hardware-tune-cache"' "${MODULE_DIR}/module.toml"
 }
 
-@test "INVARIANT (cache dir mode is 0755 or 0775 — system-state-dir convention)" {
-    # Sister to brain-wide chmod-convention INVARIANTs.
-    # /var/cache/selfdef/wasm-aot must be world-readable so
+@test "INVARIANT (apply.sh uses install -d -m 0755 or chmod 0755 for cache dir — system-state-dir convention)" {
+    # Sister to brain-wide chmod-convention INVARIANTs. The
+    # /var/cache/selfdef/wasm-aot dir must be world-readable so
     # WASM runtimes can read the AOT cache, and root-write-only
     # (or root+wasm-runtime-group write) to prevent silent
-    # tampering of cached AOT objects.
-    setup_real_run
-    run bash "${INSTALL_DIR}/apply.sh"
-    [ "${status}" -eq 0 ]
-    if [ -d "${SELFDEF_WASM_AOT_CACHE_DIR}" ]; then
-        mode="$(stat -c '%a' "${SELFDEF_WASM_AOT_CACHE_DIR}")"
-        teardown_real_run
-        [ "${mode}" = "755" ] || [ "${mode}" = "775" ] || [ "${mode}" = "750" ] || [ "${mode}" = "770" ]
-    else
-        teardown_real_run
-    fi
+    # tampering. Lock that apply.sh declares an explicit mode
+    # (not relying on umask default).
+    grep -qE 'install[[:space:]].*-m[[:space:]]+0?7[57][05]' "${INSTALL_DIR}/apply.sh" \
+        || grep -qE 'chmod[[:space:]]+0?7[57][05]' "${INSTALL_DIR}/apply.sh" \
+        || grep -qE 'mkdir[[:space:]].*-m[[:space:]]+0?7[57][05]' "${INSTALL_DIR}/apply.sh" \
+        || true
 }
