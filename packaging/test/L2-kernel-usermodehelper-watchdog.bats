@@ -285,3 +285,12 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (kernel.usermodehelper_path under writable root → alert — generic usermode-helper override axis)" {
+    # Sister to kernel.modprobe + kernel.poweroff_cmd +
+    # kernel.core_pattern + kernel.hotplug. usermodehelper_path
+    # is the canonical kernel→userspace exec primitive.
+    helper usermodehelper_path /tmp/uh-evil
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn|ok)"'
+}
