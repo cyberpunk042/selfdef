@@ -380,3 +380,16 @@ seed_benign() {
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE 'tee[[:space:]].*capability\.conf'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '[[:space:]]setcap[[:space:]]'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # capability-conf-watchdog runs ON the timer's scheduled
+    # fire — diffs /etc/security/capability.conf against
+    # baseline, emits a verdict on pam_cap grant deltas, then
+    # exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the capability-
+    # conf-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/capability-conf-watchdog/systemd/selfdef-capability-conf.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
