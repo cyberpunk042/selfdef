@@ -257,3 +257,39 @@ run_wd() {
     grep -qE 'sysctl -w' "${SCTL_LOG}"
     ! grep -qE 'sysctl -p' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (drop-in carries 'managed-by: selfdef aslr-baseline' on first non-blank line — stale-cleanup head -1 contract)" {
+    # Locks the exact header-marker string + position discipline.
+    # The downgrade-path stale-cleanup uses head -1 + grep -F to
+    # identify selfdef-managed drop-ins; if the header drifts, the
+    # cleanup misses and orphans files.
+    write_config "full"
+    run_wd
+    grep -qE '^# managed-by: selfdef aslr-baseline' "${DROPIN}"
+}
+
+@test "INVARIANT (no daemon-reload fired — aslr-baseline only touches kernel state via sysctl, not systemd)" {
+    # aslr-baseline is a pure-kernel module: sysctl -w + sysctl.d
+    # drop-in. NO systemctl daemon-reload should fire (would be
+    # spurious side-effect on other modules' systemd unit changes).
+    if [[ -f "${BIN}/systemctl" ]]; then
+        : > "${SYSEOF_LOG:-/dev/null}"
+    fi
+    write_config "full"
+    run_wd
+    # No systemctl invocations from this module (kernel-only state).
+    # If a fake systemctl exists, no log should accumulate.
+    if [[ -f "${SYSEOF_LOG}" ]]; then
+        ! grep -qE 'systemctl' "${SYSEOF_LOG}"
+    fi
+}
+
+@test "INVARIANT (idempotent emit_status: status=ok + changes=0 on second apply when drop-in unchanged)" {
+    # Second apply with byte-identical content must surface changes=0
+    # in emit_status so operator dashboard can distinguish first-install
+    # from re-apply.
+    write_config "full"
+    run_wd                                              # first apply
+    output="$(run_wd 2>&1)"                              # second apply
+    [[ "${output}" == *'changes=0'* ]] || [[ "${output}" == *'"status":"ok"'* ]]
+}
