@@ -240,3 +240,18 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (dangerous-cap detect): cap_audit_control grant → alert (T1562.001 silence-audit axis)" {
+    # cap_audit_control allows toggling kernel auditing rules — a
+    # defense-evasion-grade capability (sister to the privesc-grade
+    # cap_setuid/cap_sys_admin/cap_dac_override axis). Locks the
+    # T1562.001 (Impair Defenses) detection axis distinct from the
+    # T1548 privesc detection axis. Sister-cap coverage to the
+    # whole-system-control axis on the pam_cap surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'cap_net_raw netuser\ncap_audit_control evil\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
