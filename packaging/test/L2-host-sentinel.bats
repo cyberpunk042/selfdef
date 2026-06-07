@@ -373,3 +373,14 @@ run_wd() {
     DRY_RUN=1 run_wd
     [ ! -f "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml" ]
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on host-sentinel installer surface
+    # across multi-policy YAML phases.
+    write_config "audit"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"host-sentinel"')
+    [ "${count}" = "1" ]
+}
