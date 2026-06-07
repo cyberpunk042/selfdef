@@ -303,3 +303,23 @@ EOF
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (relative-with-slash AuthorizedKeysCommand 'sub/dir/getkeys' → alert: PWD-at-exec attacker primitive on sshd AKCmd)" {
+    # Sister to krb5-plugins-watchdog + musl-ld-path-watchdog +
+    # gss-mech-watchdog + nm-vpn-plugin-watchdog + pkcs11-modules-
+    # watchdog relative-with-slash INVARIANTs already locked. An
+    # AuthorizedKeysCommand path with embedded slashes BUT no
+    # leading slash (e.g. 'sub/dir/getkeys' instead of '/sub/dir/
+    # getkeys') is NOT a fully-qualified absolute path — sshd
+    # resolves it relative to its own CWD at exec time. An
+    # attacker who can affect sshd's CWD (PWD-at-exec primitive
+    # — via systemd WorkingDirectory= injection) gets to control
+    # where the AuthorizedKeysCommand loads from for EVERY ssh
+    # login.
+    eff "${BENIGN[@]}"
+    run_wd
+    eff "permitrootlogin no" "authorizedkeyscommand sub/dir/getkeys" "x11forwarding yes"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
