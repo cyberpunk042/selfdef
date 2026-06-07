@@ -385,3 +385,14 @@ TOMLEOF
     post_dry="$(wc -l < "${HOSTS_FILE}" 2>/dev/null || echo 0)"
     [ "${pre_existing}" = "${post_dry}" ]
 }
+
+@test "INVARIANT (hosts file chmod preserves original mode — DNS-block-list installer does NOT degrade /etc/hosts perm)" {
+    # Sister to brain-wide preserve-existing-perm INVARIANTs.
+    # /etc/hosts is typically 0644 system-config; the dns-shield
+    # appending MUST NOT degrade the file mode.
+    write_config "base"
+    chmod 0644 "${HOSTS_FILE}"
+    run_wd
+    mode="$(stat -c '%a' "${HOSTS_FILE}")"
+    [ "${mode}" = "644" ] || [ "${mode}" = "640" ] || [ "${mode}" = "600" ]
+}
