@@ -306,3 +306,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (bind-mount shadowing /usr — sister-axis to /etc + /bin + /sbin + /root/.ssh + /var)" {
+    # Sister to the bind-mount shadowing /etc + /bin + /sbin +
+    # /root/.ssh + /var sensitive-path axes already locked. /usr
+    # contains every system binary + library + share + selfdef's
+    # own libexec scripts. A bind-mount shadowing /usr would let
+    # an attacker substitute the entire binary tree with patched
+    # versions. Locks axis-symmetry on the bind-mount shadow
+    # detection across the sensitive-path family — the most
+    # impactful shadow target on the host.
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd
+    printf '%s/data/fake-usr /usr none bind 0 0\n' "${BENIGN}" > "${FSTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
