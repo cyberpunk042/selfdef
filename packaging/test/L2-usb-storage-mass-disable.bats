@@ -292,3 +292,18 @@ usb_storage            73728  0' run_wd
     grep -qE '(blacklist|install) usb_storage' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
     grep -qE '(blacklist|install) uas' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
 }
+
+@test "INVARIANT (DRY_RUN does not fire rmmod or write the modprobe drop-in)" {
+    # Sister to many other installer module's DRY_RUN INVARIANT
+    # across the brain. The usb-storage-mass-disable DRY_RUN
+    # path MUST be a no-op against live kernel state + live
+    # filesystem — operator using --dry-run to preview expects
+    # ZERO mutations. Locks the dry-run side-effect-freedom
+    # contract so a regression that fires rmmod or writes the
+    # modprobe drop-in through DRY_RUN would be caught.
+    write_config "blocked"
+    LSMOD_OUTPUT='Module                  Size  Used by
+usb_storage            73728  0' DRY_RUN=1 run_wd
+    ! [ -f "${MODPROBE_D}/50-selfdef-usb-storage.conf" ]
+    ! [ -s "${RMMOD_LOG}" ]
+}
