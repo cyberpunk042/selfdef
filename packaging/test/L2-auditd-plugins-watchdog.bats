@@ -228,6 +228,23 @@ seed_benign() {
     cap | grep -q '"severity":"alert"'
 }
 
+@test "INVARIANT (added_sample in emit JSON: operator-triage routing surfaces changed plugin paths)" {
+    # Sister to every other watchdog sample-names-file INVARIANT
+    # across the brain. When the inventory delta has added entries,
+    # the JSON record must expose them via added_sample so the
+    # downstream operator dashboard / triage pipeline can route on
+    # which plugin .conf file changed (not just a count). Closes
+    # the inventory-as-opaque-counter regression axis.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add a NEW benign plugin .conf (drives a benign warn-tier delta).
+    printf 'active = yes\ndirection = out\npath = /sbin/audisp-remote\ntype = always\n' > "${PLUGD}/distinctive-remote.conf"
+    run_wd
+    cap | grep -q '"added_sample"'
+    cap | grep -q 'distinctive-remote'
+}
+
 @test "INVARIANT (active=no plugin still scanned: defense against time-bomb persistence)" {
     # An inactive plugin (active=no) is currently dormant but operator
     # may toggle to active later, OR attacker may plant a dormant
