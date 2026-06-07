@@ -231,3 +231,34 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"severity":"ok"'
     cap | grep -q '"event":"core_pattern_safe"'
 }
+
+@test "INVARIANT (pipe to relative-path handler → alert: relative paths without slash NOT trusted as handlers)" {
+    # A relative path like '|coredump-handler %p' resolves via the
+    # kernel's PATH which is operator-controlled. Should NOT be
+    # treated as an allowlisted handler.
+    write_pattern "|coredump-handler %p"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (sample names the offending pipe-handler in JSON — operator triage routing)" {
+    # When a hijacked pattern fires, the JSON sample MUST surface
+    # the pipe-handler path so operator dashboard routes triage.
+    # Sister contract: many other watchdogs' sample-naming pattern.
+    write_pattern "|/tmp/.very-distinctive-attacker-handler %p"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q 'very-distinctive-attacker-handler'
+}
+
+@test "INVARIANT (pipe to /root → alert: root-home is not an allowlisted handler dir)" {
+    # /root is root's home — even though root-owned, it's NOT on
+    # the allowlist of canonical handler dirs (systemd / apport).
+    # An attacker who roots the system could plant a handler in
+    # /root, but the watchdog must STILL alert on this because the
+    # allowlist is closed-set.
+    write_pattern "|/root/.evil-handler %p"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"core_pattern_hijacked"'
+}
