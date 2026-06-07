@@ -318,3 +318,16 @@ EOF
     cap | grep -q '"event":"report_missing"'
     cap | grep -qE '"report_path":"[^"]+"'
 }
+
+@test "INVARIANT (no auto-uninstall: lynis-cron watchdog NEVER emits package-remove commands on lynis)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The lynis-cron watchdog invokes the lynis
+    # security-audit tool but MUST NEVER emit shell commands
+    # that uninstall the lynis package itself (apt/dpkg/dnf/
+    # rpm/yum remove|purge|uninstall lynis). Silent auto-
+    # removal would tear down the security-audit substrate —
+    # T1562.001 Impair Defenses self-defeat by the wrapper
+    # meant to invoke the audit. Locks anti-package-removal
+    # contract on the lynis-cron substrate.
+    ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+lynis' "${WD}"
+}
