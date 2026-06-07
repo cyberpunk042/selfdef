@@ -275,3 +275,19 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named plugin conf surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # auditd plugin conf file (T1562.001 — Impair Defenses via
+    # plugin-pipe attack: auditd's plugin dispatcher feeds the
+    # event stream to attacker code AS ROOT), the file path MUST
+    # surface in the JSON sample so operator dashboard routes
+    # triage to the right path.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'active = yes\npath = /tmp/.evil\ntype = always\n' > "${PLUGD}/distinctive-attacker-plugin.conf"
+    run_wd
+    cap | grep -q 'distinctive-attacker-plugin'
+}
