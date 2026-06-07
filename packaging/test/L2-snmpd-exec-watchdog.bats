@@ -315,3 +315,24 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: snmpd-exec-watchdog NEVER deletes snmpd.conf entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # snmpd-exec-watchdog DETECTS T1546/T1059 snmpd-OID-trigger
+    # remote-exec persistence but MUST NEVER emit sed/awk/rm
+    # commands to auto-clean the extend directive. The detected
+    # directive may be operator-legitimate (custom monitoring
+    # extension) — silent auto-delete would destroy operator
+    # baseline state. Surveillance, never remediation. Locks
+    # anti-data-loss contract on the snmpd-exec surveillance
+    # substrate.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'extend evil /tmp/.evil\n' > "${CONF}"
+    run_wd
+    # CONF file MUST remain on disk with extend directive intact.
+    [ -f "${CONF}" ]
+    grep -q 'extend evil' "${CONF}"
+    ! grep -qE 'sed[[:space:]]+-i' "${WD}"
+    ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(CONF|FILE|file)' "${WD}"
+}
