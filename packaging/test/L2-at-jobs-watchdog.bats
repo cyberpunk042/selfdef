@@ -631,3 +631,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         grep -qE '^NoNewPrivileges=true' "${s}"
     done
 }
+
+@test "INVARIANT (at-jobs-watchdog service unit declares ReadWritePaths= — explicit-strict-mode-permitted-writes manifest contract)" {
+    # Sister to brain-wide systemd ReadWritePaths= INVARIANT
+    # family. Watchdog .service units run under ProtectSystem=
+    # strict which forbids ALL writes to /etc, /usr, /boot —
+    # the unit can ONLY write to paths explicitly enumerated
+    # in ReadWritePaths=. Watchdog scripts MUST write to at
+    # least /dev/log (logger(1) channel) + the canonical
+    # selfdef state dir. A regression dropping ReadWritePaths=
+    # would surface as EROFS at logger() call. Locks the
+    # explicit-allowlist write-paths discipline on the at-jobs-
+    # watchdog service substrate.
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/at-jobs-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^ReadWritePaths=' "${s}"
+    done
+}

@@ -652,3 +652,27 @@ assert isinstance(ps, list), f'install_paths.paths must be TOML list, got {type(
 assert all(isinstance(p, str) for p in ps), f'every paths entry must be a string'
 "
 }
+
+@test "INVARIANT (sysctl-network-baseline module.toml declares requires field present as TOML list of inline-tables — runtime-dependency-binary contract)" {
+    # Sister to brain-wide module.toml requires INVARIANT
+    # family. The requires field MUST be a TOML list of
+    # inline-tables: [{ kind = "binary", value = "..." }].
+    # The selfdefctl resolver iterates the list + dispatches
+    # per kind to verify each required runtime dependency
+    # (canonical kinds: binary, config, systemd-unit). A
+    # regression that flattened the list to strings would
+    # break the per-kind dispatch. Locks the inline-table
+    # list-shape discipline on the sysctl-network-baseline requires substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/sysctl-network-baseline/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+req = data.get('requires')
+assert isinstance(req, list), f'requires must be TOML list, got {type(req).__name__}'
+for r in req:
+    assert isinstance(r, dict), f'requires entry must be inline-table, got {type(r).__name__}'
+    assert 'kind' in r and 'value' in r, f'requires must have kind+value, got {r!r}'
+"
+}
