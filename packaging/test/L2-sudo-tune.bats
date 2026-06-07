@@ -370,3 +370,19 @@ TOMLEOF
     ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+sudo'
     ! grep -qE 'apt|dpkg|dnf|rpm|yum' "${DST}"
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on sudo-tune surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The sudo-tune installer MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the sudo-tune apply status alert. Locks parser
+    # contract on the sudo-tune installer JSON surface
+    # (consistency-with-watchdog-family discipline).
+    write_config "audit-trail"
+    output="$(run_wd 2>&1)"
+    bad=$(printf '%s\n' "${output}" | grep -oE '"severity":"[^"]+"' | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
