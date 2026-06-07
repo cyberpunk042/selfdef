@@ -318,3 +318,45 @@ EOF
     cap | grep -q '"event":"authorized_key_added"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (ecdsa-key algorithm axis: ecdsa-sha2-nistp256 key also surfaces as alert — algorithm-agnostic detection)" {
+    # Sister to rsa-axis INVARIANT. ECDSA is a third common SSH
+    # key algorithm. Lock it specifically so a regression that
+    # whitelists only rsa+ed25519 would trip here.
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBfakeECDSAkeybodyfortest attacker-ecdsa\n' >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    run_wd
+    cap | grep -q '"event":"authorized_key_added"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (forced-command-option NOT bypassing detection: command= prefix on the line still surfaces the key as added)" {
+    # SSH options like 'command=...' or 'no-pty' prefix the actual
+    # key. An attacker may use them to restrict the key's use OR
+    # to hide the key behind option-noise hoping naive grep misses
+    # it. Lock that the watchdog still extracts + tracks the key.
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add a key with command= prefix (restricted-shell exec).
+    printf 'command="/usr/bin/restricted-shell",no-pty %s\n' "${KEY_EVIL}" >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (root-user authorized_keys gets baselined + monitored — highest-value account on the system)" {
+    # If root has authorized_keys, the watchdog MUST track it like
+    # any other user. Lock that the synthetic-passwd fixture
+    # supports root's home and the inventory captures it.
+    cat > "${PASSWD_FILE}" <<EOF
+root:x:0:0:root:${HOMES_ROOT}/root:/bin/bash
+alice:x:1000:1000:Alice:${HOMES_ROOT}/alice:/bin/bash
+EOF
+    mkdir -p "${HOMES_ROOT}/root/.ssh"
+    printf '%s\n' "${KEY_BOB}" > "${HOMES_ROOT}/root/.ssh/authorized_keys"
+    plant_baseline_keys
+    run_wd
+    grep -qP '^root\t' "${BASELINE}"
+}
