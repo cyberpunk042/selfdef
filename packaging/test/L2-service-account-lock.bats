@@ -326,3 +326,28 @@ EOF
     output_second="$(run_wd 2>&1 | grep 'FOUND:')"
     [ "${output_first}" = "${output_second}" ]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # service-account-lock TOML; parser must tolerate without
+    # altering the profile-gated behavior. enforce-with-noise still
+    # fires chsh + passwd -l on www-data (non-reserved UID<1000
+    # with interactive shell) AND root-protection preserved (root in
+    # default reserved_uids 0,1,2,3 NOT touched) — anti-bricking on
+    # the system-account neutralization substrate.
+    write_synth_passwd
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "enforce"
+reserved_uids = "0,1,2,3"
+operator_note = "service-account-with-shell = pre-attack pivot vector"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -qE 'chsh.*-s.*nologin.*www-data' "${CHSH_LOG}"
+    grep -q 'passwd -l www-data' "${PASSWD_LOG}"
+    ! grep -q 'chsh.*root' "${CHSH_LOG}"
+    ! grep -q 'passwd -l root' "${PASSWD_LOG}"
+}
