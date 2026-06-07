@@ -414,3 +414,20 @@ assert 'install' in data, 'install missing'
         ! grep -vE '^[[:space:]]*#' "${sh}" | grep -qE 'tee[[:space:]].*\$\{?[A-Z_]*FILE'
     done
 }
+
+@test "INVARIANT (initramfs-hooks-watchdog libexec uses set -u — anti-unbound-variable contract on the watchdog probe)" {
+    # Sister to brain-wide shell-discipline INVARIANT family.
+    # The initramfs-hooks-watchdog libexec uses set -u to catch typo'd env-var
+    # references before they silently propagate as empty
+    # strings into baseline-path operations. Locks set -u
+    # discipline on the initramfs-hooks-watchdog libexec substrate.
+    wd_libexec="${BATS_TEST_DIRNAME}/../../modules/initramfs-hooks-watchdog/systemd"
+    found=0
+    for sh in "${wd_libexec}"/*.sh; do
+        [ -f "${sh}" ] || continue
+        if grep -qE '^set[[:space:]]+-u' "${sh}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
