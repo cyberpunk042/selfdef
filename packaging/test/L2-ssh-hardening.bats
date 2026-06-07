@@ -354,3 +354,16 @@ TOMLEOF
     run_wd
     grep -qE '^MaxAuthTries[[:space:]]+[1-4]' "${DST}"
 }
+
+@test "INVARIANT (standard carries ClientAliveInterval + ClientAliveCountMax — idle-connection timeout cap)" {
+    # Sister to MaxAuthTries + ssh-hardening directive INVARIANTs.
+    # ClientAliveInterval/CountMax controls idle-session timeout
+    # before sshd disconnects. Without it, unattended logged-in
+    # sessions remain available indefinitely — operator-walking-
+    # away vector. Lock that standard sets BOTH directives so
+    # idle sessions auto-disconnect.
+    write_config "standard"
+    run_wd
+    grep -qE '^ClientAliveInterval[[:space:]]+[0-9]+' "${DST}"
+    grep -qE '^ClientAliveCountMax[[:space:]]+[0-9]+' "${DST}"
+}
