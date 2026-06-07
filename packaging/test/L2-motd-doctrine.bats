@@ -242,3 +242,18 @@ TEMPLATES_DIR="${MODULE_DIR}/templates"
     # missing on some hosts; operator can't tell which.
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/apply.sh"
 }
+
+@test "INVARIANT (check.sh + uninstall.sh use set -euo pipefail — full lifecycle fail-loud invariant)" {
+    # Sister to apply.sh fail-loud INVARIANT just locked above
+    # and brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # The motd-doctrine check.sh + uninstall.sh paths MUST be
+    # fail-loud across the full module surface. Silent check.sh
+    # failure would mask banner-template corruption from
+    # operator dashboard view; silent uninstall.sh failure
+    # leaves stale 50-selfdef-presence script in /etc/update-
+    # motd.d/ after package purge — orphan banner referencing
+    # uninstalled module. Locks fail-loud contract on the full
+    # motd-doctrine module-script surface.
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/check.sh"
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
+}
