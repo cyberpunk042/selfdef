@@ -205,3 +205,32 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-gss-mech -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): gss-mech-watchdog does NOT refresh baseline on suspicious-mechanism detection — alert STAYS until operator updates" {
+    # T1574/T1556 GSSAPI auth-handling code-load primitive — alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    run_wd
+    printf 'gssapi_evil 1.2.3.4 /tmp/evil.so\n' > "${MECH}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: tab-separated mechanism fields still parsed)" {
+    # The positional grammar uses whitespace (space or tab) as field
+    # separator. Attacker may use tabs to evade naive grep.
+    printf 'gssapi_evil\t1.2.3.4\t/tmp/evil.so\n' > "${MECH}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-mechanism file: ANY suspicious mechanism in any position → alert)" {
+    # Attacker may stack: benign first, suspicious second; or vice versa.
+    # Lock that ALL mechanism lines are evaluated.
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 /usr/lib/mech_krb5.so\nspnego 1.3.6.1.5.5.2 /usr/lib/mech_spnego.so\ngssapi_evil 1.2.3.4 /tmp/evil.so\n' > "${MECH}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
