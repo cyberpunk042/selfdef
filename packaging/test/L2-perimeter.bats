@@ -324,3 +324,21 @@ teardown() {
     [ -n "${reload_line}" ]
     [ "${chattr_line}" -lt "${reload_line}" ]
 }
+
+@test "INVARIANT (YAML spec section present — Tetragon CRD spec contract)" {
+    # Sister to brain-wide Tetragon CRD INVARIANT family
+    # (kind/apiVersion/metadata.name already locked). The spec
+    # section is the THIRD mandatory CRD body component —
+    # contains the kprobes array. A YAML manifest with valid
+    # metadata but missing spec would be silently rejected by
+    # the Tetragon operator without alerting the operator
+    # (kubectl apply succeeds; Tetragon doesn't load policy).
+    # Locks the spec-section presence contract on the perimeter
+    # YAML substrate.
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert 'spec' in data, 'spec section missing'
+assert isinstance(data['spec'], dict), 'spec must be dict'
+"
+}

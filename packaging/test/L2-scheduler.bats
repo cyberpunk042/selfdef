@@ -331,3 +331,19 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
         *) false ;;
     esac
 }
+
+@test "INVARIANT (unit comment references MS039 trust topology — derivation-source audit-trail)" {
+    # Sister to brain-wide operator-audit-trail INVARIANT family.
+    # The scheduler unit header MUST reference its derivation
+    # source — MS039 Ring-0 trust topology rationale for User=
+    # root + ZFS audit-log access requirements. This trail lets
+    # an operator triaging a User=root concern know WHY the
+    # scheduler runs as root (it's not lazy permissions; it's
+    # the MS039-mandated trust-topology requirement for
+    # /mnt/vault/context append + /proc/pressure/* read). A
+    # regression that dropped the MS039 comment would lose the
+    # rationale-context for the privileged-execution choice.
+    # Locks the derivation-source audit-trail discipline on the
+    # scheduler unit substrate.
+    grep -qE 'MS039' "${UNIT}"
+}

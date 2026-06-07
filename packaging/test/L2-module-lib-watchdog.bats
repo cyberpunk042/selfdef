@@ -359,3 +359,16 @@ setup() {
     # the contract is DOCUMENTED in the header comment.
     grep -qE 'MODULE[[:space:]]+— module slug|Caller contract' "${LIB}"
 }
+
+@test "INVARIANT (selfdef_injection_patterns is BASH FUNCTION — emits newline-separated tokens consumable via while-read)" {
+    # Sister to brain-wide library-contract INVARIANT family.
+    # The selfdef_injection_patterns helper MUST be a bash
+    # function (not a static variable) so callers can pipe it
+    # into grep/while-read for line-iteration. A regression
+    # that converted it to an array variable would force
+    # consumers to switch from `selfdef_injection_patterns |
+    # grep` to `for p in "${ARRAY[@]}"`, breaking every
+    # watchdog scan loop. Locks the function-vs-variable
+    # discipline on the module-lib substrate.
+    type -t selfdef_injection_patterns | grep -q '^function$'
+}

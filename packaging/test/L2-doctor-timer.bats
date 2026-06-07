@@ -297,3 +297,15 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qE '^OnUnitActiveSec=' "${TIMER}"
     ! grep -qE '^OnCalendar=' "${TIMER}"
 }
+
+@test "INVARIANT (.timer + .service files chmod 0644 — systemd unit-file convention)" {
+    # Sister to brain-wide systemd unit-file mode INVARIANT
+    # family. systemd unit files MUST be chmod 0644 (world-
+    # readable for systemctl-status visibility; root-write-only
+    # to prevent operator-mode tampering). Locks unit-file mode
+    # discipline on the doctor service + timer substrate.
+    mode_service=$(stat -c '%a' "${SERVICE}")
+    mode_timer=$(stat -c '%a' "${TIMER}")
+    [ "${mode_service}" = "644" ]
+    [ "${mode_timer}" = "644" ]
+}

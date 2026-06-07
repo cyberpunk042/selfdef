@@ -437,3 +437,17 @@ EOF
     # The printf in the script: severity_id":%d ensures integer.
     grep -qE '"severity_id":%d' "${SCRIPT}"
 }
+
+@test "INVARIANT (script exposes operator-override env vars for paths — SELFDEF_FRICTION_AUDIT_{OCSF,RING,HOSTNAME})" {
+    # Sister to brain-wide operator-override INVARIANT family.
+    # The friction-audit script MUST honor environment-variable
+    # overrides for its output paths + hostname so operators
+    # running in test/dev/staging environments can redirect
+    # output without modifying the script. Hard-coded paths
+    # would prevent CI test harnesses from observing emitted
+    # artifacts. Locks the operator-override env-var discipline
+    # on the friction-audit substrate.
+    grep -qE 'SELFDEF_FRICTION_AUDIT_OCSF_PATH' "${SCRIPT}"
+    grep -qE 'SELFDEF_FRICTION_AUDIT_RING_DIR' "${SCRIPT}"
+    grep -qE 'SELFDEF_FRICTION_AUDIT_HOSTNAME' "${SCRIPT}"
+}
