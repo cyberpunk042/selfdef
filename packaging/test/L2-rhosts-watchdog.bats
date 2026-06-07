@@ -356,3 +356,15 @@ seed_benign() {
     mode="$(stat -c '%a' "${BASELINE}")"
     [ "${mode}" = "600" ] || [ "${mode}" = "640" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # rhosts-watchdog runs ON the timer's scheduled fire — scans
+    # /etc/hosts.equiv + every user's ~/.rhosts for trust-relation
+    # entries, emits a verdict, then exits. Type=simple would
+    # break timer OnUnitActiveSec semantics. Locks oneshot-probe
+    # contract on the rhosts-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/rhosts-watchdog/systemd/selfdef-rhosts.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
