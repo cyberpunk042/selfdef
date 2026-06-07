@@ -493,3 +493,24 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on listening-ports surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The listening-ports-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1571 non-standard-port listener
+    # surveillance alert. Locks parser contract on the listening-
+    # ports inventory delta detection surface.
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline
+    tcp2="$(mk_ss_lines '0.0.0.0:22' '0.0.0.0:4444')"
+    mk_ss "${tcp2}" ""
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
