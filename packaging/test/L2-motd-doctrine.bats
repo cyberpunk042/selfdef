@@ -823,3 +823,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/motd-doctrine/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (motd-doctrine install/uninstall.sh declares non-empty body — non-trivial-script contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/motd-doctrine/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

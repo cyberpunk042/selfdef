@@ -850,3 +850,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/rkhunter-cron/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (rkhunter-cron install/uninstall.sh declares non-empty body — non-trivial-script contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/rkhunter-cron/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

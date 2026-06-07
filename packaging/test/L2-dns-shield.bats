@@ -990,3 +990,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/dns-shield/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (dns-shield install/uninstall.sh declares non-empty body — non-trivial-script contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/dns-shield/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

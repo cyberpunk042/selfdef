@@ -980,3 +980,12 @@ seed_benign() {
         [ "${lines}" -gt 20 ]
     done
 }
+
+@test "INVARIANT (capability-conf-watchdog .service unit file has >5 lines of directives — non-trivial-unit-file contract)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/capability-conf-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        lines=$(wc -l <"${s}")
+        [ "${lines}" -gt 5 ]
+    done
+}

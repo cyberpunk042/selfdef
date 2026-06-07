@@ -931,3 +931,12 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         [ "${lines}" -gt 20 ]
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .service unit file has >5 lines of directives — non-trivial-unit-file contract)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        lines=$(wc -l <"${s}")
+        [ "${lines}" -gt 5 ]
+    done
+}

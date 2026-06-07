@@ -956,3 +956,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (fail2ban-bridge install/uninstall.sh declares non-empty body — non-trivial-script contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

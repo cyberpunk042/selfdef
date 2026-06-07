@@ -944,3 +944,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (coredump-suid-restrict install/uninstall.sh declares non-empty body — non-trivial-script contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

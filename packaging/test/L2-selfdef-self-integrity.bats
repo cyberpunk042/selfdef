@@ -980,3 +980,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (selfdef-self-integrity install/uninstall.sh declares non-empty body — non-trivial-script contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

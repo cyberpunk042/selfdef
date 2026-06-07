@@ -922,3 +922,8 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     chk="${BATS_TEST_DIRNAME}/../../modules/proc-hidepid/install/check.sh"
     [ -s "${chk}" ]
 }
+
+@test "INVARIANT (proc-hidepid install/uninstall.sh declares non-empty body — non-trivial-script contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/proc-hidepid/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

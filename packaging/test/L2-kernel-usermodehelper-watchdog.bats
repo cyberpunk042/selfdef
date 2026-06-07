@@ -904,3 +904,12 @@ assert 'install' in data, 'install missing'
         [ "${lines}" -gt 20 ]
     done
 }
+
+@test "INVARIANT (kernel-usermodehelper-watchdog .service unit file has >5 lines of directives — non-trivial-unit-file contract)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/kernel-usermodehelper-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        lines=$(wc -l <"${s}")
+        [ "${lines}" -gt 5 ]
+    done
+}
