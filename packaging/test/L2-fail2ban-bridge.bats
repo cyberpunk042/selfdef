@@ -289,3 +289,28 @@ run_wd() {
         [ "${recidive_bantime}" -ge 86400 ]
     fi
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # fail2ban-bridge TOML; parser must tolerate without altering
+    # the profile-gated behavior. broad-with-noise still installs
+    # BOTH the standard 50-selfdef.conf (sshd jail) AND the recidive
+    # 60-selfdef-recidive.conf drop-in (long-term-ban jail) — the
+    # full ssh-brute-force + repeat-offender ban substrate.
+    write_config_with_noise() {
+        cat > "${CONF}" <<'TOMLEOF'
+profile = "broad"
+operator_note = "ssh brute + recidive long-term-ban + apache/nginx jails"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    }
+    write_config_with_noise
+    run_wd
+    [ -f "${JAIL_D}/50-selfdef.conf" ]
+    [ -f "${JAIL_D}/60-selfdef-recidive.conf" ]
+    grep -qE '^\[sshd\]' "${JAIL_D}/50-selfdef.conf"
+    grep -qE '^\[recidive\]' "${JAIL_D}/60-selfdef-recidive.conf"
+}
