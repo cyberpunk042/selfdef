@@ -283,3 +283,12 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (mechanism .so under /dev/shm — tmpfs writable-root axis-symmetric expansion)" {
+    # Sister to /var/tmp + /home + relative-with-slash GSSAPI
+    # mech writable-root INVARIANTs. /dev/shm tmpfs writable
+    # by ALL users.
+    printf 'gssapi_evil 1.2.3.4 /dev/shm/.evil-gss.so\n' > "${MECH}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
