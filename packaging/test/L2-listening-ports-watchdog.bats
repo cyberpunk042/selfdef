@@ -478,3 +478,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '53535|"severity":"(alert|warn|ok)"'
 }
+
+@test "INVARIANT (baseline re-establish on operator out-of-band deletion: missing baseline re-creates cleanly + emits baseline_initial)" {
+    # Sister to brain-wide baseline-re-establish INVARIANTs.
+    # State-resilience on T1571 non-standard-port listener
+    # surveillance.
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd                                              # establishes baseline
+    [ -f "${BASELINE}" ]
+    rm -f "${BASELINE}"                                  # operator wipe
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # must re-establish
+    [ -f "${BASELINE}" ]
+    cap | grep -qE '"event":"baseline_initial"'
+}
