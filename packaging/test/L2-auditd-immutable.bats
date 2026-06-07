@@ -497,3 +497,24 @@ v = data.get('requires', [])
 assert isinstance(v, list), f'requires must be list, got {type(v).__name__}'
 "
 }
+
+@test "INVARIANT (module.toml requires entries are tables with kind + value — anti-flat-string-list contract)" {
+    # Sister to brain-wide module.toml requires-shape INVARIANT
+    # family. Each requires entry MUST be a TOML inline table
+    # `{ kind = "binary", value = "X" }` — not a flat string
+    # like "binary:X" (which the resolver would not parse as
+    # structured kind/value and would fail to dispatch the
+    # check). Locks the kind+value table-shape discipline on
+    # the auditd-immutable requires substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-immutable/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+reqs = data.get('requires', [])
+for r in reqs:
+    assert isinstance(r, dict), f'requires entry must be table, got {type(r).__name__}'
+    assert 'kind' in r and 'value' in r, f'requires entry must have kind+value, got {r}'
+"
+}
