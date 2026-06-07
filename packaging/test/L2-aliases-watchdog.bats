@@ -1094,3 +1094,11 @@ seed_benign() {
         [ -s "${t}" ]
     done
 }
+
+@test "INVARIANT (aliases-watchdog .sh script body has at least one variable assignment — non-vacuous-script 84)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/aliases-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '^[a-zA-Z_]+=' "${s}"
+    done
+}

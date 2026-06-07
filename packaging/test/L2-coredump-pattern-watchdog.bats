@@ -1041,3 +1041,11 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         [ -s "${t}" ]
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .sh script body has at least one variable assignment — non-vacuous-script 84)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '^[a-zA-Z_]+=' "${s}"
+    done
+}

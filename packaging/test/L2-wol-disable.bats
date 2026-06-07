@@ -991,3 +991,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     uni="${BATS_TEST_DIRNAME}/../../modules/wol-disable/install/uninstall.sh"
     [ -s "${uni}" ]
 }
+
+@test "INVARIANT (wol-disable install/apply.sh declares first 30 lines with set -euo pipefail — strict-mode-prologue 84)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/wol-disable/install/apply.sh"
+    head -30 "${apply}" | grep -qE 'set -euo'
+}

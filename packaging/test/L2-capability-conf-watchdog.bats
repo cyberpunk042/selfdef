@@ -1090,3 +1090,11 @@ seed_benign() {
         [ -s "${t}" ]
     done
 }
+
+@test "INVARIANT (capability-conf-watchdog .sh script body has at least one variable assignment — non-vacuous-script 84)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/capability-conf-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '^[a-zA-Z_]+=' "${s}"
+    done
+}

@@ -1051,3 +1051,11 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         [ -s "${t}" ]
     done
 }
+
+@test "INVARIANT (at-jobs-watchdog .sh script body has at least one variable assignment — non-vacuous-script 84)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/at-jobs-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '^[a-zA-Z_]+=' "${s}"
+    done
+}

@@ -1043,3 +1043,11 @@ assert 'install' in data, 'install missing'
         [ -s "${t}" ]
     done
 }
+
+@test "INVARIANT (shell-init-watchdog .sh script body has at least one variable assignment — non-vacuous-script 84)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/shell-init-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '^[a-zA-Z_]+=' "${s}"
+    done
+}

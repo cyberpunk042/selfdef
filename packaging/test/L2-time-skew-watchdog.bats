@@ -1052,3 +1052,11 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
         [ -s "${t}" ]
     done
 }
+
+@test "INVARIANT (time-skew-watchdog .sh script body has at least one variable assignment — non-vacuous-script 84)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '^[a-zA-Z_]+=' "${s}"
+    done
+}

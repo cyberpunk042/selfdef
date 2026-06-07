@@ -1069,3 +1069,11 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         [ -s "${t}" ]
     done
 }
+
+@test "INVARIANT (binfmt-watchdog .sh script body has at least one variable assignment — non-vacuous-script 84)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/binfmt-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '^[a-zA-Z_]+=' "${s}"
+    done
+}

@@ -1113,3 +1113,11 @@ seed_benign() {
         [ -s "${t}" ]
     done
 }
+
+@test "INVARIANT (boot-script-watchdog .sh script body has at least one variable assignment — non-vacuous-script 84)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/boot-script-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '^[a-zA-Z_]+=' "${s}"
+    done
+}

@@ -1066,3 +1066,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     uni="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/install/uninstall.sh"
     [ -s "${uni}" ]
 }
+
+@test "INVARIANT (selfdef-self-integrity install/apply.sh declares first 30 lines with set -euo pipefail — strict-mode-prologue 84)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/install/apply.sh"
+    head -30 "${apply}" | grep -qE 'set -euo'
+}

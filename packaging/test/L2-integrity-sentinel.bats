@@ -1051,3 +1051,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     uni="${BATS_TEST_DIRNAME}/../../modules/integrity-sentinel/install/uninstall.sh"
     [ -s "${uni}" ]
 }
+
+@test "INVARIANT (integrity-sentinel install/apply.sh declares first 30 lines with set -euo pipefail — strict-mode-prologue 84)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/integrity-sentinel/install/apply.sh"
+    head -30 "${apply}" | grep -qE 'set -euo'
+}

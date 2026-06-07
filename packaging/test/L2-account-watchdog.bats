@@ -1216,3 +1216,11 @@ assert 'install' in data, 'install missing'
         [ -s "${t}" ]
     done
 }
+
+@test "INVARIANT (account-watchdog .sh script body has at least one variable assignment — non-vacuous-script 84)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/account-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        grep -qE '^[a-zA-Z_]+=' "${s}"
+    done
+}
