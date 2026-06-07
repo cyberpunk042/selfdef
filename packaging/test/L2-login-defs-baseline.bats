@@ -266,3 +266,16 @@ TOMLEOF
     grep -qE 'ENCRYPT_METHOD[[:space:]]+SHA512' "${DROPIN}"
     grep -q 'managed-by: selfdef login-defs-baseline' "${LEGACY_LOGIN_DEFS}"
 }
+
+@test "INVARIANT (PASS_MIN_DAYS > 0 — forces minimum-time-between-changes; rapid-cycling password defense)" {
+    # Sister to PASS_MAX_DAYS expiration axis already locked. The
+    # PASS_MIN_DAYS directive sets the minimum days between password
+    # changes — locks against the "rapid-cycling" attack where a
+    # user resets their password 24 times in 24 hours to cycle past
+    # the history depth and re-set to their original password.
+    # Both standard and strict profiles MUST set PASS_MIN_DAYS > 0
+    # to defeat this attack pattern (PCI/CIS requires >= 1).
+    write_config "strict"
+    run_wd
+    grep -qE 'PASS_MIN_DAYS[[:space:]]+[1-9]' "${DROPIN}"
+}
