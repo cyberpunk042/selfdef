@@ -269,3 +269,14 @@ teardown_dry_run() {
         || python3 -c "import tomli; tomli.load(open('${MODULE_DIR}/module.toml','rb'))" 2>/dev/null \
         || skip "no tomllib/tomli available; parser-contract check skipped"
 }
+
+@test "INVARIANT (no auto-uninstall: agent-guard installer NEVER emits package-remove commands on tetragon)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANT family.
+    # agent-guard installs Tetragon TracingPolicies; package-
+    # removal of tetragon is operator-domain (substrate not owned
+    # by this module — agent-guard wires policy on top). Locks
+    # no-auto-uninstall on the agent-guard substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(tetragon|bpftool)' "${f}"
+    done
+}
