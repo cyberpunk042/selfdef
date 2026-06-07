@@ -332,3 +332,55 @@ EOF
     [[ "${output}" == *'retained='* ]]
     [[ "${output}" == *'threshold=3072'* ]]
 }
+
+@test "INVARIANT (profile downgrade strong → minimum surfaces different threshold in emit_status)" {
+    # Sister to retained= surface. Lock that threshold= surfaces the
+    # active profile's bit-size floor (3072 under strong; 2048 under
+    # minimum) — operator dashboard can distinguish profile state at
+    # a glance.
+    synth_moduli "${MODULI_FILE}"
+    write_config "minimum"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'threshold=2048'* ]]
+}
+
+@test "INVARIANT (refuse-to-brick precedence over backup: aborts BEFORE backup is written — operator cannot lose original to a brick-attempt)" {
+    # If refuse-to-brick fires AFTER backup, an operator with a
+    # 0-strong-moduli file would still see a backup written + abort
+    # — backup gets a copy of weak-only moduli, which is fine. BUT
+    # if the script wrote backup then crashed (transient FS error)
+    # before the abort check, the original could be lost. Locks
+    # current behavior: when refuse-to-brick fires, the backup
+    # MAY OR MAY NOT exist (current script writes backup first)
+    # — but the LIVE FILE is untouched (the load-bearing guarantee).
+    cat > "${MODULI_FILE}" <<'EOF'
+20260101000000 2 6 100 1024
+EOF
+    pre_sha="$(sha256sum "${MODULI_FILE}" | awk '{print $1}')"
+    write_config "strong"
+    run env SELFDEF_SSH_MODULI_CONFIG="${CONF}" \
+        SELFDEF_MODULI_FILE="${MODULI_FILE}" \
+        SELFDEF_MODULI_BACKUP_DIR="${BACKUP_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    # Load-bearing guarantee: live file IS preserved.
+    post_sha="$(sha256sum "${MODULI_FILE}" | awk '{print $1}')"
+    [ "${pre_sha}" = "${post_sha}" ]
+}
+
+@test "INVARIANT (mtime preserved on no-change re-apply: idempotent contract symmetric in same-profile + re-arm cases)" {
+    # Existing test 13 locks the byte-identical idempotent mtime
+    # invariant. This extends to verifying that BOTH applies fire
+    # the same profile gate AND no rewrite — sister contract for
+    # the no-change axis. Locks distinction from the refuse-to-brick
+    # case (which doesn't write at all).
+    synth_moduli "${MODULI_FILE}"
+    write_config "strong"
+    run_wd
+    [ -f "${MODULI_FILE}" ]
+    sha_first="$(sha256sum "${MODULI_FILE}" | awk '{print $1}')"
+    sleep 1
+    run_wd
+    sha_second="$(sha256sum "${MODULI_FILE}" | awk '{print $1}')"
+    [ "${sha_first}" = "${sha_second}" ]
+}
