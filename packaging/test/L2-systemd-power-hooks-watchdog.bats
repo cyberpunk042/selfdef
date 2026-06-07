@@ -256,3 +256,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named power hook surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # systemd-sleep / systemd-shutdown hook (T1546 — power-
+    # event-trigger root-exec persistence; on a workstation the
+    # trigger fires multiple times per day), the file name MUST
+    # surface in the JSON sample so operator dashboard routes
+    # triage to the right path.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\necho new\n' > "${HOOKD}/99-distinctive-attacker-power-hook"
+    chmod 0755 "${HOOKD}/99-distinctive-attacker-power-hook"
+    run_wd
+    cap | grep -q 'distinctive-attacker-power-hook'
+}
