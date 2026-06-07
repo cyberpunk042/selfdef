@@ -483,3 +483,25 @@ EOF
     run_wd
     cap | grep -q 'attacker-path-watch.path'
 }
+
+@test "INVARIANT (.socket enabled-unit added → alert: T1543.002 socket-activation persistence axis sister to .service/.timer/.path)" {
+    # Sister to .service (T1543.002) + .timer (T1053.006) +
+    # .path axes already locked. .socket units are the FOURTH
+    # systemd persistence axis — a .socket unit listens on a
+    # network/Unix socket and activates an associated .service
+    # when a client connects. Attacker may plant a .socket unit
+    # bound to a high port + activate their callback .service
+    # on every incoming connection — remote trigger. Locks
+    # .socket axis on systemd-unit-inventory surveillance
+    # brain alongside .service + .timer + .path.
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    export SYSTEMD_UNITS="sshd.service nginx.service docker.socket attacker-callback.socket"
+    cat > "${SYSTEMD_UNIT_DIR}/attacker-callback.socket" <<'EOF'
+[Socket]
+ListenStream=4444
+EOF
+    run_wd
+    cap | grep -q 'attacker-callback.socket'
+}
