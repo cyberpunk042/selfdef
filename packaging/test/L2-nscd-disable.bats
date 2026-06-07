@@ -293,3 +293,19 @@ TOMLEOF
     DRY_RUN=1 run_wd
     ! grep -qE 'systemctl (mask|disable|stop)' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (mask is superset of stop: mask = stop+disable+mask; stop omits mask step)" {
+    # Sister to apport-disable / at-disable / avahi-disable mask-
+    # is-superset-of-stop INVARIANTs across the brain. The mask
+    # profile is the architectural superset: it fires stop +
+    # disable AND mask. The stop profile fires stop + disable
+    # but OMITS the mask. Locks the profile-rank monotonic
+    # tightening contract on the nscd-neutralization substrate
+    # — stop = soft (operator can restart), mask = hard
+    # (systemd refuses to start).
+    write_config "stop"
+    run_wd
+    grep -qE 'systemctl stop nscd' "${SYSEOF_LOG}"
+    grep -qE 'systemctl disable nscd' "${SYSEOF_LOG}"
+    ! grep -qE 'systemctl mask nscd' "${SYSEOF_LOG}"
+}
