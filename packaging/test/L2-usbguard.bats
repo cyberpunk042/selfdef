@@ -341,3 +341,21 @@ EOF
     mode="$(stat -c '%a' "${RULES_DST}")"
     [ "${mode}" = "600" ] || [ "${mode}" = "640" ] || [ "${mode}" = "644" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO rules + drop-in written AND NO usbguard restart fired when DRY_RUN=1)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/usbguard/rules.conf AND
+    # without restarting usbguard.service. A silent dry-run
+    # that committed would lock the operator out of their own
+    # USB devices AT PREVIEW TIME if the baseline doesn't
+    # cover the actual attached devices. Locks dry-run-
+    # preserves-state on the USB-device-allowlist substrate.
+    printf '%s\n' 'allow id 1d6b:0002  # known root hub' > "${BASELINE_FILE}"
+    write_config "permissive"
+    rm -f "${RULES_DST}"
+    : > "${SYSEOF_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${RULES_DST}" ]
+    ! grep -qE 'systemctl (restart|reload) usbguard' "${SYSEOF_LOG}"
+}
