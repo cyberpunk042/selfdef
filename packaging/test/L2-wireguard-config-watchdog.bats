@@ -367,3 +367,16 @@ seed_benign() {
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*wg'
     ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # wireguard-config-watchdog runs ON the timer's scheduled
+    # fire — scans /etc/wireguard/*.conf for PostUp/PostDown/
+    # PreUp/PreDown injection patterns, emits a verdict, then
+    # exits. Type=simple would break timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the wireguard-
+    # config-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/wireguard-config-watchdog/systemd/selfdef-wireguard.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
