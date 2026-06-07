@@ -342,3 +342,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on modprobe-config surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The modprobe-config-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1547.006 module-autoload-trigger root-exec
+    # persistence alert. Locks parser contract on the modprobe.d
+    # install/options detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'options usbcore autosuspend=2\n' > "${CONF}"
+    run_wd                                              # ok / baseline
+    printf 'install evilmod /tmp/.evil\n' > "${CONF}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
