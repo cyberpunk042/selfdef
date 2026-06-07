@@ -304,3 +304,26 @@ EOF
     mode="$(stat -c '%a' "${SELFDEF_FRICTION_AUDIT_RING_DIR}")"
     [ "${mode}" = "700" ] || [ "${mode}" = "750" ] || [ "${mode}" = "755" ]
 }
+
+@test "INVARIANT (OCSF jsonl carries severity field — operator dashboard severity-axis routing)" {
+    # Sister to brain-wide bounded-vocabulary INVARIANTs. The
+    # OCSF jsonl events MUST include a severity field on every
+    # event so the downstream Sigma correlator / operator
+    # dashboard can route the friction event to its proper
+    # severity tier. Locks JSON-schema field-presence contract
+    # for downstream consumer correlator compatibility.
+    install_mock lspci "LnkSta: Width x8\nLnkSta: Width x8"
+    run bash "${SCRIPT}"
+    [ "${status}" -eq 0 ]
+    # OCSF events emit either to a single jsonl (OCSF_PATH) OR
+    # to per-event .json files in RING_DIR depending on event
+    # type — check both surfaces for severity field presence.
+    event_file=""
+    [ -f "${SELFDEF_FRICTION_AUDIT_OCSF_PATH}" ] && event_file="${SELFDEF_FRICTION_AUDIT_OCSF_PATH}"
+    if [ -z "${event_file}" ]; then
+        event_file=$(find "${SELFDEF_FRICTION_AUDIT_RING_DIR}" -name '*.json' | head -1)
+    fi
+    [ -f "${event_file}" ]
+    grep -qE '"severity"' "${event_file}" \
+        || grep -qE '"severity_id"' "${event_file}"
+}
