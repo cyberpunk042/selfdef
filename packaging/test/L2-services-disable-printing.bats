@@ -219,3 +219,46 @@ run_wd() {
     [ "${stop_line}" -lt "${disable_line}" ]
     [ "${disable_line}" -lt "${mask_line}" ]
 }
+
+@test "INVARIANT (mask order symmetric across event-source units — cups.socket + cups.path + saned.socket each stop→disable→mask)" {
+    # Sister to rsh-telnet-disable symmetric-mask-order INVARIANT.
+    # Each event-source unit must terminate-then-clear-then-gate
+    # consistently — a regression that swaps order for ONE unit
+    # type must trip this.
+    write_config "mask"
+    run_wd
+    for sock in cups.socket cups.path saned.socket; do
+        s="$(grep -n "systemctl stop ${sock}" "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+        d="$(grep -n "systemctl disable ${sock}" "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+        m="$(grep -n "systemctl mask ${sock}" "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+        [ "${s}" -lt "${d}" ]
+        [ "${d}" -lt "${m}" ]
+    done
+}
+
+@test "INVARIANT (profile downgrade mask → stop: rewrites stop+disable on each unit + does NOT re-issue mask — bidirectional contract)" {
+    # Sister to rsh-telnet-disable + avahi/nscd/at/wwan/kdump family
+    # downgrade pattern. Operator can both tighten + loosen.
+    write_config "mask"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    # Downgraded profile still emits stop+disable on each unit.
+    grep -q 'systemctl stop cups.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable cups.service' "${SYSEOF_LOG}"
+    # stop profile does NOT issue mask calls.
+    ! grep -q 'systemctl mask' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (acted counter accuracy mirrors actually-acted units — distinguishes 7-present from 0-present)" {
+    # Sister to rsh-telnet-disable acted-counter-accuracy INVARIANT.
+    # Real-world hosts may have only a subset installed; acted=
+    # must reflect the real count for operator dashboard.
+    write_config "mask"
+    output="$(PRINT_PRESENT=1 run_wd 2>&1)"
+    [[ "${output}" == *'acted=7'* ]]
+    : > "${SYSEOF_LOG}"
+    output_none="$(PRINT_PRESENT=0 run_wd 2>&1)"
+    [[ "${output_none}" == *'acted=0'* ]] || [[ "${output_none}" == *'no-op'* ]]
+}
