@@ -295,3 +295,20 @@ mk_suid() { printf 'ELF-%s' "$1" > "${ROOT}/$1"; chmod 4755 "${ROOT}/$1"; }
     cap | grep -q '"severity":"alert"'
     cap | grep -qE '"added":4'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named suid binary surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker drops a new
+    # setuid-root binary (T1548.001 priv-esc persistence
+    # primitive), the binary path MUST surface in the JSON sample
+    # so operator dashboard routes triage to the right path.
+    # Locks the new-file-discovered operator-visibility contract
+    # on the added side (REMOVED-sample is already locked at the
+    # operator-deinstallation INVARIANT above).
+    mk_suid sudo
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    mk_suid distinctive-attacker-suid
+    run_wd
+    cap | grep -q 'distinctive-attacker-suid'
+}
