@@ -318,3 +318,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: autofs-watchdog NEVER deletes auto.master entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # autofs-watchdog DETECTS T1546 autofs program-map root-
+    # exec persistence but MUST NEVER emit sed/awk/rm commands
+    # to auto-clean the program: map. The detected map may be
+    # operator-legitimate (custom dynamic-mount handler for
+    # cluster filesystems, dynamic NFS provisioner). Silent
+    # auto-delete would destroy operator baseline state AND
+    # could break operator's intended automount workflow.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the autofs surveillance substrate.
+    printf '/mnt/data program:/tmp/.evil\n' > "${CONF}"
+    run_wd
+    [ -f "${CONF}" ]
+    grep -q 'program:' "${CONF}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*auto'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+}
