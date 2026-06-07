@@ -275,3 +275,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(warn|alert)"'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs. selfdef-
+    # unowned-files tag must fire EXACTLY ONCE per scan regardless
+    # of how many orphans surface. Lock consolidation on T1070
+    # Indicator Removal surveillance surface.
+    for i in 1 2 3 4 5; do
+        printf 'x' > "${ROOT}/orphan-${i}"
+        chown 99999:99999 "${ROOT}/orphan-${i}"
+    done
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-unowned-files -- ')
+    [ "${main_count}" = "1" ]
+}
