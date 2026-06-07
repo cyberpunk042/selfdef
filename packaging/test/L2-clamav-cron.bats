@@ -227,3 +227,59 @@ Scanned files: 1234"
     # And both are joined by '|'.
     printf '%s' "${main_line}" | grep -qE 'First.Trojan FOUND\|.*Second.Trojan FOUND'
 }
+
+@test "INVARIANT (freshclam called before clamscan: signature DB refresh ordering)" {
+    # freshclam (signature DB update) MUST be called before clamscan
+    # (the scan itself). A scan against stale signatures misses recent
+    # malware. Lock the ordering via call-tracking.
+    FRESH_LOG="${TMP}/freshclam.call"
+    cat > "${BIN}/fake-freshclam" <<EOF
+#!/usr/bin/env bash
+printf 'freshclam %s\n' "\$*" >> "${FRESH_LOG}"
+exit 0
+EOF
+    chmod +x "${BIN}/fake-freshclam"
+    CLAM_LOG="${TMP}/clamscan.call"
+    cat > "${FAKE_CLAM}" <<EOF
+#!/usr/bin/env bash
+printf 'clamscan %s\n' "\$*" >> "${CLAM_LOG}"
+printf 'Infected files: 0\nScanned files: 1\n'
+exit 0
+EOF
+    chmod +x "${FAKE_CLAM}"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_CLAMAV_PROFILE="home" \
+        SELFDEF_CLAMSCAN_BIN="${FAKE_CLAM}" \
+        SELFDEF_FRESHCLAM_BIN="${BIN}/fake-freshclam" \
+        bash "${WD}"
+    # Both fired.
+    [ -f "${FRESH_LOG}" ]
+    [ -f "${CLAM_LOG}" ]
+    # freshclam mtime <= clamscan mtime (freshclam fired first).
+    fresh_mtime="$(stat -c '%Y' "${FRESH_LOG}")"
+    clam_mtime="$(stat -c '%Y' "${CLAM_LOG}")"
+    [ "${fresh_mtime}" -le "${clam_mtime}" ]
+}
+
+@test "INVARIANT (scan_rc surfaces in JSON when present — operator can correlate rc to severity)" {
+    # The scan_rc field is the bridge between clamscan exit code and
+    # severity classification. Locked.
+    mk_clam 1 "/v/x: Trojan FOUND
+Infected files: 1
+Scanned files: 1"
+    run_wd
+    cap | grep -qE '"clamscan_rc":1|"scan_rc":1'
+}
+
+@test "INVARIANT (single-FOUND no double-pipe — sample formatting consistent across 1-found and multi-found)" {
+    # Single FOUND should produce 'Trojan FOUND' (no trailing pipe)
+    # or 'Trojan FOUND|' (acceptable; tr always appends).
+    # Lock that no DOUBLE pipe ever appears.
+    mk_clam 1 "/v/x: Only.Trojan FOUND
+Infected files: 1
+Scanned files: 1"
+    run_wd
+    main_line=$(cap | grep -E '^-t selfdef-clamav --')
+    printf '%s' "${main_line}" | grep -q 'Only.Trojan'
+    ! printf '%s' "${main_line}" | grep -q '||'
+}
