@@ -273,3 +273,18 @@ seed_benign() {
     cap | grep -q '"event":"nsswitch_rogue_source"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (known-source acceptance: sssd is NOT flagged — enterprise SSSD-integrated host)" {
+    # Sister to the ldap known-source-acceptance INVARIANT already
+    # locked. sssd is a canonical legitimate enterprise-NSS provider
+    # via libnss-sss (the SSSD provider for AD/IPA/LDAP-backed
+    # identity). Locks that the KNOWN_NSS allow-list includes sssd
+    # alongside ldap (operator-friendly false-positive guard for
+    # SSSD-integrated hosts).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'passwd: files sss\ngroup: files sss\nshadow: files sss\nhosts: files dns\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"event":"nsswitch_rogue_source"'
+}
