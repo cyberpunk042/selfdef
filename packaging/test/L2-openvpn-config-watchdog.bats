@@ -398,3 +398,18 @@ assert 'install' in data, 'install missing'
     done
     [ "${found}" = "1" ]
 }
+
+@test "INVARIANT (openvpn-config-watchdog timer unit declares RandomizedDelaySec — anti-thundering-herd cadence contract)" {
+    # Sister to brain-wide timer-cadence INVARIANT family.
+    # Locks anti-thundering-herd cadence discipline on the
+    # openvpn-config-watchdog timer substrate.
+    timer="${BATS_TEST_DIRNAME}/../../modules/openvpn-config-watchdog/systemd"
+    found=0
+    for t in "${timer}"/*.timer; do
+        [ -f "${t}" ] || continue
+        if grep -qE '^RandomizedDelaySec=' "${t}"; then
+            found=1
+        fi
+    done
+    [ "${found}" = "1" ]
+}
