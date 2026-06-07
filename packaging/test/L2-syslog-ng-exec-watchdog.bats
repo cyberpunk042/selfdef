@@ -250,3 +250,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (program() under /home: user-writable hijack coverage — sister axis to rsyslog-exec /home)" {
+    # Sister to the rsyslog-exec /home INVARIANT just added. /home
+    # is the user-writable surface — an attacker with a regular user
+    # account can drop a malicious binary into their home and have
+    # syslog-ng exec it AS ROOT on every matching log event. Lock
+    # axis-symmetry on /home for the syslog-ng program() surface
+    # (T1037/T1546 — log-event-trigger root-exec persistence via
+    # the program() destination).
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'destination d_evil { program("/home/user/.evil"); };\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
