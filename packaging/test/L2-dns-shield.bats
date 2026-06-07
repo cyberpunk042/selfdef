@@ -334,3 +334,19 @@ TOMLEOF
     grep -q '^0\.0\.0\.0 analytics\.example$' "${HOSTS_FILE}"
     grep -q '^127\.0\.0\.1 localhost$' "${HOSTS_FILE}"
 }
+
+@test "INVARIANT (allowlist takes precedence over operator additions: same domain in operator + allow → allowlist wins, domain NOT blocked)" {
+    # Sister to the allowlist-subtracts INVARIANT already locked.
+    # When a domain appears in BOTH operator additions AND
+    # allowlist, the allowlist must win (operator may move a
+    # domain to allowlist while forgetting to remove from
+    # additions — must not block). Locks the precedence-of-
+    # allowlist contract.
+    write_config "base"
+    printf '%s\n' 'controversial.example' > "${OPERATOR_FILE}"
+    printf '%s\n' 'controversial.example' > "${ALLOW_FILE}"
+    run_wd
+    # controversial.example NOT blocked (allowlist won).
+    ! grep -q '^0\.0\.0\.0 controversial\.example$' "${HOSTS_FILE}"
+    ! grep -q '^0\.0\.0\.0 www\.controversial\.example$' "${HOSTS_FILE}"
+}
