@@ -334,3 +334,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family
+    # for timer-driven scheduled probes. coredump-pattern-
+    # watchdog runs ON the timer's scheduled fire — reads
+    # /proc/sys/kernel/core_pattern, emits a verdict, then exits.
+    # Type=simple would leave systemd thinking the probe is a
+    # long-running daemon, breaking timer OnUnitActiveSec
+    # semantics. Locks oneshot-probe contract on the coredump-
+    # pattern-watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd/selfdef-coredump-pattern.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
