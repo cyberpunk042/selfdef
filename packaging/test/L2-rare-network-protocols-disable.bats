@@ -302,3 +302,17 @@ TOMLEOF
     [ -f "${MODPROBE_FILE}" ]
     [ "$(stat -c '%a' "${MODPROBE_FILE}")" = "644" ]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO modprobe drop-in written when DRY_RUN=1)" {
+    # Sister to rare-filesystems-disable DRY_RUN INVARIANT just
+    # locked and every other installer module's DRY_RUN INVARIANT
+    # across the brain. Operator's exploratory --dry-run MUST
+    # preview without writing /etc/modprobe.d/50-selfdef-rare-
+    # net.conf. Silent dry-run could prevent legitimate use of
+    # DCCP/SCTP/RDS/TIPC (e.g. operator investigating Carrier-
+    # Grade NAT setup or RDMA testing) at preview time.
+    write_config "baseline"
+    rm -f "${MODPROBE_FILE}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${MODPROBE_FILE}" ]
+}
