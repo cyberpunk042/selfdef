@@ -329,3 +329,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # pkcs11-modules-watchdog runs ON the timer's scheduled fire
+    # — scans /etc/pkcs11/modules for module .so paths in
+    # writable roots, emits a verdict, then exits. Type=simple
+    # would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the pkcs11-modules-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/pkcs11-modules-watchdog/systemd/selfdef-pkcs11-modules.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
