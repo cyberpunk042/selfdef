@@ -248,3 +248,17 @@ INSTALL_DIR="${MODULE_DIR}/install"
     # the load-bearing guarantee is no uncaught error / crash.
     [ "${status}" -eq 0 ] || [[ "${output}" == *"not found"* ]] || [[ "${output}" == *"no-op"* ]] || [[ "${output}" == *"already"* ]]
 }
+
+@test "INVARIANT (module.toml provides wasm-aot-cache-dir contract — downstream-consumer interface lock)" {
+    # Sister to many other installer module's provides-contract
+    # INVARIANT across the brain (suricata ids+eve-json, slm-
+    # cpu-loop slm-loop-runtime, tensor-parallel-inference
+    # tensor-parallel-runtime). wasm-aot-cache's provides field
+    # names the downstream-visible interface: wasm-aot-cache-dir
+    # (the cache directory path consumed by every wasm runtime
+    # consumer module). A silent rename of the provides token
+    # would break every downstream consumer module that lists
+    # wasm-aot-cache-dir in its depends_on. Locks the cross-
+    # module interface contract.
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"wasm-aot-cache-dir"' "${MODULE_DIR}/module.toml"
+}
