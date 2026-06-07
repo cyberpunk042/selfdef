@@ -339,3 +339,14 @@ TOMLEOF
     [ ! -f "${LOGROTATE_DST}" ]
     ! grep -qE 'accton' "${ACCT_LOG}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on acct-baseline installer surface
+    # across pacct-file + ACCT_DIR + logrotate-drop-in phases.
+    write_config "enabled"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"acct-baseline"')
+    [ "${count}" = "1" ]
+}
