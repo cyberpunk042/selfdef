@@ -388,3 +388,21 @@ EOF
         *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert}" ;;
     esac
 }
+
+@test "INVARIANT (baseline file is chmod 0600 — confidentiality of modules-load inventory)" {
+    # Sister to brain-wide baseline-chmod-0600 confidentiality
+    # INVARIANTs across L2 surveillance suites. The modules-
+    # load-watchdog baseline TSV contains the inventory of
+    # auto-load module names which discloses kernel-module
+    # configuration to any user able to read the file. Mode
+    # 0600 (root-only) is the canonical confidentiality
+    # contract — mode 0644 would expose the kmod-autoload
+    # surface to reconnaissance. Locks file-mode
+    # confidentiality on the modules-load surveillance
+    # substrate.
+    seed_benign
+    run_wd
+    [ -f "${BASELINE}" ]
+    mode="$(stat -c '%a' "${BASELINE}")"
+    [ "${mode}" = "600" ] || [ "${mode}" = "640" ]
+}
