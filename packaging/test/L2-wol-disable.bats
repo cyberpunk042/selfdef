@@ -302,3 +302,14 @@ TOMLEOF
     grep -qE '^(After|Wants|Requires)=.*(network-online|sysinit|network).target' "${SYSTEMD_DIR}/selfdef-wol-disable.service" \
         || grep -qE '^WantedBy=multi-user.target' "${SYSTEMD_DIR}/selfdef-wol-disable.service"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on wol-disable installer surface
+    # across libexec + service-unit + drop-in phases.
+    write_config "enforce"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"wol-disable"')
+    [ "${count}" = "1" ]
+}
