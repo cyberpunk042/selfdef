@@ -366,3 +366,22 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"coredumpd-redirect"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: coredumpd-redirect NEVER emits package-remove commands on systemd-coredump)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The coredumpd-redirect installer writes a
+    # coredump.conf.d drop-in pinning Storage=external + size
+    # caps but MUST NEVER emit shell commands that uninstall
+    # the systemd-coredump package itself (apt/dpkg/dnf/rpm/yum
+    # remove|purge|uninstall systemd-coredump). Silent auto-
+    # removal would tear down crash-capture entirely — forensic
+    # evidence value of crash dumps is high (security incident
+    # triage + reverse-engineering memory-corruption-bug exploits).
+    # Locks anti-package-removal contract on the coredumpd
+    # redirect substrate.
+    write_config "redirect"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+systemd-coredump'
+    drop_in="${DROPIN_DIR}/50-selfdef.conf"
+    [ ! -f "${drop_in}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${drop_in}"
+}
