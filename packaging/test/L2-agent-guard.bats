@@ -215,3 +215,19 @@ teardown_dry_run() {
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/check.sh"
     grep -qE 'set -euo pipefail' "${INSTALL_DIR}/uninstall.sh"
 }
+
+@test "INVARIANT (every shipped policy declares apiVersion: cilium.io/v1alpha1 — Tetragon CRD apiVersion contract)" {
+    # Sister to brain-wide Tetragon CRD apiVersion/kind/
+    # metadata.name INVARIANTs. The Tetragon CRD requires
+    # apiVersion: cilium.io/v1alpha1 (the Cilium-Tetragon
+    # TracingPolicy CRD shape). Without apiVersion, kubectl
+    # apply -f silently rejects the manifest as an unknown
+    # CRD — partial policy load + half-enforced runtime guard.
+    # Cousin to kind:TracingPolicy + metadata.name already
+    # locked. Locks apiVersion axis on the MS017 AI-runtime
+    # guard Tetragon-policy substrate.
+    POLICY_DIR="${BATS_TEST_DIRNAME}/../../modules/agent-guard/policies"
+    for f in "${POLICY_DIR}"/*.yaml; do
+        grep -qE '^apiVersion:[[:space:]]+cilium\.io/v1alpha1' "${f}"
+    done
+}
