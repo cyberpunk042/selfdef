@@ -673,3 +673,6 @@ setup() {
     n=$(grep -cE '^[a-zA-Z_][a-zA-Z0-9_]*\(\)' "${LIB}")
     [ "${n}" -gt 5 ]
 }
+@test "INVARIANT (lib SELFDEF_MODULE_LIB_VERSION is >=1 — version-required minimum)" {
+    [ "${SELFDEF_MODULE_LIB_VERSION}" -ge 1 ]
+}

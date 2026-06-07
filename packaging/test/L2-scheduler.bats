@@ -607,3 +607,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     n=$(grep -c 'scheduler' "${POSTINST}")
     [ "${n}" -ge 2 ]
 }
+@test "INVARIANT (scheduler.service file has >20 lines of directives — comprehensive-config contract)" {
+    lines=$(wc -l < "${UNIT}")
+    [ "${lines}" -gt 20 ]
+}

@@ -593,3 +593,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     lines=$(wc -l < "${TIMER}")
     [ "${lines}" -gt 5 ]
 }
+@test "INVARIANT (init checklist has selfdef-doctor-timer reference — operator-canonical wiring contract)" {
+    grep -qE 'selfdef-doctor' "${INIT}"
+}

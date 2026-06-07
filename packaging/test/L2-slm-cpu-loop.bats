@@ -838,3 +838,7 @@ chk_path = os.path.join('${BATS_TEST_DIRNAME}', '..', '..', 'modules', 'slm-cpu-
     chk="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/check.sh"
     [ -s "${chk}" ]
 }
+@test "INVARIANT (slm-cpu-loop install/uninstall.sh declares non-empty body — non-trivial-script contract)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh"
+    [ -s "${uni}" ]
+}

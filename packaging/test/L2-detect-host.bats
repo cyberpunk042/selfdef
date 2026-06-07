@@ -752,3 +752,7 @@ assert 'sigma-correlator' in p, f'must provide sigma-correlator, got {p!r}'
     lines=$(wc -l < "${mtoml}")
     [ "${lines}" -gt 20 ]
 }
+@test "INVARIANT (detect-host README is non-empty — operator-doc presence)" {
+    readme="${BATS_TEST_DIRNAME}/../../modules/detect-host/README.md"
+    [ -s "${readme}" ]
+}

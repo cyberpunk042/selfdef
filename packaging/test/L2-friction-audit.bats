@@ -714,3 +714,6 @@ EOF
     grep -qE 'zfs' "${SCRIPT}"
     grep -qE 'memory' "${SCRIPT}"
 }
+@test "INVARIANT (script declares emit_ocsf function — OCSF emission canonical surface)" {
+    grep -qE '^emit_ocsf\(\)|emit_ocsf \(\)' "${SCRIPT}"
+}

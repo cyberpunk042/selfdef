@@ -428,3 +428,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     n=$(grep -c 'guardian' "${POSTINST}")
     [ "${n}" -ge 3 ]
 }
+@test "INVARIANT (guardian.service file has >20 lines of directives — comprehensive-config contract)" {
+    lines=$(wc -l < "${UNIT}")
+    [ "${lines}" -gt 20 ]
+}

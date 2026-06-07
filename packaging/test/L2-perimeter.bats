@@ -692,3 +692,11 @@ assert s == True, f'syscall must be True, got {s!r}'
     lines=$(wc -l < "${YAML}")
     [ "${lines}" -gt 20 ]
 }
+@test "INVARIANT (YAML kprobes call=sys_execve — execve attestation contract)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+c = data['spec']['kprobes'][0]['call']
+assert c == 'sys_execve', f'call must be sys_execve, got {c!r}'
+"
+}
