@@ -342,3 +342,22 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"journal-tune"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: journal-tune NEVER emits package-remove commands on systemd-journald)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The journal-tune installer writes a journald.
+    # conf.d drop-in pinning SystemMaxUse + Storage + retention
+    # but MUST NEVER emit shell commands that uninstall the
+    # systemd package itself (apt/dpkg/dnf/rpm/yum remove|purge|
+    # uninstall systemd|systemd-journal-remote). Silent auto-
+    # removal would be catastrophic — systemd-journald is the
+    # init system's logging substrate, removing it would break
+    # the entire OS audit trail + most service monitoring.
+    # T1562.001 self-defeat. Locks anti-package-removal contract
+    # on the journal-tune substrate.
+    write_config "paranoid"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(systemd|systemd-journal-remote)'
+    drop_in="${DROPIN_DIR}/50-selfdef.conf"
+    [ ! -f "${drop_in}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${drop_in}"
+}
