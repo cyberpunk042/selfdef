@@ -1044,3 +1044,11 @@ seed_benign() {
     size=$(stat -c '%s' "${readme}")
     [ "${size}" -gt 100 ]
 }
+
+@test "INVARIANT (capability-conf-watchdog .service Documentation URL is HTTP/HTTPS — operator-doc-link-protocol 78)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/capability-conf-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^Documentation=(http|https)://' "${s}"
+    done
+}

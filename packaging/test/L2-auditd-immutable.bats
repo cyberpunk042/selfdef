@@ -1014,3 +1014,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     size=$(stat -c '%s' "${uni}")
     [ "${size}" -gt 50 ]
 }
+
+@test "INVARIANT (auditd-immutable module.toml first-line includes a comment or name — TOML-table-start-canonical 78)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-immutable/module.toml"
+    head -1 "${mtoml}" | grep -qE '^#|^name'
+}

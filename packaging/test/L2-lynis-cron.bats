@@ -950,3 +950,8 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     size=$(stat -c '%s' "${uni}")
     [ "${size}" -gt 50 ]
 }
+
+@test "INVARIANT (lynis-cron module.toml first-line includes a comment or name — TOML-table-start-canonical 78)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/lynis-cron/module.toml"
+    head -1 "${mtoml}" | grep -qE '^#|^name'
+}

@@ -1001,3 +1001,11 @@ assert 'install' in data, 'install missing'
     size=$(stat -c '%s' "${readme}")
     [ "${size}" -gt 100 ]
 }
+
+@test "INVARIANT (wireguard-config-watchdog .service Documentation URL is HTTP/HTTPS — operator-doc-link-protocol 78)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/wireguard-config-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^Documentation=(http|https)://' "${s}"
+    done
+}

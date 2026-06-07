@@ -964,3 +964,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     size=$(stat -c '%s' "${uni}")
     [ "${size}" -gt 50 ]
 }
+
+@test "INVARIANT (loopback-only-dns module.toml first-line includes a comment or name — TOML-table-start-canonical 78)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/loopback-only-dns/module.toml"
+    head -1 "${mtoml}" | grep -qE '^#|^name'
+}

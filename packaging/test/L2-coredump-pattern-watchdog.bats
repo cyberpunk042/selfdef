@@ -995,3 +995,11 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
     size=$(stat -c '%s' "${readme}")
     [ "${size}" -gt 100 ]
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .service Documentation URL is HTTP/HTTPS — operator-doc-link-protocol 78)" {
+    svc_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    for s in "${svc_dir}"/*.service; do
+        [ -f "${s}" ] || continue
+        grep -qE '^Documentation=(http|https)://' "${s}"
+    done
+}
