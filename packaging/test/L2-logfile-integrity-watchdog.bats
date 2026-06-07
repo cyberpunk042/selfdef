@@ -372,3 +372,37 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -f "${STATE}" ]
     [ "$(stat -c '%a' "${STATE}")" = "600" ] || [ "$(stat -c '%a' "${STATE}")" = "640" ] || [ "$(stat -c '%a' "${STATE}")" = "644" ]
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. The selfdef-logfile-integrity
+    # tag must fire EXACTLY ONCE per scan regardless of how many
+    # log-truncation or rotation events surface (multi-log
+    # scenario with shrink + rotation + missing combined). Multi-
+    # line output would break the SDD-062 downstream JSON-line
+    # consumer (Sigma correlator). Locks the consolidation
+    # discipline on the audit-trail integrity surveillance
+    # surface (T1565.001 — log tampering).
+    LOG2="${TMP}/log2"
+    LOG3="${TMP}/log3"
+    printf 'a\nb\n' > "${LOG1}"
+    printf 'c\nd\n' > "${LOG2}"
+    printf 'e\nf\n' > "${LOG3}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_LOGINT_PROFILE=report \
+    SELFDEF_LOGINT_STATE="${STATE}" \
+    SELFDEF_LOGINT_WATCH="${LOG1} ${LOG2} ${LOG3}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # truncate all 3 logs in one scan
+    : > "${LOG1}"
+    : > "${LOG2}"
+    : > "${LOG3}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_LOGINT_PROFILE=report \
+    SELFDEF_LOGINT_STATE="${STATE}" \
+    SELFDEF_LOGINT_WATCH="${LOG1} ${LOG2} ${LOG3}" \
+        bash "${WD}"
+    main_count=$(cap | grep -cE '^-t selfdef-logfile-integrity -- ')
+    [ "${main_count}" = "1" ]
+}
