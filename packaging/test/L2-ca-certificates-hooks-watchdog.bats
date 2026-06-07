@@ -348,3 +348,19 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family
+    # for timer-driven scheduled probes. The ca-certificates-
+    # hooks-watchdog probe runs ON the timer's scheduled fire —
+    # scans /etc/ca-certificates/update.d, emits a verdict, then
+    # exits. Type=simple would leave systemd thinking the probe
+    # is a long-running daemon, breaking timer's OnSuccess /
+    # OnUnitActiveSec semantics (which depend on the service
+    # reaching inactive(dead) before the next fire). Locks
+    # oneshot-probe contract on the ca-certificates-hooks-
+    # watchdog substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/ca-certificates-hooks-watchdog/systemd/selfdef-cacert-hooks.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
