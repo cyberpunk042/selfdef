@@ -185,3 +185,24 @@ with open('${MODULE_DIR}/profiles/${p}.toml', 'rb') as f:
     grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/check.sh"
     grep -qE 'set -euo pipefail' "${MODULE_DIR}/install/uninstall.sh"
 }
+
+@test "INVARIANT (no auto-uninstall: vpn-bridge installer NEVER emits package-remove commands on wireguard/tailscale/cloudflare packages)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The vpn-bridge installer wires nftables FORWARD
+    # rules + per-profile dispatch (relay-via-server / tailscale
+    # / cloudflare-tunnel) but MUST NEVER emit shell commands
+    # that uninstall the upstream VPN tunnel packages
+    # (wireguard, tailscale, cloudflared). Silent auto-removal
+    # of the tunnel daemon during install would tear down the
+    # overlay network entirely — every downstream pod / service
+    # depending on overlay-network contract loses connectivity.
+    # Locks anti-package-removal contract on the L3 overlay-
+    # network substrate.
+    for f in "${MODULE_DIR}/install/apply.sh" \
+             "${MODULE_DIR}/install/check.sh" \
+             "${MODULE_DIR}/install/uninstall.sh" \
+             "${MODULE_DIR}"/install/profiles/*.sh; do
+        [ -f "${f}" ] || continue
+        ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(wireguard|tailscale|cloudflared|wg)' "${f}"
+    done
+}
