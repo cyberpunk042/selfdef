@@ -303,3 +303,22 @@ setup() {
     declare -F selfdef_is_writable_dir    >/dev/null
     declare -F selfdef_scan_injection     >/dev/null
 }
+
+@test "INVARIANT (lib exports the canonical 4 manifest helpers: selfdef_manifest_path + module_record_file + module_render_files + module_clear_manifest — F-2027-024 contract)" {
+    # Sister to the SDD-006 5-helper + SDD-061 v3 4-helper
+    # INVARIANTs above. F-2027-024 (per-module install manifest)
+    # adds 4 additional helpers consumed by every module's
+    # apply.sh/uninstall.sh for manifest-tracked file-removal:
+    #   - selfdef_manifest_path: resolves the per-module manifest path
+    #   - module_record_file: appends a path to the manifest (idempotent)
+    #   - module_render_files: prints every recorded path (uninstall iterates)
+    #   - module_clear_manifest: removes the manifest after uninstall
+    # Downstream module scripts source the lib and rely on these
+    # names verbatim — renaming any one breaks the F-2027-024
+    # manifest-tracked uninstall contract. Locks the 4-helper
+    # manifest export discipline on the module-lib substrate.
+    declare -F selfdef_manifest_path  >/dev/null
+    declare -F module_record_file     >/dev/null
+    declare -F module_render_files    >/dev/null
+    declare -F module_clear_manifest  >/dev/null
+}
