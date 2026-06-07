@@ -462,3 +462,25 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-restore: ssh-hostkey-watchdog NEVER overwrites host keys — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-restore / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # ssh-hostkey-watchdog DETECTS canonical MITM signal (host-
+    # key fingerprint change) but MUST NEVER emit shell commands
+    # that overwrite the swapped key with the baseline original.
+    # Auto-restore would destroy forensic evidence chain
+    # (operator can't analyze the attacker's planted key if it's
+    # silently reverted) AND could overwrite operator-legitimate
+    # key-rotation (operator may have run ssh-keygen to rotate
+    # host keys but forgot to re-baseline). Surveillance, never
+    # auto-remediation. Locks anti-evidence-destruction contract
+    # on the ssh-hostkey substrate.
+    mk_key ed25519 "ssh-ed25519 ORIGINAL_ED root@host"
+    run_wd                                              # baseline
+    mk_key ed25519 "ssh-ed25519 ATTACKER_ED root@host"  # MITM swap
+    run_wd                                              # detect
+    # Swapped key MUST remain on disk with attacker content.
+    grep -q 'ATTACKER_ED' "${KEYDIR}/ssh_host_ed25519_key.pub"
+    ! grep -qE 'cp[[:space:]]+.*\$\{?BASELINE_DIR\}?/.*[[:space:]]+\$\{?KEYDIR' "${WD}"
+}
