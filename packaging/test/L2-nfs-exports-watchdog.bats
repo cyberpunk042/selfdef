@@ -331,3 +331,21 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (baseline re-establish on operator out-of-band deletion: missing baseline re-creates cleanly + emits baseline_initial)" {
+    # Sister to brain-wide baseline-re-establish INVARIANTs.
+    # Operator may wipe /var/lib/selfdef/nfs-exports.tsv during
+    # host triage to force a fresh inventory. The watchdog MUST
+    # re-create the baseline cleanly on the next scan AND emit
+    # baseline_initial (not crash with read-error AND not
+    # silently no-op). Locks state-resilience on the NFS exports
+    # surveillance surface (T1199 trusted-relationship).
+    seed_benign
+    run_wd                                              # establishes baseline
+    [ -f "${BASELINE}" ]
+    rm -f "${BASELINE}"                                  # operator wipe
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # must re-establish
+    [ -f "${BASELINE}" ]
+    cap | grep -qE '"event":"baseline_initial"'
+}
