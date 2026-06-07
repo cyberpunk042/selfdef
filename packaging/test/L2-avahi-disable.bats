@@ -333,3 +333,10 @@ TOMLEOF
     ! grep -q 'systemctl mask avahi-daemon.socket' "${SYSEOF_LOG}"
     ! grep -q 'systemctl stop avahi-daemon.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (no auto-uninstall: avahi-daemon package NEVER auto-removed)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs.
+    write_config "mask"
+    run_wd
+    ! grep -qE '(apt-get|dpkg|dnf|rpm)[[:space:]]+(remove|purge|uninstall)' "${SYSEOF_LOG}"
+}
