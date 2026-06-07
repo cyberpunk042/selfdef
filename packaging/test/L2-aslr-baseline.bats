@@ -293,3 +293,24 @@ run_wd() {
     output="$(run_wd 2>&1)"                              # second apply
     [[ "${output}" == *'changes=0'* ]] || [[ "${output}" == *'"status":"ok"'* ]]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # aslr-baseline TOML; parser must tolerate without altering the
+    # profile-gated behavior. full-with-noise still installs the
+    # kernel.randomize_va_space=2 sysctl drop-in (full ASLR — the
+    # load-bearing memory-layout-randomization defense against ROP
+    # and return-to-libc exploits).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "full"
+operator_note = "randomize_va_space=2 — full ASLR vs ROP/ret2libc"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE 'kernel\.randomize_va_space[[:space:]]*=[[:space:]]*2' "${DROPIN}"
+    grep -q 'managed-by: selfdef aslr-baseline' "${DROPIN}"
+}
