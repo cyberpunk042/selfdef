@@ -371,3 +371,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on fstab surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The fstab-watchdog MUST only emit severity values from the
+    # closed set {ok,warn,alert} — never custom values (critical,
+    # error, fatal, notice, info). Operator dashboard parsers
+    # branch on the literal severity string; an out-of-set value
+    # silently falls through routing and the operator never
+    # sees the T1574 Hijack Execution Flow via fstab bind-mount-
+    # shadow persistence alert. Locks parser contract on the
+    # /etc/fstab + /etc/fstab.d detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%s' "${BENIGN}" > "${FSTAB}"
+    run_wd                                              # ok / baseline
+    printf '%s/data/fake-bin /bin none bind 0 0\n' "${BENIGN}" > "${FSTAB}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
