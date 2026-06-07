@@ -262,3 +262,24 @@ run_wd() {
     output_none="$(PRINT_PRESENT=0 run_wd 2>&1)"
     [[ "${output_none}" == *'acted=0'* ]] || [[ "${output_none}" == *'no-op'* ]]
 }
+
+@test "INVARIANT (config-layer-noise resilience: extra TOML keys do NOT bypass profile gate)" {
+    # Sister to every other watchdog/installer config-layer-noise
+    # INVARIANT across the brain. Operator may add forward-compat
+    # keys (commentary, future flags, vendor annotations) to the
+    # services-disable-printing TOML; parser must tolerate without
+    # altering the profile-gated behavior. mask-with-noise still
+    # fires systemctl mask on cups.service + cups.socket — the
+    # full printing/scanning attack surface neutralization (CUPS
+    # has CVE history including the September 2024 RCE family
+    # CVE-2024-47076/47175/47176/47177).
+    cat > "${CONF}" <<'TOMLEOF'
+profile = "mask"
+operator_note = "CUPS = remote print-RCE attack surface (CVE-2024-47176)"
+future_flag = "reserved"
+vendor_annotation = "selfdef-2026.06"
+TOMLEOF
+    run_wd
+    grep -q 'systemctl mask cups.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask cups.socket' "${SYSEOF_LOG}"
+}
