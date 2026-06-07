@@ -248,3 +248,17 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     # scheduler substrate.
     grep -qE '^RestartSec=' "${UNIT}"
 }
+
+@test "INVARIANT (unit declares Wants=selfdef-guardian.service — soft-bind contract: scheduler starts even when guardian absent)" {
+    # Sister to brain-wide systemd dependency-discipline INVARIANT
+    # family. The scheduler binds tetragon + guardian as After=
+    # (ordering) but with Wants= (not Requires=) — scheduler MUST
+    # start even when guardian is unhealthy, so the backpressure
+    # monitor can log the missing-source state via its degraded-
+    # mode JSON record. Requires= would fail-loud cascade-stop
+    # scheduler when guardian is down, defeating the "graceful
+    # degradation in absence of upstream IPS" contract. Locks
+    # soft-bind discipline on the scheduler unit substrate.
+    grep -qE '^Wants=selfdef-guardian.service' "${UNIT}"
+    ! grep -qE '^Requires=selfdef-guardian.service' "${UNIT}"
+}
