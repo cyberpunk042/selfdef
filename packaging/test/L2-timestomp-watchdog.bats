@@ -261,3 +261,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-timestomp'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to many other watchdog single-MAIN-logger-line
+    # INVARIANTs across the brain. selfdef-timestomp tag must
+    # fire EXACTLY ONCE per scan regardless of how many anomalies
+    # surface across multiple watched roots. Multi-line output
+    # would break SDD-062 downstream JSON-line consumer.
+    # Locks consolidation discipline on T1070.006 Timestomp
+    # surveillance surface.
+    for i in 1 2 3 4 5; do
+        printf 'x' > "${ROOT}/anomaly-${i}"
+        touch -d "2099-01-0${i}" "${ROOT}/anomaly-${i}"
+    done
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-timestomp -- ')
+    [ "${main_count}" = "1" ]
+}
