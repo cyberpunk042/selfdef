@@ -415,3 +415,16 @@ TOMLEOF
     first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${src}")"
     [[ "${first_nonblank}" == *"selfdef"* ]]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO AA_LIST written AND NO aa-enforce/aa-complain fires when DRY_RUN=1)" {
+    # Sister to brain-wide installer DRY_RUN INVARIANTs. The
+    # apparmor-baseline DRY_RUN path MUST preview without
+    # writing the curated profiles list AND without firing
+    # aa-enforce/aa-complain on loaded profiles.
+    write_config "enforce"
+    rm -f "${AA_LIST}"
+    : > "${AAFLIP_LOG}"
+    AA_LOADED='firefox' DRY_RUN=1 run_wd
+    [ ! -f "${AA_LIST}" ]
+    ! grep -qE 'aa-(enforce|complain)' "${AAFLIP_LOG}"
+}
