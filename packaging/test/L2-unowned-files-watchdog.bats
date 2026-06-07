@@ -259,3 +259,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q 'distinctive-attacker-orphan'
 }
+
+@test "INVARIANT (recursive scan: orphan in nested subdirectory also surfaces — not just top-level)" {
+    # Sister to suid-sgid + timestomp recursive-scan INVARIANTs.
+    # Real-world host hierarchies have nested directories.
+    # Attacker may plant orphans in subdirs to dodge a top-only
+    # scan. The watchdog MUST recurse into subdirectories. Locks
+    # the recursive-traversal contract on the unowned-files
+    # detection surface (T1070 — Indicator Removal; orphans
+    # left over from compromised-user-deletion may sit anywhere
+    # in /opt /var /srv subtree).
+    mkdir -p "${ROOT}/deep/nested/path"
+    printf 'x' > "${ROOT}/deep/nested/path/nested-orphan"
+    chown 99999:99999 "${ROOT}/deep/nested/path/nested-orphan"
+    run_wd
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
