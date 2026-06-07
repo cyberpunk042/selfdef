@@ -555,3 +555,21 @@ EOF
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-disable: systemd-unit-watchdog NEVER emits systemctl disable/mask — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-remediation / surveillance-
+    # not-destruction INVARIANTs across L2 watchdog suites. The
+    # systemd-unit-watchdog DETECTS T1543.002 / T1053.006 /
+    # T1546 systemd persistence (planted .service/.timer/.path/
+    # .socket/.mount units) but MUST NEVER emit systemctl
+    # disable/mask commands to auto-neutralize the planted
+    # unit. The detected unit may be operator-legitimate
+    # (operator deployed a new service but forgot to re-
+    # baseline) — silent auto-disable would break operator-
+    # intended runtime. Auto-disable is also a denial-of-
+    # service primitive (attacker plants a unit, watchdog
+    # disables it + operator's actual workload). Surveillance,
+    # never remediation. Locks anti-runtime-destruction
+    # contract on the systemd-unit surveillance substrate.
+    ! grep -qE 'systemctl[[:space:]]+(disable|mask|stop)' "${WD}"
+}
