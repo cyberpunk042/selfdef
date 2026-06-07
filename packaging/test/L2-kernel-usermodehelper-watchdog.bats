@@ -270,3 +270,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # expansion is intentional, not silent.
     cap | grep -qE '"event":"[a-z_]+"'
 }
+
+@test "INVARIANT (kernel.hotplug under writable root → alert: hotplug kernel-helper axis sister to modprobe + poweroff_cmd)" {
+    # Sister to kernel.modprobe + kernel.poweroff_cmd + kernel.
+    # core_pattern usermode-helper INVARIANTs. The kernel.hotplug
+    # sysctl points at a userspace program the kernel invokes
+    # AS ROOT on device hotplug events (legacy pre-udev path).
+    # A writable-root hotplug value gets attacker-controlled exec
+    # on every USB insert / NIC bring-up / device discovery.
+    # T1546 — Event Triggered Execution via kernel usermode-
+    # helper axis. Locks coverage of this axis alongside the
+    # modprobe + poweroff_cmd family.
+    helper hotplug /tmp/hotplug-evil
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
