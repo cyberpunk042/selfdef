@@ -368,3 +368,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (env_keep += PERL5LIB → alert: perl-runtime env-pass-through axis sister to LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT/PYTHONPATH family)" {
+    # Sister to LD_PRELOAD + LD_LIBRARY_PATH + LD_AUDIT +
+    # PYTHONPATH env-keep INVARIANTs already locked. PERL5LIB
+    # is the perl-runtime analog of dynamic-loader env-vars —
+    # if sudo passes PERL5LIB through to a privileged perl
+    # subprocess (e.g., sudo invoking a perl admin script),
+    # attacker plants their malicious .pm module in their
+    # PERL5LIB and perl's @INC resolves their module before the
+    # system one. T1574 Hijack Execution Flow via perl module
+    # substitution — sister axis to T1574.006 dynamic-loader.
+    # Closes PERL5LIB axis on the language-runtime env-keep
+    # alert coverage.
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%sDefaults env_keep += "PERL5LIB"\n' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
