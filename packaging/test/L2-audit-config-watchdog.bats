@@ -411,3 +411,26 @@ setup_baseline_state() {
     run_wd
     cap | grep -qE 'selfdef-audit-config'
 }
+
+@test "INVARIANT (baseline_rules JSON field echoes captured baseline rule count — operator sees both current AND baseline in same record for diff context)" {
+    # Sister to many other watchdog/installer JSON-field-echo
+    # INVARIANTs across the brain. emit_status carries BOTH the
+    # live rule_count AND the captured baseline_rules count
+    # in a single JSON record so the dashboard correlator can
+    # surface delta (live - baseline) without re-querying the
+    # baseline file. Lock the baseline_rules field presence on
+    # the rules-flushed alert path: when an attacker drops
+    # rules via auditctl -D, the JSON must surface
+    # baseline_rules with the pre-attack count so operator
+    # immediately sees "had N rules, now has 0". Without this,
+    # the dashboard would need a separate baseline-state lookup.
+    # Locks the diff-context-in-one-record contract on the
+    # T1562.001 surveillance surface.
+    setup_baseline_state
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    set_state "" "1" "active"             # rules flushed
+    run_wd
+    cap | grep -qE '"baseline_rules":[1-9]'
+    cap | grep -q '"event":"audit_rules_flushed"'
+}
