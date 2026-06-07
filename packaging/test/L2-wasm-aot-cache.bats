@@ -276,3 +276,21 @@ INSTALL_DIR="${MODULE_DIR}/install"
     # topological-order contract.
     grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[.*"hardware-tune-cache"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (cache dir mode is 0755 or 0775 — system-state-dir convention)" {
+    # Sister to brain-wide chmod-convention INVARIANTs.
+    # /var/cache/selfdef/wasm-aot must be world-readable so
+    # WASM runtimes can read the AOT cache, and root-write-only
+    # (or root+wasm-runtime-group write) to prevent silent
+    # tampering of cached AOT objects.
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    if [ -d "${SELFDEF_WASM_AOT_CACHE_DIR}" ]; then
+        mode="$(stat -c '%a' "${SELFDEF_WASM_AOT_CACHE_DIR}")"
+        teardown_real_run
+        [ "${mode}" = "755" ] || [ "${mode}" = "775" ] || [ "${mode}" = "750" ] || [ "${mode}" = "770" ]
+    else
+        teardown_real_run
+    fi
+}
