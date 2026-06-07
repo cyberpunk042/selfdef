@@ -250,3 +250,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # Either alert (preferred — canonical path resolution catches /tmp/) OR warn (acceptable — config change).
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (keyfile under /home → alert): keyfile-vs-keyscript axis-symmetric on user-writable root" {
+    # Sister to keyscript-under-/home INVARIANT above. A LUKS keyfile
+    # in user-home is an unlock-key-compromise vector — a user-mode
+    # attacker can swap the keyfile to hijack disk encryption. Locks
+    # axis-symmetry between keyscript-/home and keyfile-/home on the
+    # user-writable hijack surface.
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'data /dev/sda2 /home/user/.luks-key luks\n' > "${CRYPTTAB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
