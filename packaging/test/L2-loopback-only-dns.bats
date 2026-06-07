@@ -327,3 +327,19 @@ TOMLEOF
     output_second="$(run_wd 2>&1)"
     [[ "${output_second}" == *'changes=0'* ]]
 }
+
+@test "INVARIANT (no auto-uninstall: loopback-only-dns NEVER emits package-remove commands on systemd-resolved)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The loopback-only-dns installer writes a
+    # systemd-resolved drop-in to pin DNSStubListener=0.0.0.0
+    # → 127.0.0.1 but MUST NEVER emit shell commands that
+    # uninstall systemd-resolved itself (apt/dpkg/dnf/rpm/yum
+    # remove|purge|uninstall systemd-resolved). Silent auto-
+    # removal would break the DNS resolver substrate entirely.
+    # Locks anti-package-removal contract on the loopback-only-
+    # dns substrate.
+    write_config "loopback"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+systemd-resolved'
+    [ ! -f "${DST}" ] || ! grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)' "${DST}"
+}
