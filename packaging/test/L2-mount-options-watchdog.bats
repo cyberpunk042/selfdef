@@ -459,3 +459,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ -f "${svc}" ]
     grep -qE '^Type=oneshot' "${svc}"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. mount-options-watchdog manifest declares install + profile gating
+    # the resolver enforces; malformed manifest wedges the
+    # mount-options-watchdog scanner baseline. Python's tomllib is the
+    # canonical parser. Locks anti-malformed-manifest on the
+    # mount-options-watchdog substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/mount-options-watchdog/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert data['name'] == 'mount-options-watchdog', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
