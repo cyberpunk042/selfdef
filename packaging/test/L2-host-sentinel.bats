@@ -290,3 +290,43 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=audit'* ]]
 }
+
+@test "INVARIANT (asymmetric kmod-vs-ldpreload action: enforce ld-preload=Sigkill but kmod stays Post — locks the rationale boundary)" {
+    # The architectural distinction: kmod is post-load detection
+    # (barn door closed); ld-preload IS pre-exec gate (can kill).
+    # Lock that BOTH halves of the asymmetry hold in enforce.
+    write_config "enforce"
+    run_wd
+    # ld-preload-watch ONLY has Sigkill (no Post).
+    grep -q 'action: Sigkill' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+    ! grep -q 'action: Post' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+    # kmod-watch ONLY has Post (no Sigkill).
+    grep -q 'action: Post' "${POLICY_DIR}/selfdef-host-kmod-watch.yaml"
+    ! grep -q 'action: Sigkill' "${POLICY_DIR}/selfdef-host-kmod-watch.yaml"
+}
+
+@test "INVARIANT (per-policy independence: kmod enabled + ld-preload disabled installs ONLY kmod, not the other)" {
+    # Per-policy flags are independent — installing one MUST NOT
+    # accidentally install the other. Sister axis to the existing
+    # 'disabled-removes-stale' INVARIANT.
+    write_config "audit" "true" "false"
+    run_wd
+    [ -f "${POLICY_DIR}/selfdef-host-kmod-watch.yaml" ]
+    ! [ -f "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml" ]
+}
+
+@test "INVARIANT (downgrade enforce → audit with policy already at Sigkill: rewrites to Post — no Sigkill remnant after downgrade)" {
+    # Sister to the existing Sigkill→Post INVARIANT but explicit about
+    # the load-bearing guarantee: NO Sigkill action remnant in the
+    # downgraded audit-profile file. The Sigkill action is irreversible
+    # in production (kills the loading process), so a stale Sigkill
+    # remnant after operator downgrade would silently keep killing.
+    write_config "enforce"
+    run_wd
+    grep -q 'action: Sigkill' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+    write_config "audit"
+    run_wd
+    # Verify the load-bearing guarantee: NO Sigkill remnant anywhere
+    # in the file (full content scan, not just first match).
+    ! grep -q 'Sigkill' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+}
