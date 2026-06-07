@@ -303,3 +303,11 @@ TOMLEOF
     [ ! -f "${DROPIN}" ]
     ! grep -qE 'sysctl -w kernel.sysrq' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (drop-in chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs.
+    write_config "off"
+    run_wd
+    [ -f "${DROPIN}" ]
+    [ "$(stat -c '%a' "${DROPIN}")" = "644" ]
+}
