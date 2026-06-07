@@ -191,3 +191,45 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"lynis_rc":[0-9]+'
 }
+
+@test "INVARIANT (lynis bin non-zero exit: wrapper still emits JSON + still rc=0 — advisory contract holds even on lynis crash)" {
+    # Lynis itself may exit non-zero (parse error, missing dep,
+    # crashed plugin). The wrapper MUST still emit a JSON record
+    # so the operator dashboard sees the run + still exit 0 (the
+    # wrapper is advisory, not enforcement — operator owns the
+    # response, not the cron).
+    printf '#!/usr/bin/env bash\nexit 17\n' > "${FAKE_LYNIS}"
+    mk_report 85                                            # legacy report from prior run
+    run_wd
+    cap | grep -q '"tag":"selfdef-lynis"'
+}
+
+@test "INVARIANT (report-missing exit code is 0 — high severity does NOT propagate as wrapper rc)" {
+    # Lynis-cron's wrapper is advisory; even a 'report_missing'
+    # severity=high MUST not exit non-zero (cron would mark the
+    # unit failed and operator would chase a phantom incident).
+    # Severity is for the dashboard; rc is for cron.
+    REPORT_V="${TMP}/nonexistent" \
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LYNIS_PROFILE="quick" \
+        SELFDEF_LYNIS_BIN="${FAKE_LYNIS}" \
+        SELFDEF_LYNIS_REPORT="${TMP}/nonexistent" \
+        bash "${WD}"
+    # bats fails on rc != 0; this line confirms rc=0 by reaching it.
+    cap | grep -q '"severity":"high"'
+}
+
+@test "INVARIANT (large-warning fixture: warnings count reflects ALL warnings even though sample is capped at 5)" {
+    # The cap is on log volume (the inline sample), NOT on the
+    # warnings counter. Operator dashboard should still see the
+    # full count so triage knows how big the haystack is.
+    {
+        printf 'hardening_index=55\n'
+        for i in $(seq -w 1 50); do
+            printf 'warning[]=W-%s|body|-|\n' "${i}"
+        done
+    } > "${REPORT}"
+    run_wd
+    cap | grep -q '"warnings":50'
+    cap | grep -q '"severity":"alert"'                      # 55 < 60
+}
