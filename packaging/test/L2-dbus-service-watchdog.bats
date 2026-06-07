@@ -334,3 +334,26 @@ EOF
     run_wd
     cap | grep -q 'distinctive-attacker-dbus'
 }
+
+@test "INVARIANT (Exec under /home: user-writable hijack on D-Bus service-activation surface)" {
+    # Sister to /var/tmp Exec writable-root INVARIANT already
+    # locked. /home/<user> is writable by the owning user without
+    # privilege; attacker who pivots into a user account plants
+    # /home/<user>/.evil + registers a D-Bus .service file with
+    # Exec=/home/<user>/.evil + User=root — dbus-daemon fires
+    # the attacker payload AS ROOT on every matching D-Bus
+    # method call. Locks the /home axis on the D-Bus service-
+    # activation writable-root coverage symmetric to /var/tmp +
+    # /tmp on the T1543 Create-or-Modify-System-Process surface.
+    svc /usr/libexec/myservice > "${SVC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${DBUSD}/evil-home.service" <<EOF
+[D-BUS Service]
+Name=com.evil.home
+Exec=/home/alice/.evil
+User=root
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
