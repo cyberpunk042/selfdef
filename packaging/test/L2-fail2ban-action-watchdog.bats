@@ -896,3 +896,12 @@ assert 'install' in data, 'install missing'
         grep -qE 'logger -t selfdef-' "${s}"
     done
 }
+
+@test "INVARIANT (fail2ban-action-watchdog .sh script file is non-empty (size > 100 bytes) — non-trivial-script contract)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/fail2ban-action-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        size=$(stat -c '%s' "${s}")
+        [ "${size}" -gt 100 ]
+    done
+}

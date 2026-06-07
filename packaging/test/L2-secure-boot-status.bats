@@ -898,3 +898,10 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     uni="${BATS_TEST_DIRNAME}/../../modules/secure-boot-status/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '#!/.*bash'
 }
+
+@test "INVARIANT (secure-boot-status install/apply.sh declares non-empty body — non-trivial-script contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/secure-boot-status/install/apply.sh"
+    [ -s "${apply}" ]
+    lines=$(wc -l <"${apply}")
+    [ "${lines}" -gt 5 ]
+}

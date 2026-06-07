@@ -978,3 +978,10 @@ assert any(p.startswith('/etc/') for p in ps), f'paths must include ≥1 /etc/ t
     uni="${BATS_TEST_DIRNAME}/../../modules/dns-shield/install/uninstall.sh"
     head -1 "${uni}" | grep -qE '#!/.*bash'
 }
+
+@test "INVARIANT (dns-shield install/apply.sh declares non-empty body — non-trivial-script contract)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/dns-shield/install/apply.sh"
+    [ -s "${apply}" ]
+    lines=$(wc -l <"${apply}")
+    [ "${lines}" -gt 5 ]
+}

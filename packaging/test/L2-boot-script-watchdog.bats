@@ -985,3 +985,12 @@ seed_benign() {
         grep -qE 'logger -t selfdef-' "${s}"
     done
 }
+
+@test "INVARIANT (boot-script-watchdog .sh script file is non-empty (size > 100 bytes) — non-trivial-script contract)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/boot-script-watchdog/systemd"
+    for s in "${script_dir}"/*.sh; do
+        [ -f "${s}" ] || continue
+        size=$(stat -c '%s' "${s}")
+        [ "${size}" -gt 100 ]
+    done
+}
