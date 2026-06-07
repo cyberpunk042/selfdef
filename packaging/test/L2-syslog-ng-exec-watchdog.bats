@@ -346,3 +346,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: syslog-ng-exec-watchdog NEVER deletes syslog-ng config entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # syslog-ng-exec-watchdog DETECTS T1037/T1546 syslog-ng
+    # program() log-event-trigger root-exec persistence but
+    # MUST NEVER emit sed/awk/rm commands to auto-clean the
+    # program() directive. The detected directive may be
+    # operator-legitimate (custom log-forwarding pipeline) —
+    # silent auto-delete would destroy operator baseline state
+    # AND could leave syslog-ng with broken config. Surveil-
+    # lance, never remediation. Locks anti-data-loss contract
+    # on the syslog-ng-exec surveillance substrate.
+    printf 'destination d_evil { program("/tmp/.evil"); };\n' > "${CONF}"
+    run_wd
+    [ -f "${CONF}" ]
+    grep -q 'program' "${CONF}"
+    ! grep -qE 'sed[[:space:]]+-i.*syslog-ng' "${WD}"
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+}
