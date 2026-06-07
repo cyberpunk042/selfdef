@@ -367,3 +367,15 @@ TOMLEOF
     grep -qE '^ClientAliveInterval[[:space:]]+[0-9]+' "${DST}"
     grep -qE '^ClientAliveCountMax[[:space:]]+[0-9]+' "${DST}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on ssh-hardening installer surface
+    # despite the dual-phase apply (sshd -t validation + drop-in
+    # render + reload).
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"ssh-hardening"')
+    [ "${count}" = "1" ]
+}
