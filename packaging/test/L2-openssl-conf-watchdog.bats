@@ -318,3 +318,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (service unit declares Type=oneshot — timer-driven probe semantics)" {
+    # Sister to brain-wide systemd Type=oneshot INVARIANT family.
+    # openssl-conf-watchdog runs ON the timer's scheduled fire —
+    # scans /etc/ssl/openssl.cnf for engine/provider .so paths
+    # in writable roots, emits a verdict, then exits. Type=
+    # simple would break timer OnUnitActiveSec semantics. Locks
+    # oneshot-probe contract on the openssl-conf-watchdog
+    # substrate.
+    svc="${BATS_TEST_DIRNAME}/../../modules/openssl-conf-watchdog/systemd/selfdef-openssl-conf.service"
+    [ -f "${svc}" ]
+    grep -qE '^Type=oneshot' "${svc}"
+}
