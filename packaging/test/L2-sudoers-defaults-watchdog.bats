@@ -350,3 +350,21 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (env_keep += PYTHONPATH → alert: python-runtime env-pass-through axis sister to LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT family)" {
+    # Sister to LD_PRELOAD + LD_LIBRARY_PATH + LD_AUDIT env-keep
+    # INVARIANTs already locked. PYTHONPATH is the python-
+    # runtime analog of dynamic-loader env-vars — if sudo
+    # passes PYTHONPATH through to privileged python subprocess
+    # (e.g., sudo invoking a python admin script), attacker
+    # plants their malicious .py module in their PYTHONPATH and
+    # python's import resolves their module before the system
+    # one. T1574 Hijack Execution Flow via python module
+    # substitution — sister axis to T1574.006 dynamic-loader.
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%sDefaults env_keep += "PYTHONPATH"\n' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
