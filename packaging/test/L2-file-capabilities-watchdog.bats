@@ -362,3 +362,17 @@ mk_cap() { printf '#!/bin/sh\n' > "${ROOT}/$1"; chmod 0755 "${ROOT}/$1"; setcap 
     cap | grep -q '"severity":"alert"'
     cap | grep -q 'sys_admin_binary'
 }
+
+@test "INVARIANT (cap_chown dangerous-cap detect — ownership-confusion super-cap — also alerts on file-cap surface)" {
+    # Sister to capability-conf-watchdog cap_chown INVARIANT just
+    # locked. cap_chown lets the binary re-own ANY file regardless
+    # of uid — pre-attack pivot primitive (T1222 File and Directory
+    # Permissions Modification). Closes axis-parity between the two
+    # capability-tracking watchdogs on the cap_chown coverage.
+    mk_cap baseline cap_net_raw+ep
+    run_wd
+    mk_cap chown_binary cap_chown+ep
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
