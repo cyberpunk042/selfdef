@@ -255,3 +255,20 @@ teardown_real_run() {
     teardown_real_run
     [[ "${first_nonblank}" == *"hardware-tune"* ]] || [[ "${first_nonblank}" == *"selfdef"* ]]
 }
+
+@test "INVARIANT (module.toml provides hardware-tune-env contract — downstream-consumer interface lock)" {
+    # Sister to many other installer module's provides-contract
+    # INVARIANT across the brain (bridge-l2 l2-bridge, suricata
+    # ids+eve-json, slm-cpu-loop slm-loop-runtime, tensor-
+    # parallel-inference tensor-parallel-runtime, wasm-aot-cache
+    # wasm-aot-cache-dir). The hardware-tune-cache module is the
+    # substrate every compile-via-CFLAGS / RUSTFLAGS consumer
+    # module composes on. Its provides token names the env-
+    # binding contract — every consumer module (tensor-parallel-
+    # inference / slm-cpu-loop / wasm-aot-cache / future
+    # compile-time-tuned modules) lists this in depends_on. A
+    # silent rename of the token would break every downstream
+    # consumer's compile-time CPU-tuning ingestion.
+    grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"hardware-tune-env"' "${MODULE_DIR}/module.toml" \
+        || grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"hardware-tune-cache"' "${MODULE_DIR}/module.toml"
+}
