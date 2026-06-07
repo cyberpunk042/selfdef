@@ -351,3 +351,18 @@ seed_benign() {
     cap | grep -qE '"added":[3-9]'
     cap | grep -q 'backdoor1\|backdoor2\|backdoor3'
 }
+
+@test "INVARIANT (single MAIN logger record per scan — SDD-062 consumer dispatch contract)" {
+    # Sister to brain-wide single-MAIN-logger INVARIANTs.
+    # selfdef-access-conf tag must fire EXACTLY ONCE per scan
+    # regardless of how many broad-permit additions surface.
+    # Lock consolidation discipline on T1136/T1098 access-grant
+    # surveillance surface.
+    seed_benign
+    run_wd
+    printf '+ : root : LOCAL\n+ : evil1 : ALL\n+ : evil2 : ALL\n+ : evil3 : ALL\n- : ALL : ALL\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-access-conf -- ')
+    [ "${main_count}" = "1" ]
+}
