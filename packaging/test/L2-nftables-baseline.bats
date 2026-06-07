@@ -384,3 +384,18 @@ run_wd() {
     [ ! -f "${NFT_DROPIN}" ]
     ! grep -qE "nft -f ${NFT_DROPIN}" "${NFT_LOG}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # One installer run must emit EXACTLY ONE emit_status JSON
+    # record on stdout — not zero (silent run invisible to
+    # operator dashboard) and not multiple (duplicate records
+    # corrupt the dashboard's apply-count + last-status
+    # invariants). Locks single-record discipline on the
+    # host-firewall installer surface.
+    write_config "baseline"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"nftables-baseline"')
+    [ "${count}" = "1" ]
+}
