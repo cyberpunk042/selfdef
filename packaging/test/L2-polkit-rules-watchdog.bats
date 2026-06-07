@@ -368,3 +368,21 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-polkit-rules -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (baseline re-establish on operator out-of-band deletion: missing baseline re-creates cleanly + emits baseline_initial)" {
+    # Sister to brain-wide baseline-re-establish INVARIANTs.
+    # Operator may wipe baseline during host triage to force a
+    # fresh inventory. The watchdog MUST re-create the baseline
+    # cleanly on the next scan AND emit baseline_initial (not
+    # crash AND not silently no-op). Locks state-resilience on
+    # the polkit-rules-grant surveillance surface (T1548 Abuse
+    # Elevation Control Mechanism via polkit YES-grant).
+    seed_benign
+    run_wd                                              # establishes baseline
+    [ -f "${BASELINE}" ]
+    rm -f "${BASELINE}"                                  # operator wipe
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # must re-establish
+    [ -f "${BASELINE}" ]
+    cap | grep -qE '"event":"baseline_initial"'
+}
