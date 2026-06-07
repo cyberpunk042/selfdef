@@ -458,3 +458,23 @@ v = data.get('conflicts', [])
 assert isinstance(v, list), f'conflicts must be list, got {type(v).__name__}'
 "
 }
+
+@test "INVARIANT (module.toml provides field is a TOML list — anti-string-malformation contract on provides)" {
+    # Sister to brain-wide module.toml manifest-completeness +
+    # depends_on-list + conflicts-list INVARIANTs already
+    # locked. The provides field MUST be a TOML list — the
+    # resolver iterates it to register each provided contract
+    # in the consumer-binding graph. A scalar would silently
+    # parse as a single-element list, masking real provides.
+    # Locks list-vs-string discipline on the provides field of
+    # the auditd-tune substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-tune/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('provides', [])
+assert isinstance(v, list), f'provides must be list, got {type(v).__name__}'
+"
+}
