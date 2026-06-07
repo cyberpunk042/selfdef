@@ -408,3 +408,17 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"severity":"alert"'
     cap | grep -qE '"added":3'
 }
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_LISTENPORTS_PROFILE — operator-dashboard distinguishes report from enforce)" {
+    # Sister to many other watchdog profile-echo INVARIANTs across
+    # the brain. Downstream operator dashboard / triage pipeline
+    # must see the profile value the watchdog ran under (report vs
+    # enforce) so it can distinguish advisory findings from gate-
+    # failing findings. The latter would have aborted the unit on
+    # alert; the former just logged. Closes the profile-surfacing
+    # axis on the listening-ports surveillance surface.
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
