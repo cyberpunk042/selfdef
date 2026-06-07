@@ -339,3 +339,18 @@ TOMLEOF
     first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${DST}")"
     [[ "${first_nonblank}" == *"selfdef"* ]]
 }
+
+@test "INVARIANT (standard carries MaxAuthTries <= 4 — brute-force-attempt cap)" {
+    # Sister to ssh-hardening standard hardening directive
+    # family INVARIANTs already locked. MaxAuthTries caps the
+    # number of authentication attempts per ssh connection
+    # before sshd disconnects. The default is 6 — a stricter
+    # value defeats credential brute-force exploits (operator-
+    # mistyped fail2ban triggers; reduces per-connection
+    # brute-force window). Locks that standard sets this
+    # directive to a strict value (<=4) — CIS benchmark + DISA-
+    # STIG mandate it.
+    write_config "standard"
+    run_wd
+    grep -qE '^MaxAuthTries[[:space:]]+[1-4]' "${DST}"
+}
