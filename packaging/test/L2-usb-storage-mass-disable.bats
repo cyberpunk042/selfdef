@@ -307,3 +307,15 @@ usb_storage            73728  0' DRY_RUN=1 run_wd
     ! [ -f "${MODPROBE_D}/50-selfdef-usb-storage.conf" ]
     ! [ -s "${RMMOD_LOG}" ]
 }
+
+@test "INVARIANT (modprobe drop-in is chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs. The modprobe
+    # drop-in lands at /etc/modprobe.d/50-selfdef-usb-storage.conf
+    # and must be world-readable (modprobe at boot reads it) and
+    # root-write-only (any user rewrite would re-enable USB-storage
+    # autoload).
+    write_config "blocked"
+    run_wd
+    [ -f "${MODPROBE_D}/50-selfdef-usb-storage.conf" ]
+    [ "$(stat -c '%a' "${MODPROBE_D}/50-selfdef-usb-storage.conf")" = "644" ]
+}
