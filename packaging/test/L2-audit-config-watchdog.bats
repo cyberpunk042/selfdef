@@ -444,3 +444,17 @@ setup_baseline_state() {
     [ -f "${BASELINE}" ]
     [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
 }
+
+@test "INVARIANT (baseline re-establish on operator out-of-band deletion: missing baseline re-creates cleanly + emits baseline_initial)" {
+    # Sister to brain-wide baseline-re-establish INVARIANTs.
+    # State-resilience on T1562.001 audit-config tamper
+    # surveillance.
+    setup_baseline_state
+    run_wd                                              # establishes baseline
+    [ -f "${BASELINE}" ]
+    rm -f "${BASELINE}"                                  # operator wipe
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # must re-establish
+    [ -f "${BASELINE}" ]
+    cap | grep -qE '"event":"baseline_initial"'
+}
