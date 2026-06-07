@@ -461,3 +461,19 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     case "${real_timer}" in */packaging/systemd/*) ;; *) false ;; esac
     case "${real_service}" in */packaging/systemd/*) ;; *) false ;; esac
 }
+
+@test "INVARIANT (cargo-deb assets shipping paths are explicit /lib/systemd/system/ — not /etc/systemd/system/ — system-package directory discipline)" {
+    # Sister to brain-wide systemd-shipping-directory INVARIANT
+    # family. The cargo-deb assets MUST ship the unit files to
+    # /lib/systemd/system/ (the system-package canonical
+    # location per Debian Policy §9.3.1), NOT /etc/systemd/
+    # system/ (which is reserved for operator-extension
+    # overrides per FHS). A regression to /etc/* would risk
+    # an operator's override file shadowing the package-
+    # shipped unit + create a silent-divergence bug. Locks
+    # the /lib/systemd/system shipping discipline on the
+    # doctor cargo-deb manifest substrate.
+    grep -qE 'lib/systemd/system' "${DAEMON_CARGO}"
+    # Verify the doctor unit specifically targets /lib not /etc
+    grep -qE 'selfdef-doctor\.(service|timer).*lib/systemd/system' "${DAEMON_CARGO}"
+}

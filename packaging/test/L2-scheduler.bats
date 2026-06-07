@@ -501,3 +501,8 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     grep -qE '^ExecStart=/usr/local/bin/selfdef-scheduler' "${UNIT}"
     ! grep -qE '^ExecStart=/usr/local/bin/selfdef-guardian' "${UNIT}"
 }
+
+@test "INVARIANT (scheduler.service has WantedBy=multi-user.target Install — enable-graph reachability contract)" {
+    # Sister to brain-wide [Install] WantedBy INVARIANT family.
+    grep -qE '^WantedBy=multi-user.target' "${UNIT}"
+}

@@ -604,3 +604,23 @@ for r in req:
     assert 'kind' in r and 'value' in r, f'requires must have kind+value, got {r!r}'
 "
 }
+
+@test "INVARIANT (bitnet-gpu-inference module.toml name field matches directory name — canonical-naming alignment contract)" {
+    # Sister to brain-wide module.toml name INVARIANT family.
+    # The name field MUST match the parent directory name so
+    # the selfdef installer can resolve modules/<slug>/
+    # module.toml by name field alone (without re-reading
+    # parent-dir name). A regression where module.toml name
+    # = "foo" lives under modules/bar/ would break the
+    # resolver's path-by-name canonical lookup. Locks the
+    # name-matches-dir discipline on the bitnet-gpu-inference substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+n = data.get('name', '')
+assert n == 'bitnet-gpu-inference', f'name must match dir, got {n!r}'
+"
+}

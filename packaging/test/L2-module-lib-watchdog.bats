@@ -545,3 +545,10 @@ setup() {
     real_lib="$(readlink -f "${LIB}")"
     case "${real_lib}" in */packaging/lib/*) ;; *) false ;; esac
 }
+
+@test "INVARIANT (lib emit_status() helper accepts status + message arguments — 2-positional-arg contract)" {
+    # Sister to brain-wide helper-arity INVARIANT family.
+    grep -qE 'emit_status\(\)' "${LIB}"
+    awk '/^emit_status\(\)/,/^}/' "${LIB}" | grep -qE 'local status="\$1"'
+    awk '/^emit_status\(\)/,/^}/' "${LIB}" | grep -qE 'message="\$2"'
+}

@@ -539,3 +539,18 @@ assert 'namespace' not in meta, f'metadata.namespace must be absent (cluster-sco
     real_yaml="$(readlink -f "${YAML}")"
     case "${real_yaml}" in */packaging/tetragon-policies/*) ;; *) false ;; esac
 }
+
+@test "INVARIANT (postrm reverses chattr +i BEFORE rm — anti-chattr-locked-leaked-file contract)" {
+    # Sister to brain-wide postrm sequencing INVARIANT family.
+    # The postrm MUST run `chattr -i` BEFORE `rm -f` since
+    # immutable files cannot be removed even by root. A
+    # regression that ordered rm BEFORE chattr -i would
+    # surface as `rm: cannot remove ...: Operation not
+    # permitted` + leak the policy file across the purge.
+    # Locks the chattr-before-rm sequencing on the postrm.
+    chattr_line=$(grep -nE 'chattr -i' "${POSTRM}" | head -1 | cut -d: -f1)
+    rm_line=$(grep -nE 'rm -f.*sovereign-perimeter\.yaml' "${POSTRM}" | head -1 | cut -d: -f1)
+    [ -n "${chattr_line}" ]
+    [ -n "${rm_line}" ]
+    [ "${chattr_line}" -lt "${rm_line}" ]
+}

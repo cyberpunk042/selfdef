@@ -645,3 +645,18 @@ rh = data.get('requires_hardware')
 assert rh is not None, f'[requires_hardware] must be present, got None'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml name field matches directory name — canonical-naming alignment contract)" {
+    # Sister to brain-wide module.toml name-matches-dir
+    # INVARIANT family. The name field MUST match the parent
+    # directory name. Locks the alignment discipline.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+n = data.get('name', '')
+assert n == 'slm-cpu-loop', f'name must match dir, got {n!r}'
+"
+}

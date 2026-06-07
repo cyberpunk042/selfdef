@@ -526,3 +526,18 @@ for k in ('apply', 'check', 'uninstall'):
     assert not v, f'install.{k} must NOT be set when kind=debian-package, got {v!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml name field matches directory name — canonical-naming alignment contract)" {
+    # Sister to brain-wide module.toml name-matches-dir
+    # INVARIANT family. The name field MUST match the parent
+    # directory name. Locks the alignment discipline.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+n = data.get('name', '')
+assert n == 'detect-host', f'name must match dir, got {n!r}'
+"
+}

@@ -606,3 +606,8 @@ EOF
     # the override-env-var canonical discipline.
     grep -qE 'SELFDEF_FRICTION_AUDIT_HOSTNAME' "${SCRIPT}"
 }
+
+@test "INVARIANT (script declares SELFDEF_FRICTION_AUDIT_RING_DIR override variable — operator-configurable ring-buffer location)" {
+    # Sister to operator-config-env-var INVARIANT family.
+    grep -qE 'SELFDEF_FRICTION_AUDIT_RING_DIR' "${SCRIPT}"
+}
