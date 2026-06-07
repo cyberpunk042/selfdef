@@ -129,3 +129,35 @@ MODULE_DIR="${BATS_TEST_DIRNAME}/../../modules/detect-host"
     # Specifically /etc/selfdef must be declared (the daemon config root).
     grep -q '/etc/selfdef' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (module.toml has [install] section with kind = debian-package — the canonical surface for debian-package modules)" {
+    # Sister to existing 'install.kind = debian-package' INVARIANT
+    # but locks the [install] section header presence specifically.
+    grep -qE '^\[install\]' "${MODULE_DIR}/module.toml"
+    # Verifies the surface that the module-toml parser keys on.
+}
+
+@test "INVARIANT (cross-reference: docs/dev/modules.md documents BOTH install kinds — script AND debian-package)" {
+    # detect-host is the canonical reference for debian-package.
+    # The other kind (script) is documented in the same file. Lock
+    # both kinds documented so a future single-kind regression in
+    # docs/dev/modules.md trips here.
+    grep -qE 'debian.package|debian_package' "${BATS_TEST_DIRNAME}/../../docs/dev/modules.md"
+    grep -qE 'kind.*script|script.*kind' "${BATS_TEST_DIRNAME}/../../docs/dev/modules.md"
+}
+
+@test "INVARIANT (no uninstall.sh — debian-package modules let dpkg purge handle removal)" {
+    # Sister to NO-apply.sh/verify.sh INVARIANT. Locks that uninstall
+    # is also delegated to the package manager — operator runs
+    # 'apt purge selfdef-daemon' or equivalent.
+    [ ! -f "${MODULE_DIR}/install/uninstall.sh" ]
+    [ ! -f "${MODULE_DIR}/uninstall.sh" ]
+}
+
+@test "INVARIANT (no check.sh — debian-package modules use 'systemctl status selfdef-daemon' for health, not a per-module script)" {
+    # Sister to NO-uninstall + apply + verify INVARIANTs. The
+    # debian-package kind delegates ALL lifecycle to systemd +
+    # dpkg; no module-script check needed.
+    [ ! -f "${MODULE_DIR}/install/check.sh" ]
+    [ ! -f "${MODULE_DIR}/check.sh" ]
+}
