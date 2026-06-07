@@ -250,3 +250,19 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (init= under /dev/shm — tmpfs PID-1 hijack vector): writable-tmpfs init= axis" {
+    # Sister to the init= under /tmp + /var/tmp PID-1 hijack axes
+    # already locked. /dev/shm is tmpfs world-writable — an attacker
+    # who can sync a callback across reboot via initramfs + persist
+    # the init= line in /etc/default/grub gets PID-1 hijack on next
+    # boot. T1542/T1037 boot-time PID-1 hijack via tmpfs init=.
+    # Locks coverage of the /dev/shm writable-tmpfs axis on the
+    # init= PID-1 hijack family.
+    seed_benign
+    run_wd
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="quiet init=/dev/shm/.attacker-init"\n' > "${DEFAULT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
