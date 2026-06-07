@@ -324,3 +324,22 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (baseline re-establish on operator out-of-band deletion: missing baseline re-creates cleanly + emits baseline_initial)" {
+    # Sister to brain-wide baseline-re-establish INVARIANTs.
+    # Operator may wipe /var/lib/selfdef/nsswitch-baseline.tsv
+    # during host triage to force a fresh inventory. The
+    # watchdog MUST re-create the baseline cleanly on the next
+    # scan AND emit baseline_initial (not crash AND not
+    # silently no-op). Locks state-resilience on the NSS
+    # provider surveillance surface (T1556.001 modify-auth-
+    # process via NSS module hijack).
+    seed_benign
+    run_wd                                              # establishes baseline
+    [ -f "${BASELINE}" ]
+    rm -f "${BASELINE}"                                  # operator wipe
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # must re-establish
+    [ -f "${BASELINE}" ]
+    cap | grep -qE '"event":"baseline_initial"'
+}
