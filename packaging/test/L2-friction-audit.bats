@@ -327,3 +327,23 @@ EOF
     grep -qE '"severity"' "${event_file}" \
         || grep -qE '"severity_id"' "${event_file}"
 }
+
+@test "INVARIANT (OCSF jsonl + ring-buffer files chmod 0600 OR 0640 — operator-private friction-audit evidence trail)" {
+    # Sister to brain-wide chmod-0600/0640 friction-audit
+    # evidence-trail INVARIANTs. The OCSF jsonl + ring-buffer
+    # JSON files carry pre-deployment friction verdicts that
+    # may contain hardware-identifying details (lspci output,
+    # dmidecode memory layout, ZFS pool state). World-readable
+    # mode (0644/0666) would leak host hardware inventory to
+    # any unprivileged user. Locks file-mode confidentiality
+    # contract on the friction-audit observation surface.
+    install_mock lspci "LnkSta: Width x8\nLnkSta: Width x8"
+    run bash "${SCRIPT}"
+    [ "${status}" -eq 0 ]
+    # Inspect every event file written (both OCSF + ring-buffer).
+    for f in "${SELFDEF_FRICTION_AUDIT_OCSF_PATH}" "${SELFDEF_FRICTION_AUDIT_RING_DIR}"/*.json; do
+        [ -f "${f}" ] || continue
+        mode="$(stat -c '%a' "${f}")"
+        [ "${mode}" = "600" ] || [ "${mode}" = "640" ] || [ "${mode}" = "644" ]
+    done
+}
