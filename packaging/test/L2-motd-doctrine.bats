@@ -233,3 +233,12 @@ TEMPLATES_DIR="${MODULE_DIR}/templates"
         || grep -qE '50-selfdef-presence.*-m[[:space:]]+0?755' "${INSTALL_DIR}/apply.sh" \
         || grep -qE 'chmod[[:space:]]+0?755[[:space:]].*50-selfdef-presence' "${INSTALL_DIR}/apply.sh"
 }
+
+@test "INVARIANT (apply.sh uses set -euo pipefail — fail-loud invariant)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # Silent apply.sh failure leaves operator-facing banner half-
+    # installed (e.g. issue.txt placed but motd.txt not, or motd
+    # script not chmod 0755) — pre-login legal/CFAA notice
+    # missing on some hosts; operator can't tell which.
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/apply.sh"
+}
