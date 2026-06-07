@@ -199,3 +199,14 @@ teardown() {
     run python3 -c "import yaml; d=yaml.safe_load(open('${YAML}')); print(d['apiVersion'])"
     [ "${output}" = "cilium.io/v1alpha1" ]
 }
+
+@test "INVARIANT (YAML metadata.name is non-empty — Tetragon CRD identifier contract)" {
+    # Sister to apiVersion + kind + spec.kprobes contract INVARIANTs.
+    # Tetragon TracingPolicy requires metadata.name for in-cluster
+    # identification and tetra cli operations (tetra tracingpolicy
+    # list / delete). A vacuous empty name would still parse but
+    # be operator-unmanageable.
+    run python3 -c "import yaml; d=yaml.safe_load(open('${YAML}')); print(d['metadata']['name'])"
+    [ -n "${output}" ]
+    [ "${output}" != "None" ]
+}
