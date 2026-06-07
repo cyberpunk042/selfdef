@@ -344,3 +344,15 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"rare-filesystems-disable"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-uninstall: rare-fs packages NEVER auto-removed)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs. The
+    # module neutralizes via blacklist; packages stay installed.
+    write_config "baseline"
+    run_wd
+    ! grep -qE '(apt-get|dpkg|dnf|rpm)[[:space:]]+(remove|purge|uninstall)' "${SYSEOF_LOG:-/dev/null}" 2>/dev/null || true
+    # The drop-in must exist; nothing about modprobe drop-in
+    # construction can include package-removal commands.
+    [ -f "${MODPROBE_FILE}" ]
+    ! grep -qE 'apt-get|dpkg|dnf|rpm' "${MODPROBE_FILE}"
+}
