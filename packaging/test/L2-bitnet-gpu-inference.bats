@@ -821,3 +821,8 @@ assert isinstance(data, dict)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (bitnet-gpu-inference module dir is at canonical path modules/bitnet-gpu-inference/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference"
+    [ -d "${mod_dir}" ]
+}

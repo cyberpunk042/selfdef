@@ -783,3 +783,8 @@ assert isinstance(data, dict)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (bridge-l2 module dir is at canonical path modules/bridge-l2/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/bridge-l2"
+    [ -d "${mod_dir}" ]
+}

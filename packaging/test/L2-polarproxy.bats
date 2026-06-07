@@ -706,3 +706,8 @@ assert ch == 'install/check.sh'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (polarproxy module dir is at canonical path modules/polarproxy/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/polarproxy"
+    [ -d "${mod_dir}" ]
+}

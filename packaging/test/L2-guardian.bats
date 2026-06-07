@@ -440,3 +440,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     [ -f "${UNIT}" ]
     case "$(readlink -f "${UNIT}")" in */packaging/systemd/*) ;; *) false ;; esac
 }
+@test "INVARIANT (guardian.service file readable — file-mode-access contract)" {
+    [ -r "${UNIT}" ]
+}

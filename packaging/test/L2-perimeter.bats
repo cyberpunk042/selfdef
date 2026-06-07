@@ -707,3 +707,6 @@ assert c == 'sys_execve', f'call must be sys_execve, got {c!r}'
 @test "INVARIANT (YAML file is at canonical packaging/tetragon-policies/ path — packaging tree-layout 71-cycle)" {
     [ -f "${YAML}" ]
 }
+@test "INVARIANT (YAML file readable — file-mode-access contract)" {
+    [ -r "${YAML}" ]
+}

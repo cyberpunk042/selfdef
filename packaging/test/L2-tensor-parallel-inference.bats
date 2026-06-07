@@ -873,3 +873,8 @@ assert isinstance(data, dict)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (tensor-parallel-inference module dir is at canonical path modules/tensor-parallel-inference/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference"
+    [ -d "${mod_dir}" ]
+}

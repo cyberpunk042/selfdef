@@ -725,3 +725,6 @@ EOF
 @test "INVARIANT (script SCRIPT path resolves to existing file — script-existence basic check)" {
     [ -f "${SCRIPT}" ]
 }
+@test "INVARIANT (script file readable — file-mode-access contract)" {
+    [ -r "${SCRIPT}" ]
+}

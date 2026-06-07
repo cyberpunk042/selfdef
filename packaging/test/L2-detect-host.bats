@@ -771,3 +771,6 @@ assert isinstance(data, dict)
     mod_dir="${BATS_TEST_DIRNAME}/../../modules/detect-host"
     [ -d "${mod_dir}" ]
 }
+@test "INVARIANT (detect-host module.toml file readable — file-mode-access contract)" {
+    [ -r "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml" ]
+}

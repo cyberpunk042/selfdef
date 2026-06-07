@@ -604,3 +604,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     [ -f "${TIMER}" ]
     [ -f "${SERVICE}" ]
 }
+@test "INVARIANT (.service file readable — file-mode-access contract)" {
+    [ -r "${SERVICE}" ]
+}

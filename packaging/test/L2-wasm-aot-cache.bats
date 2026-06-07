@@ -856,3 +856,8 @@ assert isinstance(data, dict)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (wasm-aot-cache module dir is at canonical path modules/wasm-aot-cache/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache"
+    [ -d "${mod_dir}" ]
+}

@@ -683,3 +683,6 @@ setup() {
 @test "INVARIANT (lib file is at canonical packaging/lib/ path — packaging tree-layout 71-cycle)" {
     [ -f "${LIB}" ]
 }
+@test "INVARIANT (lib file readable — file-mode-access contract)" {
+    [ -r "${LIB}" ]
+}

@@ -753,3 +753,8 @@ assert ch == 'install/check.sh'
     mtoml="${BATS_TEST_DIRNAME}/../../modules/suricata/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (suricata module dir is at canonical path modules/suricata/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/suricata"
+    [ -d "${mod_dir}" ]
+}

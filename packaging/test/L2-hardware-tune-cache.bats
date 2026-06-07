@@ -837,3 +837,8 @@ assert isinstance(data, dict)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
     [ -f "${mtoml}" ]
 }
+
+@test "INVARIANT (hardware-tune-cache module dir is at canonical path modules/hardware-tune-cache/ — dir-layout 72-cycle)" {
+    mod_dir="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache"
+    [ -d "${mod_dir}" ]
+}
