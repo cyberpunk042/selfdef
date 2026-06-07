@@ -254,3 +254,11 @@ teardown_real_run() {
     grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"bitnet-gpu-runtime"' "${MODULE_DIR}/module.toml" \
         || grep -qE '^provides[[:space:]]*=[[:space:]]*\[.*"bitnet-gpu"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (apply.sh uses set -euo pipefail — fail-loud invariant)" {
+    # Sister to brain-wide fail-loud-set-euo-pipefail INVARIANTs.
+    # Silent apply.sh failure leaves runtime.env + schedule.json
+    # half-rendered; downstream BitNet consumers would load
+    # broken state.
+    grep -qE 'set -euo pipefail' "${INSTALL_DIR}/apply.sh"
+}
