@@ -240,3 +240,23 @@ SCEOF
         bash "${WD}" >/dev/null 2>&1
     ! [ -f "${TMP}/sysctl_called.log" ]
 }
+
+@test "INVARIANT (sh drop-in is shell-sourceable: bash -n parses cleanly — downstream login-shell consumer contract)" {
+    # The /etc/profile.d/50-selfdef-umask.sh is sourced by every
+    # interactive login shell. It MUST be valid POSIX sh / bash
+    # syntax. Sister to hardware-tune-cache + tensor-parallel-
+    # inference shell-sourceable INVARIANT.
+    write_config "group"
+    run_wd
+    bash -n "${PROFILE_D}/50-selfdef-umask.sh"
+}
+
+@test "INVARIANT (both drop-ins carry selfdef-identifier header — operator audit trail + uninstall identification)" {
+    # Sister to many other modules' header-marker INVARIANT. Both
+    # /etc/profile.d/ and /etc/login.defs.d/ drop-ins MUST be
+    # identifiable as selfdef-owned at scan/uninstall time.
+    write_config "group"
+    run_wd
+    grep -qE '^#.*selfdef|^#.*managed-by' "${PROFILE_D}/50-selfdef-umask.sh"
+    grep -qE '^#.*selfdef|^#.*managed-by' "${LOGIN_DEFS_D}/50-selfdef-umask.conf"
+}
