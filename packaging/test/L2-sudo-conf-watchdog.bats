@@ -285,3 +285,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (Plugin .so under /run — boot-recreated tmpfs writable-root axis-symmetric expansion on sudo plugin surface)" {
+    # Sister to /tmp + /home + /dev/shm + /var/tmp + relative-
+    # with-slash sudo plugin writable-root INVARIANTs already
+    # locked. /run is a tmpfs writable by systemd-units running
+    # as various uids — attacker who pivots via a unit-owned
+    # process can plant a malicious sudo plugin under /run/<svc>/
+    # and have sudo dlopen() it AS ROOT on every sudo invocation.
+    # /run often slips past tmpfs surveillance because operators
+    # think only /dev/shm is the tmpfs writable-root. Closes
+    # the /run axis on the T1574 sudo plugin-substitution
+    # privilege-elevation surface.
+    printf 'Plugin policy /run/.evil-sudo-plugin.so\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
