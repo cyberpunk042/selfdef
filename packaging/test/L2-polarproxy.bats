@@ -175,3 +175,23 @@ INSTALL_DIR="${MODULE_DIR}/install"
     # substrate.
     grep -qE '^RestartSec=' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
 }
+
+@test "INVARIANT (module.toml TOML-parseable — anti-malformed-manifest contract)" {
+    # Sister to brain-wide module.toml TOML-parseable INVARIANT
+    # family. polarproxy manifest declares install + the TLS+
+    # PCAP+CERTHTTP+LOG+CA+PASSWORD substitution gating the
+    # resolver enforces; malformed manifest wedges the TLS-MITM
+    # service template render. Python's tomllib is the
+    # canonical parser. Locks anti-malformed-manifest on the
+    # polarproxy substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as f:
+    data = tomllib.load(f)
+assert data['name'] == 'polarproxy', 'name mismatch'
+assert 'version' in data, 'version missing'
+assert 'install' in data, 'install missing'
+"
+}
