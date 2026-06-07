@@ -309,3 +309,15 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     [ "${mode_service}" = "644" ]
     [ "${mode_timer}" = "644" ]
 }
+
+@test "INVARIANT (.service [Install] section + WantedBy=multi-user.target — packaging-enable surface for postinst)" {
+    # Sister to brain-wide systemd [Install] INVARIANT family.
+    # The doctor .service has [Install] WantedBy=multi-user.target
+    # so the Debian postinst can `systemctl enable selfdef-
+    # doctor.timer` AND have the underlying .service unit reachable
+    # via the normal enable graph. Without [Install], systemctl
+    # enable would be a no-op. Locks the [Install] section
+    # discipline on the doctor service substrate.
+    grep -qE '^\[Install\]' "${SERVICE}"
+    grep -qE '^WantedBy=multi-user\.target' "${SERVICE}"
+}
