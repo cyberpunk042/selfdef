@@ -363,3 +363,23 @@ mk_suid() { printf 'ELF-%s' "$1" > "${ROOT}/$1"; chmod 4755 "${ROOT}/$1"; }
     [ -f "${BASELINE}" ]
     cap | grep -qE '"event":"baseline_initial"'
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on suid-sgid surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The suid-sgid-watchdog MUST only emit severity values from
+    # the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1548.001 Abuse Elevation Control Mechanism:
+    # setuid/setgid alert. Locks parser contract on the priv-
+    # elevation-binary inventory detection surface.
+    mk_suid sudo
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # ok / baseline path
+    mk_suid attacker_planted_suid
+    run_wd                                              # alert path
+    # Every severity value emitted MUST be one of {ok,warn,alert}.
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
