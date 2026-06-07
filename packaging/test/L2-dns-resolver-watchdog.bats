@@ -445,3 +445,27 @@ EOF
     run_wd
     cap | grep -q '198.51.100.42'
 }
+
+@test "INVARIANT (DoT/DoH bypass attempt: cleartext public-resolver 8.8.8.8 added when prior was DoT-only → alert)" {
+    # Sister to localhost-nameserver replacement INVARIANT
+    # already locked. Operators frequently configure systemd-
+    # resolved or unbound with DoT (DNS-over-TLS) to a curated
+    # upstream — bypassing cleartext DNS surveillance/MITM. An
+    # attacker who manages to rewrite /etc/resolv.conf to point
+    # at a cleartext public resolver (8.8.8.8 / 1.1.1.1 / 9.9.9.9)
+    # downgrades the encrypted-DNS posture silently. The
+    # watchdog MUST treat ADD of a non-loopback cleartext
+    # resolver as alert, even if the resolver itself is a
+    # famous public one (the famousness doesn't excuse the
+    # downgrade). Locks the DoT/DoH-bypass detection axis on
+    # the DNS-redirection surveillance surface (T1556.004 —
+    # Impair Defenses: Modify DNS Resolver).
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 8.8.8.8
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
