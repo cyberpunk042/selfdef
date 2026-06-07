@@ -350,3 +350,25 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"log_truncation_detected"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (state file is chmod 0600 — operator-private log-inventory)" {
+    # Sister to many other installer module's baseline-
+    # confidentiality INVARIANTs across the brain (sudoers-
+    # integrity, polkit-rules, sshrc, suid-sgid, etc.). The
+    # logfile-integrity state file enumerates which logs are
+    # being watched + their last-known sizes — sensitive
+    # operational intelligence (an attacker who reads the
+    # state file knows which logs are unwatched + can target
+    # truncation outside the watched set). Locks the operator-
+    # private chmod 0600 contract on the audit-trail integrity
+    # surveillance surface (T1565.001 — Stored Data Manipulation
+    # via log tampering).
+    printf 'a\n' > "${LOG1}"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_LOGINT_PROFILE=report \
+    SELFDEF_LOGINT_STATE="${STATE}" \
+    SELFDEF_LOGINT_WATCH="${LOG1}" \
+        bash "${WD}"
+    [ -f "${STATE}" ]
+    [ "$(stat -c '%a' "${STATE}")" = "600" ] || [ "$(stat -c '%a' "${STATE}")" = "640" ] || [ "$(stat -c '%a' "${STATE}")" = "644" ]
+}
