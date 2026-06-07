@@ -367,3 +367,19 @@ TOMLEOF
     mode="$(stat -c '%a' "${LOGROTATE_DST}")"
     [ "${mode}" = "644" ]
 }
+
+@test "INVARIANT (no auto-uninstall: acct-baseline NEVER emits package-remove commands on acct/psacct)" {
+    # Sister to brain-wide no-auto-uninstall INVARIANTs across
+    # L2 suites. The acct-baseline installer enables process
+    # accounting via accton + ships logrotate drop-in but MUST
+    # NEVER emit shell commands that uninstall the acct/psacct
+    # package itself (apt/dpkg/dnf/rpm/yum remove|purge|
+    # uninstall acct|psacct). Silent auto-removal would tear
+    # down the process-accounting audit-trail entirely —
+    # operator's pacct/wtmp records would not be written.
+    # T1562.001 self-defeat. Locks anti-package-removal
+    # contract on the acct-baseline substrate.
+    write_config "enabled"
+    output="$(run_wd 2>&1)"
+    ! printf '%s\n' "${output}" | grep -qE '(apt-get|dpkg|dnf|rpm|yum)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(acct|psacct)'
+}
