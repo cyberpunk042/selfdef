@@ -314,3 +314,16 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (exec-path under writable-root: resolvconf hook invoking binary from /dev/shm → alert)" {
+    # Sister to brain-wide writable-root-exec INVARIANTs. T1546
+    # DNS-update-trigger root-exec persistence — hooks run AS
+    # ROOT on every resolv.conf rewrite. /dev/shm tmpfs in-RAM
+    # writable-root: no on-disk forensic trace.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n/dev/shm/staged_payload\n' > "${HOOKD}/libc"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
