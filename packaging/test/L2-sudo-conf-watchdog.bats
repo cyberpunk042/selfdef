@@ -270,3 +270,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (Plugin .so under /var/tmp — writable-root expansion on sudo plugin-load axis)" {
+    # Sister to /tmp + /home + /dev/shm + relative-with-slash
+    # writable-root axes already locked. /var/tmp is the
+    # writable-spool surface shared with the rest of the
+    # writable-root family. A Plugin path pointing into
+    # /var/tmp lets an attacker plant a malicious sudo plugin
+    # there + have sudo dlopen() it AS ROOT on every sudo
+    # invocation. Locks axis-symmetry on /var/tmp for the sudo
+    # plugin surface (T1574 — Hijack Execution Flow via shared
+    # object substitution on the privilege-elevation handler).
+    printf 'Plugin policy /var/tmp/.evil-sudo-plugin.so\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
