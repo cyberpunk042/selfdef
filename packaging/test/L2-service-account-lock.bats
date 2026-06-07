@@ -620,3 +620,18 @@ for r in reqs:
     assert 'kind' in r and 'value' in r, f'requires entry must have kind+value, got {r}'
 "
 }
+
+@test "INVARIANT (module.toml summary field present + non-empty — operator-dashboard one-line description contract)" {
+    # Sister to brain-wide module.toml manifest-completeness
+    # family. Locks summary-present discipline on the
+    # service-account-lock substrate.
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/service-account-lock/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+s = data.get('summary', '')
+assert isinstance(s, str) and len(s) > 0, f'summary must be non-empty string, got {repr(s)}'
+"
+}
