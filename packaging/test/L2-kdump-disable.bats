@@ -303,3 +303,13 @@ TOMLEOF
     KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd
     ! grep -qE '(apt-get|dpkg|dnf|rpm)[[:space:]]+(remove|purge|uninstall)' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (downgrade mask → stop does NOT auto-unmask — mask is sticky)" {
+    # Sister to brain-wide downgrade-no-auto-unmask INVARIANTs.
+    write_config "mask"
+    KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd
+    ! grep -qE 'systemctl unmask k(dump|exec)' "${SYSEOF_LOG}"
+}
