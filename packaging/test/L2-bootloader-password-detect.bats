@@ -256,3 +256,13 @@ run_wd() {
     grep -qE '^#.*selfdef|^#.*managed-by' "${SYSTEMD_DIR}/selfdef-bootloader-password.timer"
     grep -qE '^#.*selfdef|^#.*managed-by' "${SYSTEMD_DIR}/selfdef-bootloader-password.service"
 }
+
+@test "INVARIANT (libexec is shell-sourceable: bash -n parses cleanly — service ExecStart contract)" {
+    # The libexec script runs from systemd ExecStart. bash -n must
+    # parse cleanly. Sister to umask-baseline + shell-timeout-
+    # baseline + tensor-parallel-inference + slm-cpu-loop + wol-
+    # disable shell-sourceable INVARIANT.
+    write_config "report"
+    run_wd
+    bash -n "${LIBEXEC_DIR}/bootloader-password-detect.sh"
+}
