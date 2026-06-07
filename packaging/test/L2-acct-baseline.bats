@@ -402,3 +402,18 @@ assert 'version' in data, 'version missing'
 assert 'install' in data, 'install missing'
 "
 }
+
+@test "INVARIANT (no auto-delete: acct-baseline installer NEVER deletes operator-pre-existing logrotate/accounting configs — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # acct-baseline writes its own /etc/logrotate.d/ drop-in for
+    # /var/log/wtmp/pacct rotation; it MUST NEVER rm/find-delete
+    # an operator's pre-existing /etc/logrotate.d entries not
+    # owned by THIS module. Locks no-auto-delete on the acct-
+    # baseline installer substrate.
+    install_dir="${BATS_TEST_DIRNAME}/../../modules/acct-baseline/install"
+    for f in "${install_dir}/apply.sh" "${install_dir}/check.sh" "${install_dir}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/etc/logrotate\.d([[:space:]]|/[[:space:]]|$)' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/logrotate\.d.*-delete' "${f}"
+    done
+}
