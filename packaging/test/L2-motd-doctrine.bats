@@ -197,3 +197,21 @@ TEMPLATES_DIR="${MODULE_DIR}/templates"
         || grep -qE 'selfdef|managed-by' "${TEMPLATES_DIR}/issue.net.txt" \
         || grep -qE 'selfdef|managed-by' "${TEMPLATES_DIR}/motd.txt"
 }
+
+@test "INVARIANT (templates chmod 0644 — system-config convention; operator-readable but root-write-only)" {
+    # Sister to many other installer module's chmod-0644
+    # INVARIANT across the brain (sysctl drop-ins, limits.d,
+    # ssh-hardening drop-in, journal-tune drop-in, AppArmor
+    # AA_LIST, bridge-l2 nftables ruleset). The motd-doctrine
+    # template files land at /etc/issue + /etc/issue.net +
+    # /etc/motd + /etc/update-motd.d/50-selfdef-presence as
+    # system-config paths. 0644 is the standard read-everyone,
+    # write-root convention. A 0666 world-writable regression
+    # would let any user rewrite the pre-login legal banner
+    # (compliance audit-trail tamper) or the post-login
+    # presence-indicator. Locks the file-perm contract on
+    # the pre/post-login banner substrate at the shipped-
+    # source layer (apply.sh's install -m 0644 contract).
+    grep -qE 'install[[:space:]].*-m[[:space:]]+0?644' "${INSTALL_DIR}/apply.sh" \
+        || grep -qE 'chmod[[:space:]]+0?644' "${INSTALL_DIR}/apply.sh"
+}
