@@ -407,3 +407,16 @@ EOF
     # friction-audit OCSF substrate.
     grep -qE '"activity_id":' "${SCRIPT}"
 }
+
+@test "INVARIANT (OCSF jsonl carries gate field — operator triage-to-gate routing contract)" {
+    # Sister to brain-wide OCSF schema-fidelity INVARIANT family.
+    # The gate field is friction-audit's operator-triage
+    # discriminator: which of the 4 architectural gates (PCIe,
+    # ZFS, Memory, Audit) emitted this verdict. A SIEM
+    # dashboard filters on gate=memory to surface only memory-
+    # gate failures. The emit_ocsf() helper unconditionally
+    # appends "gate":"<gate>" into every OCSF record. Locks
+    # the gate-discriminator contract on the friction-audit
+    # OCSF substrate.
+    grep -qE '"gate":' "${SCRIPT}"
+}
