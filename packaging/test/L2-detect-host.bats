@@ -186,3 +186,16 @@ MODULE_DIR="${BATS_TEST_DIRNAME}/../../modules/detect-host"
     # cascade-break every consumer at resolution time.
     grep -qE '^name[[:space:]]*=[[:space:]]*"detect-host"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (module.toml declares summary field — operator dashboard one-line surface)" {
+    # Sister to brain-wide module.toml-required-field INVARIANTs
+    # (name, version, category, install_paths, provides,
+    # depends_on, conflicts). The summary field carries one-line
+    # operator-facing context surfaced on the dashboard module-
+    # inventory view + the package metadata. Without it,
+    # operators see a bare module name with no context on the
+    # module's role — degrading the operator-observability
+    # contract. Locks summary-surface contract on the
+    # foundational detect-host module.
+    grep -qE '^summary[[:space:]]*=[[:space:]]*".+"' "${MODULE_DIR}/module.toml"
+}
