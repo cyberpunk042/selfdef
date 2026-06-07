@@ -305,3 +305,18 @@ TOMLEOF
         grep -q "blacklist ${m}" "${MODPROBE_FILE}"
     done
 }
+
+@test "INVARIANT (drop-in is chmod 0644 — system-config convention)" {
+    # Sister to many other installer module's chmod 0644 INVARIANT
+    # across the brain. The modprobe drop-in (e.g. 50-selfdef-
+    # rare-fs.conf) lives in /etc/modprobe.d/ and is parsed by
+    # modprobe at module-autoload time + by initramfs hooks.
+    # Must be world-readable (initramfs scripts run as varying
+    # uids during early boot) and root-write-only — any other
+    # perm would let an attacker rewrite the blacklist to allow
+    # the rare FS drivers, re-exposing the kernel-CVE surface.
+    write_config "baseline"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    [ "$(stat -c '%a' "${MODPROBE_FILE}")" = "644" ]
+}
