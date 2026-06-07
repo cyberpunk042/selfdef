@@ -353,3 +353,19 @@ TOMLEOF
     count=$(printf '%s\n' "${output}" | grep -cE '"module":"at-disable"')
     [ "${count}" = "1" ]
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on at-disable surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The at-disable installer MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the at-service neutralization status alert.
+    # Locks parser contract on the at-disable installer JSON
+    # surface (consistency-with-watchdog-family discipline).
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    bad=$(printf '%s\n' "${output}" | grep -oE '"severity":"[^"]+"' | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
