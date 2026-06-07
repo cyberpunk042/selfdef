@@ -358,3 +358,20 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '/boot:nosuid'
     cap | grep -qE '"severity":"(warn|alert)"'
 }
+
+@test "INVARIANT (/var/log + nodev: missing nodev on /var/log surfaces in sample — audit-log device-creation defense)" {
+    # Sister to /tmp+nosuid, /var/tmp+nosuid, /dev/shm+noexec,
+    # /boot+nosuid axes already locked. /var/log is the audit-
+    # trail directory — anti-tampering policy says it should be
+    # nodev (no device-node creation; an attacker who can create
+    # a character/block device in /var/log might use mknod c
+    # /dev/sda to plant a raw block-device tap on the underlying
+    # disk). Lock the axis-symmetry on /var/log: missing nodev
+    # surfaces in sample so operator dashboard routes triage to
+    # the audit-log integrity surface.
+    mk_findmnt
+    write_fixture $'/var/log\tnosuid,noexec,relatime'    # missing nodev only
+    run_wd
+    cap | grep -q '/var/log:nodev'
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
