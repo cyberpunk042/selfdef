@@ -349,3 +349,23 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: ssh-client-config-watchdog NEVER deletes config entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # ssh-client-config-watchdog DETECTS T1556 Modify
+    # Authentication Process / T1574 Hijack Execution Flow via
+    # ssh client-config tampering but MUST NEVER emit sed/awk/
+    # rm commands to auto-clean the suspicious directive. The
+    # detected ProxyCommand/LocalCommand may be operator-
+    # legitimate (corp bastion setup, dev tunneling tool) —
+    # silent auto-delete would destroy operator baseline state.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the ssh-client-config surveillance substrate.
+    printf 'Host bastion\n    ProxyCommand /tmp/.evil %%h %%p\n' > "${CONF}"
+    run_wd
+    [ -f "${CONF}" ]
+    grep -q 'ProxyCommand' "${CONF}"
+    ! grep -qE 'sed[[:space:]]+-i.*/d' "${WD}"
+    ! grep -qE 'find[[:space:]].*-delete' "${WD}"
+}
