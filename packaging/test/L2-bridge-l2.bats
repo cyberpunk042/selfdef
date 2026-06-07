@@ -298,3 +298,18 @@ assert 'install' in data, 'install missing'
     [ -f "${INSTALL_DIR}/lib.sh" ]
     grep -qE 'module-lib\.sh|SELFDEF_MODULE_LIB' "${INSTALL_DIR}/lib.sh"
 }
+
+@test "INVARIANT (module.toml depends_on field is a TOML list — anti-string-malformation contract)" {
+    # Sister to brain-wide module.toml manifest-completeness
+    # INVARIANT family. Locks list-vs-string discipline on the
+    # depends_on field of the bridge-l2 substrate.
+    mtoml="${MODULE_DIR}/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('depends_on', [])
+assert isinstance(v, list), f'depends_on must be list, got {type(v).__name__}'
+"
+}

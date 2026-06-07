@@ -354,3 +354,18 @@ teardown_real_run() {
     # locked).
     grep -qE '^memory_gib_min[[:space:]]*=[[:space:]]*[0-9]+' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (module.toml depends_on field is a TOML list — anti-string-malformation contract)" {
+    # Sister to brain-wide module.toml manifest-completeness
+    # INVARIANT family. Locks list-vs-string discipline on the
+    # depends_on field of the hardware-tune-cache substrate.
+    mtoml="${MODULE_DIR}/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('depends_on', [])
+assert isinstance(v, list), f'depends_on must be list, got {type(v).__name__}'
+"
+}
