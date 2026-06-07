@@ -372,3 +372,17 @@ setup() {
     # discipline on the module-lib substrate.
     type -t selfdef_injection_patterns | grep -q '^function$'
 }
+
+@test "INVARIANT (lib helpers respect DRY_RUN env var — anti-side-effect contract in test/CI mode)" {
+    # Sister to brain-wide DRY_RUN-discipline INVARIANT family.
+    # The module-lib's run() helper MUST honor DRY_RUN=1 by
+    # logging the command-that-would-run rather than executing
+    # it. Watchdog/installer scripts depend on this so CI test
+    # runs don't actually mutate the host. A regression that
+    # bypassed DRY_RUN in run() would let CI runs write into
+    # /etc, breaking hermetic test isolation. Locks DRY_RUN
+    # discipline on the module-lib run() substrate.
+    grep -qE 'DRY_RUN' "${LIB}"
+    # Also verify run() function body actually checks DRY_RUN:
+    awk '/^run\(\)/,/^}/' "${LIB}" | grep -qE 'DRY_RUN'
+}
