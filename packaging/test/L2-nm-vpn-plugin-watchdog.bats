@@ -306,3 +306,22 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-nm-vpn-plugin -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (severity bounded vocabulary {ok,warn,alert} — operator dashboard parser contract on nm-vpn-plugin surface)" {
+    # Sister to brain-wide severity-bounded-vocabulary INVARIANTs.
+    # The nm-vpn-plugin-watchdog MUST only emit severity values
+    # from the closed set {ok,warn,alert} — never custom values
+    # (critical, error, fatal, notice, info). Operator dashboard
+    # parsers branch on the literal severity string; an out-of-
+    # set value silently falls through routing and the operator
+    # never sees the T1574 NetworkManager VPN-plugin Hijack
+    # Execution Flow alert. Locks parser contract on the
+    # NM VPN-plugin descriptor detection surface.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[libnm]\nplugin=/usr/lib/NetworkManager/libnm-vpn-plugin-openvpn.so\n' > "${NAME}"
+    run_wd                                              # ok / baseline
+    printf '[libnm]\nplugin=/tmp/.evil-nm-plugin.so\n' > "${NAME}"
+    run_wd                                              # alert path
+    bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
+    [ -z "${bad}" ]
+}
