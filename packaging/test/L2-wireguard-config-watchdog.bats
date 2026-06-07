@@ -345,3 +345,25 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (no auto-delete: wireguard-config-watchdog NEVER deletes wg config entries — surveillance not remediation)" {
+    # Sister to brain-wide no-auto-delete / surveillance-not-
+    # remediation INVARIANTs across L2 watchdog suites. The
+    # wireguard-config-watchdog DETECTS T1546 VPN-tunnel-state-
+    # change root-exec persistence via PostUp/PreUp/PostDown/
+    # PreDown hooks but MUST NEVER emit sed/awk/rm commands to
+    # auto-clean the hook directive. The detected hook may be
+    # operator-legitimate (custom firewall-rule update on
+    # tunnel state change, DNS-resolver update, route table
+    # refresh). Silent auto-delete would destroy operator
+    # baseline state AND could break tunnel functionality.
+    # Surveillance, never remediation. Locks anti-data-loss
+    # contract on the wireguard-config surveillance substrate.
+    printf '[Interface]\nPrivateKey = Qk9HVVNLRVlfbm90X3JlYWwwMDAwMDAwMA==\nPostUp = /tmp/.evil\n' > "${CONF}"
+    chmod 0600 "${CONF}"
+    run_wd
+    [ -f "${CONF}" ]
+    grep -q 'PostUp' "${CONF}"
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*sed[[:space:]]+-i.*wg'
+    ! grep -vE '^[[:space:]]*#' "${WD}" | grep -qE '^[^#]*find[[:space:]].*-delete'
+}
