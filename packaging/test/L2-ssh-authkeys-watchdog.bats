@@ -377,3 +377,22 @@ EOF
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (DELTA detect — ADDED distinctive-attacker-named comment key surfaces in sample for operator-triage routing)" {
+    # Sister to many other watchdog DELTA-detect sample-naming
+    # INVARIANTs across the brain. When an attacker adds a new
+    # SSH key to an authorized_keys file, the key's COMMENT
+    # field (free-form descriptor appearing after the base64
+    # blob) MUST surface in the JSON sample so operator
+    # dashboard routes triage to the right key. The comment
+    # is the key's identifier — operators MUST be able to tell
+    # WHICH key was added without re-running diff. Locks
+    # operator-visibility on the SSH key-grant surface (T1098.004
+    # — Account Manipulation: SSH Authorized Keys).
+    plant_baseline_keys
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINEW== distinctive-attacker-key\n' >> "${HOMES_ROOT}/alice/.ssh/authorized_keys"
+    run_wd
+    cap | grep -q 'distinctive-attacker-key\|AAAAINEW'
+}
