@@ -281,3 +281,20 @@ run_wd() {
     run_wd
     grep -qE 'fail_interval\s*=' "${FAILLOCK_CONF}"
 }
+
+@test "INVARIANT (faillock.conf carries unlock_time directive — the auto-unlock-after-window for locked accounts)" {
+    # Sister to fail_interval INVARIANT just locked. unlock_time
+    # is the auto-unlock window after which a locked account
+    # becomes usable again (without operator manual intervention).
+    # Without it, account locks become PERMANENT until operator
+    # manually faillock --user X --reset — defeats usability for
+    # legitimate users who simply mistyped. Lock that BOTH
+    # profiles carry the directive (lenient may have longer
+    # unlock_time than strict, but BOTH must specify one).
+    write_config "lenient"
+    run_wd
+    grep -qE 'unlock_time\s*=' "${FAILLOCK_CONF}"
+    write_config "strict"
+    run_wd
+    grep -qE 'unlock_time\s*=' "${FAILLOCK_CONF}"
+}
