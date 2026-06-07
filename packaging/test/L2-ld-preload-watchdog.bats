@@ -236,3 +236,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (LD_PRELOAD under /home → alert): user-writable hijack axis on per-process dlopen-injection surface" {
+    # Sister to the /tmp + /var/tmp + /dev/shm writable-root axes
+    # already locked. /home is the user-writable surface — a non-
+    # root attacker can drop a malicious .so into their home and
+    # have it dlopen()'d into EVERY process they invoke (or
+    # globally if the line is in /etc/ld.so.preload). Locks axis-
+    # symmetry across the writable-root family on the LD_PRELOAD
+    # surface (T1574.006 — Dynamic Linker Hijacking).
+    printf '/home/user/.evil.so\n' > "${PRELOAD}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
