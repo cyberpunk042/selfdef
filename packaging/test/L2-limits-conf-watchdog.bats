@@ -346,3 +346,24 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-limits-conf -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (DELTA detect — distinctive-attacker drop-in surfaces in sample)" {
+    # Sister to brain-wide DELTA-detect sample-naming INVARIANTs.
+    LIMITSD3="${TMP}/limits.d.delta"; mkdir -p "${LIMITSD3}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        SELFDEF_LIMITS_D="${LIMITSD3}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '* hard core unlimited\n' > "${LIMITSD3}/99-distinctive-attacker-limits.conf"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        SELFDEF_LIMITS_D="${LIMITSD3}" \
+        bash "${WD}"
+    cap | grep -qE 'distinctive-attacker-limits|"severity":"(alert|warn)"'
+}
