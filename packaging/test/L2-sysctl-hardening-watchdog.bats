@@ -227,3 +227,43 @@ seed_benign() {
     FILES_V="${CONF} ${CONF2}" run_wd
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (dmesg_restrict weakening: kernel.dmesg_restrict=0 → alert — kernel-log info disclosure axis)" {
+    # dmesg_restrict=1 hides kernel ring buffer from unprivileged
+    # users. Setting to 0 exposes kernel pointers + driver state
+    # (T1592 reconnaissance). Sister axis to kptr_restrict.
+    seed_benign
+    run_wd
+    printf 'kernel.dmesg_restrict = 0\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (sample names offending sysctl key in JSON — operator triage routing)" {
+    # When weakening alert fires, sample MUST surface the specific
+    # sysctl key name. Sister contract: many other watchdogs'
+    # sample-naming pattern.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Use a distinctive weakening for forensics trail.
+    printf 'kernel.randomize_va_space = 0\nfs.suid_dumpable = 1\n' > "${CONF}"
+    run_wd
+    # Both weakened keys surface in sample for forensics.
+    cap | grep -qE 'randomize_va_space|suid_dumpable'
+}
+
+@test "INVARIANT (severity precedence: weakened + benign-change in same scan → alert wins over warn)" {
+    # Sister to other watchdogs' severity precedence INVARIANTs.
+    # When a weakening AND a benign change coexist in same scan,
+    # alert (weakening) wins over warn (benign change).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Both weakening AND benign change.
+    printf 'kernel.randomize_va_space = 0\nkernel.kptr_restrict = 2\nkernel.yama.ptrace_scope = 1\nnet.core.somaxconn = 4096\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"sysctl_hardening_weakened"'
+    cap | grep -q '"severity":"alert"'
+}
