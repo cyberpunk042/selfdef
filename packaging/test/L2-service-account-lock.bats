@@ -351,3 +351,28 @@ TOMLEOF
     ! grep -q 'chsh.*root' "${CHSH_LOG}"
     ! grep -q 'passwd -l root' "${PASSWD_LOG}"
 }
+
+@test "INVARIANT (interactive-shell detection covers zsh/dash/ksh — not bash-only axis)" {
+    # Sister to many other watchdog's shell-variant coverage
+    # INVARIANTs across the brain. Attacker may set a non-bash
+    # interactive shell (zsh/dash/ksh/fish) on a non-reserved
+    # system account to dodge a bash-only detector. The neutralize
+    # gate must fire on ANY interactive shell, not just /bin/bash
+    # or /bin/sh. Locks the multi-shell axis on the service-account
+    # neutralization substrate.
+    cat > "${PASSWD_FILE}" <<'EOF'
+root:x:0:0:root:/root:/bin/bash
+zsh-user:x:40:40:zsh-svc:/var/svc:/bin/zsh
+dash-user:x:41:41:dash-svc:/var/svc:/bin/dash
+ksh-user:x:42:42:ksh-svc:/var/svc:/bin/ksh
+alice:x:1000:1000:Alice,,,:/home/alice:/bin/bash
+EOF
+    write_config "enforce"
+    run_wd
+    grep -qE 'chsh.*-s.*nologin.*zsh-user' "${CHSH_LOG}"
+    grep -qE 'chsh.*-s.*nologin.*dash-user' "${CHSH_LOG}"
+    grep -qE 'chsh.*-s.*nologin.*ksh-user' "${CHSH_LOG}"
+    grep -q 'passwd -l zsh-user' "${PASSWD_LOG}"
+    grep -q 'passwd -l dash-user' "${PASSWD_LOG}"
+    grep -q 'passwd -l ksh-user' "${PASSWD_LOG}"
+}
