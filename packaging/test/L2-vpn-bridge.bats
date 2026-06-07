@@ -250,6 +250,6 @@ with open('${MODULE_DIR}/profiles/${p}.toml', 'rb') as f:
     # substrate.
     for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
         [ -f "${f}" ] || continue
-        head -20 "${f}" | grep -qE 'set[[:space:]]+-euo[[:space:]]+pipefail'
+        grep -qE '^set[[:space:]]+-euo[[:space:]]+pipefail' "${f}"
     done
 }
