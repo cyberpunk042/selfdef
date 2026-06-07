@@ -359,3 +359,17 @@ teardown_real_run() {
         ! grep -qE '(apt-get|dpkg|dnf|rpm|yum|pip|pip3)[[:space:]]+(remove|purge|uninstall)[[:space:]]+(vllm|cuda|python3?)' "${f}"
     done
 }
+
+@test "INVARIANT (no auto-delete: tensor-parallel-inference installer NEVER deletes operator-pre-existing configs in target dir — surveillance not destruction)" {
+    # Sister to brain-wide no-auto-delete INVARIANT family.
+    # tensor-parallel-inference writes its own env/config files;
+    # it MUST NEVER rm/find-delete an operator's pre-existing
+    # /etc/selfdef/inference or vllm/cuda config files not owned
+    # by THIS module. Locks no-auto-delete on the tensor-parallel-
+    # inference installer substrate.
+    for f in "${INSTALL_DIR}/apply.sh" "${INSTALL_DIR}/check.sh" "${INSTALL_DIR}/uninstall.sh"; do
+        [ -f "${f}" ] || continue
+        ! grep -qE '(^|[^a-z])rm[[:space:]]+-rf?[[:space:]]+/etc/selfdef' "${f}"
+        ! grep -qE 'find[[:space:]]+/etc/selfdef.*-delete' "${f}"
+    done
+}
