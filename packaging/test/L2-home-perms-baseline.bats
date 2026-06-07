@@ -258,3 +258,41 @@ run_wd() {
     [ "$(stat -c '%a' "${HOMES}/already")" = "700" ]
     [ "$(stat -c '%a' "${HOMES}/loose")" = "750" ]
 }
+
+@test "INVARIANT (world-writable 0777 home: tightened to profile target — the most-permissive case)" {
+    # If an operator has accidentally set a home to 0777 (world-
+    # writable), the watchdog must tighten it to the profile target.
+    # Sister to existing 0755 tightening test but for the most-
+    # permissive starting point.
+    write_config "group"
+    mk_home alice 1001 0777
+    run_wd
+    [ "$(stat -c '%a' "${HOMES}/alice")" = "750" ]
+}
+
+@test "INVARIANT (uid=999 boundary: uid 999 is treated as SYSTEM not user — uid<1000 skip boundary)" {
+    # Sister axis to existing uid=1000 boundary test. uid=999 is
+    # the LAST system uid; should be skipped.
+    write_config "group"
+    mk_home boundary999 999 0755
+    run_wd
+    # uid=999 < 1000 → skipped, perms unchanged.
+    [ "$(stat -c '%a' "${HOMES}/boundary999")" = "755" ]
+}
+
+@test "INVARIANT (single-shot backup: re-apply does NOT overwrite the original-perm backup file)" {
+    # Sister to other modules' single-shot backup INVARIANT. The
+    # backup carries the operator's pre-apply state — re-applies
+    # must NOT overwrite (otherwise the backup becomes a snapshot
+    # of already-modified state, losing original).
+    write_config "group"
+    mk_home alice 1001 0755
+    run_wd
+    [ -f "${BACKUP_DIR}/home-perms.bak" ]
+    backup_mtime_before="$(stat -c '%Y' "${BACKUP_DIR}/home-perms.bak")"
+    sleep 1
+    run_wd
+    backup_mtime_after="$(stat -c '%Y' "${BACKUP_DIR}/home-perms.bak")"
+    # mtime preserved = no re-backup = original preserved.
+    [ "${backup_mtime_before}" = "${backup_mtime_after}" ]
+}
