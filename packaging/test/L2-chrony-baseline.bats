@@ -338,3 +338,12 @@ run_wd() {
     [ ! -f "${CHRONY_DROPIN_DIR}/50-selfdef.conf" ]
     ! grep -qE 'systemctl (restart|reload) chronyd' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (drop-in is chmod 0644 — system-config convention)" {
+    # Sister to brain-wide chmod 0644 INVARIANTs.
+    write_config "pool"
+    run_wd
+    drop_in="${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    [ -f "${drop_in}" ]
+    [ "$(stat -c '%a' "${drop_in}")" = "644" ]
+}
