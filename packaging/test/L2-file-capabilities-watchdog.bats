@@ -409,3 +409,19 @@ mk_cap() { printf '#!/bin/sh\n' > "${ROOT}/$1"; chmod 0755 "${ROOT}/$1"; setcap 
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (cap_dac_override dangerous-cap detect — DAC-bypass axis on file-cap surface — T1548)" {
+    # Sister to cap_sys_module / cap_chown / cap_sys_ptrace /
+    # cap_sys_admin dangerous-cap INVARIANTs on the file-cap
+    # surface, and cap_dac_override INVARIANT in capability-
+    # conf-watchdog. cap_dac_override bypasses ALL file
+    # permission checks; planted on a non-root binary it lets
+    # the binary read/write any file regardless of mode/owner.
+    # T1548 Abuse Elevation Control Mechanism via DAC bypass.
+    mk_cap baseline cap_net_raw+ep
+    run_wd
+    mk_cap dac_bypass_binary cap_dac_override+ep
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
