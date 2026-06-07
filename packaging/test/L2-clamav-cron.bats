@@ -341,3 +341,16 @@ Scanned files: 1"
     PROFILE=report run_wd
     cap | grep -q '"profile":"report"'
 }
+
+@test "INVARIANT (severity field is bounded vocabulary {ok,warn,alert,high} — operator dashboard severity axis lock)" {
+    # Sister to brain-wide bounded-vocabulary INVARIANTs (lynis-
+    # cron, rkhunter-cron, time-skew-watchdog). severity field
+    # on operator dashboard color-coded axis; bounded set locked.
+    mk_clam 0 "no warnings"
+    run_wd
+    sev=$(cap | grep -oE '"severity":"[^"]+"' | head -1)
+    case "${sev}" in
+        '"severity":"ok"'|'"severity":"warn"'|'"severity":"alert"'|'"severity":"high"') : ;;
+        *) fail "severity '${sev}' outside bounded vocabulary {ok,warn,alert,high}" ;;
+    esac
+}
