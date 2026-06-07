@@ -289,3 +289,19 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"request_key_intact"'
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (callout under /home — user-writable hijack on kernel-keyring upcall surface)" {
+    # Sister to many other watchdog's /home user-writable
+    # INVARIANT across the brain. /home is the user-writable
+    # surface — an attacker with regular user account can drop
+    # a malicious callout binary into their home and have the
+    # kernel invoke it AS ROOT every time the keyring requests
+    # an upcall. Locks axis-symmetry on /home for the request-
+    # key callout surface (T1546 — Event Triggered Execution
+    # via kernel-keyring upcall; the kernel calls into the
+    # configured callout binary AS ROOT to resolve key
+    # requests).
+    printf 'create dns_resolver * * /home/user/.evil-callout\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
