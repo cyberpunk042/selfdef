@@ -315,3 +315,21 @@ EOF
     first_nonblank="$(grep -E -m1 -v '^[[:space:]]*$' "${RULES_D}/99-selfdef-immutable.rules")"
     [[ "${first_nonblank}" == *"selfdef"* ]]
 }
+
+@test "INVARIANT (DRY_RUN side-effect-freedom: NO rule file written AND NO augenrules --load fired)" {
+    # Sister to every other installer module's DRY_RUN INVARIANT
+    # across the brain (acct-baseline / aslr-baseline / apport-
+    # disable / audit-rules / many others). Operator's exploratory
+    # --dry-run MUST preview without writing /etc/audit/rules.d/
+    # 99-selfdef-immutable.rules AND without firing augenrules
+    # --load. The immutable lock (-e 2) is irreversible without
+    # reboot once committed — a silent dry-run that committed
+    # would lock the operator out of the audit subsystem until
+    # reboot. Locks the dry-run-preserves-state contract on the
+    # auditd-immutable-lock substrate.
+    write_config "enforce" "true"
+    : > "${AUGEN_LOG}"
+    DRY_RUN=1 run_wd
+    [ ! -f "${RULES_D}/99-selfdef-immutable.rules" ]
+    ! grep -qE 'augenrules.*--load' "${AUGEN_LOG}"
+}
