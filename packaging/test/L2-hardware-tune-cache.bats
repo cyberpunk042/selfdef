@@ -336,3 +336,21 @@ teardown_real_run() {
     # hardware-tune-cache substrate.
     grep -qE '^phase[[:space:]]*=[[:space:]]*"pre"' "${MODULE_DIR}/module.toml"
 }
+
+@test "INVARIANT (module.toml [requires_hardware].memory_gib_min present + numeric — RAM-gating hardware-tier discrimination)" {
+    # Sister to brain-wide module.toml [requires_hardware]
+    # SD-R14 contract family. hardware-tune-cache's tuned env
+    # file only earns its keep on workstation-class hosts (32+
+    # GiB RAM where march=native + AVX-512 VNNI actually
+    # accelerate downstream cargo/cc builds). The memory_gib_min
+    # gate prevents the resolver from installing tune-cache on
+    # tiny CI/VM hosts where the fallback selfdef-tune.sh path
+    # already returns the right tune (and the cache file would
+    # be wrong because the host's memory profile is different).
+    # A regression dropping memory_gib_min would surface as
+    # spurious AVX-512 flags landing in cargo builds on 8-GiB
+    # CI runners. Locks RAM-gating discipline on the hardware-
+    # tune-cache substrate (sister to avx512_vnni gate already
+    # locked).
+    grep -qE '^memory_gib_min[[:space:]]*=[[:space:]]*[0-9]+' "${MODULE_DIR}/module.toml"
+}
