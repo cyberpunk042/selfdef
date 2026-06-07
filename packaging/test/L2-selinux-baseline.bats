@@ -431,3 +431,18 @@ EOF
     run_wd
     cap | grep -qE '"status":"ok"' || cap | grep -qE 'profile=permissive' || grep -qE '^SELINUX=permissive' "${SELINUX_CONFIG}"
 }
+
+@test "INVARIANT (single emit_status JSON record per run — operator dashboard single-source-of-truth)" {
+    # Sister to brain-wide single-emit_status / single-MAIN-
+    # logger INVARIANTs (SDD-062 consumer dispatch contract).
+    # Single-record discipline on SELinux baseline installer
+    # surface across audit + apply + emit phases.
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=enforcing
+SELINUXTYPE=targeted
+EOF
+    write_config "enforcing"
+    output="$(run_wd 2>&1)"
+    count=$(printf '%s\n' "${output}" | grep -cE '"module":"selinux-baseline"')
+    [ "${count}" = "1" ]
+}
