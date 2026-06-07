@@ -451,3 +451,20 @@ EOF
     grep -qE 'SELFDEF_FRICTION_AUDIT_RING_DIR' "${SCRIPT}"
     grep -qE 'SELFDEF_FRICTION_AUDIT_HOSTNAME' "${SCRIPT}"
 }
+
+@test "INVARIANT (script declares 4 architectural gates — PCIe + ZFS + Memory + Audit per sain-01 §5)" {
+    # Sister to brain-wide architectural-gate INVARIANT family.
+    # sain-01 §5 prescribes exactly 4 friction-audit gates:
+    # PCIe (lane count), ZFS (pool status), Memory (sticks
+    # count), Audit (event-log readback). A regression dropping
+    # a gate would silently miss a class of friction failures.
+    # The script's emit_ocsf gate parameter MUST be one of
+    # these 4 strings. Locks the 4-gate architectural enumeration
+    # on the friction-audit substrate.
+    # emit_ocsf "<gate>" and emit_ring "<gate>" must reference
+    # all 4 canonical gate names as quoted strings.
+    grep -qE 'emit_ocsf.*"pcie"|emit_ring.*"pcie"' "${SCRIPT}"
+    grep -qE 'emit_ocsf.*"zfs"|emit_ring.*"zfs"' "${SCRIPT}"
+    grep -qE 'emit_ocsf.*"memory"|emit_ring.*"memory"' "${SCRIPT}"
+    grep -qE 'emit_ocsf.*"audit"|emit_ring.*"audit"' "${SCRIPT}"
+}
