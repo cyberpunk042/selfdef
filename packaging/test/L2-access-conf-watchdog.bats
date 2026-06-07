@@ -399,3 +399,22 @@ seed_benign() {
     bad=$(grep -oE '"severity":"[^"]+"' "${SELFDEF_TEST_LOGCAP}" | grep -vE '"severity":"(ok|warn|alert)"' || true)
     [ -z "${bad}" ]
 }
+
+@test "INVARIANT (baseline file is chmod 0600 — confidentiality of access-conf inventory)" {
+    # Sister to brain-wide baseline-chmod-0600 confidentiality
+    # INVARIANTs across L2 surveillance suites. The access-conf-
+    # watchdog baseline TSV contains the inventory of PAM
+    # access.conf user-grant tuples which discloses operator-
+    # allowed login-paths to any user able to read the file.
+    # Mode 0600 (root-only) is the canonical confidentiality
+    # contract — mode 0644 would expose the login-grant
+    # whitelist enabling attacker to enumerate which user
+    # identities are trusted for credential-grab. Locks file-
+    # mode confidentiality on the access-conf surveillance
+    # substrate.
+    seed_benign
+    run_wd
+    [ -f "${BASELINE}" ]
+    mode="$(stat -c '%a' "${BASELINE}")"
+    [ "${mode}" = "600" ] || [ "${mode}" = "640" ]
+}
