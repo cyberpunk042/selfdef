@@ -846,3 +846,11 @@ assert bom not in mid, 'mid-file BOM present'
     h2=$(sha256sum "${F}" | cut -d' ' -f1)
     [ "${h1}" = "${h2}" ] && [ "${#h1}" = "64" ]
 }
+
+@test "INVARIANT (guardian.service substrate file does not contain U+FEFF byte-order-mark anywhere — POSIX-no-BOM-anywhere-canonical 147)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
+    python3 -c "
+data = open('${F}', 'r', encoding='utf-8', errors='replace').read()
+assert '\ufeff' not in data, 'U+FEFF BOM present'
+"
+}
