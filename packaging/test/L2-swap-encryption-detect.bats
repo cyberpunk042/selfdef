@@ -1386,3 +1386,16 @@ a = (data.get('profiles') or {}).get('available') or []
 assert all(isinstance(x, str) for x in a), f'profiles.available items must all be strings, got {[type(x).__name__ for x in a]!r}'
 "
 }
+
+@test "INVARIANT (swap-encryption-detect module.toml requires list elements are inline-tables with kind+value keys (or empty) — TOML-requires-elements-shape-canonical 128)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/swap-encryption-detect/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('requires') or []
+for el in r:
+    assert isinstance(el, dict), f'requires element must be inline-table, got {type(el).__name__}'
+    assert 'kind' in el and 'value' in el, f'requires element must have kind+value keys, got {sorted(el.keys())!r}'
+"
+}
