@@ -192,6 +192,21 @@ impl SqliteStore {
             Some(s) => Ok(Some(serde_json::from_str(&s)?)),
         }
     }
+
+    /// Delete every event whose `time_ns` is strictly older than
+    /// `cutoff_ns` (an absolute unix-nanoseconds instant). Returns the
+    /// number of rows deleted. This is the enforcement primitive behind
+    /// `StoreConfig::hot_retention_days` (SDD-081) — without it the hot
+    /// store grows unbounded and the retention knob is dead config.
+    pub async fn prune_older_than(&self, cutoff_ns: i64) -> Result<u64, StoreError> {
+        let conn = Arc::clone(&self.conn);
+        let deleted = tokio::task::spawn_blocking(move || -> Result<usize, rusqlite::Error> {
+            let conn = conn.lock().unwrap_or_else(|p| p.into_inner());
+            conn.execute("DELETE FROM events WHERE time_ns < ?1", params![cutoff_ns])
+        })
+        .await??;
+        Ok(deleted as u64)
+    }
 }
 
 // ---------------------------------------------------------------- tests
@@ -240,6 +255,36 @@ mod tests {
         // Recent ordering: highest sequence first (newest first).
         assert_eq!(recent[0].metadata.sequence, 4);
         assert_eq!(recent[4].metadata.sequence, 0);
+    }
+
+    #[tokio::test]
+    async fn prune_older_than_deletes_only_events_before_cutoff() {
+        use time::{Duration, OffsetDateTime};
+        let dir = tempdir().unwrap();
+        let store = SqliteStore::open(dir.path().join("state.sqlite")).unwrap();
+
+        let now = OffsetDateTime::now_utc();
+        // 3 old events (40 days ago) + 2 fresh events (1 hour ago).
+        for i in 0..3 {
+            let mut e = make_event(i, SeverityId::Low);
+            e.time_dt = now - Duration::days(40);
+            store.insert(&e).await.unwrap();
+        }
+        for i in 3..5 {
+            let mut e = make_event(i, SeverityId::Low);
+            e.time_dt = now - Duration::hours(1);
+            store.insert(&e).await.unwrap();
+        }
+        assert_eq!(store.count().await.unwrap(), 5);
+
+        // Cutoff at 30 days ago: the 3 old events are pruned, 2 fresh kept.
+        let cutoff_ns = (now - Duration::days(30)).unix_timestamp_nanos() as i64;
+        let deleted = store.prune_older_than(cutoff_ns).await.unwrap();
+        assert_eq!(deleted, 3);
+        assert_eq!(store.count().await.unwrap(), 2);
+
+        // Idempotent: a second prune at the same cutoff deletes nothing.
+        assert_eq!(store.prune_older_than(cutoff_ns).await.unwrap(), 0);
     }
 
     #[tokio::test]

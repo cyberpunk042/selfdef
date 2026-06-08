@@ -10,6 +10,7 @@ mod cli_mirror_publisher;
 mod dispatcher_adapter;
 mod hardware_probe_loop;
 mod mirror_export_loop;
+mod retention_sweep_loop;
 mod rules_collector_loop;
 
 use std::path::PathBuf;
@@ -385,6 +386,18 @@ async fn main() -> Result<()> {
         let sd = shutdown.clone();
         let s = Arc::clone(&store);
         tokio::spawn(async move { run_store_sink(s, store_sub, sd).await })
+    };
+
+    // SD-R retention sweep (SDD-081): enforce StoreConfig::hot_retention_days.
+    // Without it the knob is dead config and the hot store grows unbounded
+    // (F-2026-016). Disabled when hot_retention_days==0 (operator opt-out).
+    let _retention_task = {
+        let s = Arc::clone(&store);
+        let sd = shutdown.clone();
+        let days = cfg.store.hot_retention_days;
+        tokio::spawn(
+            async move { retention_sweep_loop::run_retention_sweep_loop(s, days, sd).await },
+        )
     };
 
     // SD-R22: periodic hardware probe + thermal-event emission loop.

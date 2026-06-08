@@ -56,7 +56,10 @@ max_msgs = -1                               # unlimited
 # Hot store path. Daemon must have rw on this directory.
 hot_path = "/var/lib/selfdef/state.sqlite"
 
-# Retention in hot store (days). After this, events age out to warm.
+# Retention in hot store (days). Enforced by the daemon's retention
+# sweep (SDD-081): an initial sweep at startup + every 6h deletes events
+# older than this horizon and logs the pruned count. Set to 0 to DISABLE
+# retention (keep events forever).
 hot_retention_days = 30
 
 # Warm store directory (DuckDB + Parquet).
