@@ -1075,3 +1075,10 @@ assert '\\x00' not in data and '\\u0000' not in data, 'literal NUL-escape sequen
     F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
     [ "$(wc -c < "${F}")" -gt 0 ]
 }
+
+@test "INVARIANT (script substrate file path does not contain double-slash // sequences — POSIX-path-no-double-slash-canonical 141)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    case "${F}" in *//*) return 1 ;; *) ;; esac
+    abs=$(readlink -f "${F}")
+    case "${abs}" in *//*) return 1 ;; *) ;; esac
+}

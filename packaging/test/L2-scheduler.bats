@@ -970,3 +970,10 @@ assert '\\x00' not in data and '\\u0000' not in data, 'literal NUL-escape sequen
     F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
     [ "$(wc -c < "${F}")" -gt 0 ]
 }
+
+@test "INVARIANT (scheduler.service substrate file path does not contain double-slash // sequences — POSIX-path-no-double-slash-canonical 141)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    case "${F}" in *//*) return 1 ;; *) ;; esac
+    abs=$(readlink -f "${F}")
+    case "${abs}" in *//*) return 1 ;; *) ;; esac
+}
