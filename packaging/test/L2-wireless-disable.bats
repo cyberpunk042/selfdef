@@ -1180,3 +1180,8 @@ with open('${mtoml}') as fp:
     last_char=$(tail -c 1 "${mtoml}" | od -An -c | tr -d ' ')
     [ "${last_char}" = "\\n" ]
 }
+
+@test "INVARIANT (wireless-disable module.toml does not contain leading tabs — TOML-indentation-canonical 106)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wireless-disable/module.toml"
+    ! grep -qP '^\t' "${mtoml}"
+}

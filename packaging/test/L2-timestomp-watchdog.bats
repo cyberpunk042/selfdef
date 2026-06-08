@@ -1184,3 +1184,8 @@ with open('${mtoml}') as fp:
     last_char=$(tail -c 1 "${mtoml}" | od -An -c | tr -d ' ')
     [ "${last_char}" = "\\n" ]
 }
+
+@test "INVARIANT (timestomp-watchdog module.toml does not contain leading tabs — TOML-indentation-canonical 106)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/timestomp-watchdog/module.toml"
+    ! grep -qP '^\t' "${mtoml}"
+}

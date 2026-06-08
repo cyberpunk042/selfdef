@@ -1208,3 +1208,8 @@ with open('${mtoml}') as fp:
     last_char=$(tail -c 1 "${mtoml}" | od -An -c | tr -d ' ')
     [ "${last_char}" = "\\n" ]
 }
+
+@test "INVARIANT (systemd-generator-watchdog module.toml does not contain leading tabs — TOML-indentation-canonical 106)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/systemd-generator-watchdog/module.toml"
+    ! grep -qP '^\t' "${mtoml}"
+}

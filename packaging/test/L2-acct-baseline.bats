@@ -1205,3 +1205,8 @@ with open('${mtoml}') as fp:
     last_char=$(tail -c 1 "${mtoml}" | od -An -c | tr -d ' ')
     [ "${last_char}" = "\\n" ]
 }
+
+@test "INVARIANT (acct-baseline module.toml does not contain leading tabs — TOML-indentation-canonical 106)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/acct-baseline/module.toml"
+    ! grep -qP '^\t' "${mtoml}"
+}

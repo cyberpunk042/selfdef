@@ -1253,3 +1253,8 @@ with open('${mtoml}') as fp:
     last_char=$(tail -c 1 "${mtoml}" | od -An -c | tr -d ' ')
     [ "${last_char}" = "\\n" ]
 }
+
+@test "INVARIANT (suid-sgid-watchdog module.toml does not contain leading tabs — TOML-indentation-canonical 106)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/suid-sgid-watchdog/module.toml"
+    ! grep -qP '^\t' "${mtoml}"
+}
