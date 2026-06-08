@@ -745,3 +745,6 @@ setup() {
 @test "INVARIANT (lib defines die helper available in setup 91)" {
     declare -F die >/dev/null
 }
+@test "INVARIANT (lib's emit_status is bash function 92)" {
+    type -t emit_status | grep -q '^function$'
+}

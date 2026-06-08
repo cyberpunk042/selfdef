@@ -816,3 +816,10 @@ for k in data['spec']['kprobes']:
     assert k.get('call')
 "
 }
+@test "INVARIANT (YAML spec.kprobes[0].call is sys_execve 92)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert data['spec']['kprobes'][0]['call'] == 'sys_execve'
+"
+}

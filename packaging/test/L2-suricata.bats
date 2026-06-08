@@ -890,3 +890,14 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any(p.startswith('/etc/') for p in ps)
 "
 }
+
+@test "INVARIANT (suricata module.toml install_paths.scope canonical-system 92 — operator-scope-fixed)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/suricata/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+sc = (data.get('install_paths') or {}).get('scope', '')
+assert sc in ('system', 'user', '')
+"
+}

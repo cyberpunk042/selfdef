@@ -787,3 +787,6 @@ EOF
 @test "INVARIANT (script invokes hostname binary OR uses HOSTNAME — host-identification 91)" {
     grep -qE 'hostname|HOSTNAME' "${SCRIPT}"
 }
+@test "INVARIANT (script writes ts_ms in millisecond format from date+%s%N — millisecond-precision 92)" {
+    grep -qE 'ts_ms=.*\$\(date|date \+%s%N' "${SCRIPT}"
+}

@@ -669,3 +669,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service file declares Type= directive — canonical-systemd-type 91)" {
     grep -qE '^Type=' "${SERVICE}"
 }
+@test "INVARIANT (.timer declares OnBootSec OR OnUnitActiveSec — cadence-canonical 92)" {
+    grep -qE '^(OnBootSec|OnUnitActiveSec)=' "${TIMER}"
+}

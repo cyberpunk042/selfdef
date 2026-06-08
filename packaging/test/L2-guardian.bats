@@ -503,3 +503,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service uses RestrictAddressFamilies — network-surface-bound 91)" {
     grep -qE '^RestrictAddressFamilies' "${UNIT}"
 }
+@test "INVARIANT (guardian.service uses LockPersonality directive — anti-personality 92)" {
+    grep -qE '^LockPersonality=true' "${UNIT}"
+}
