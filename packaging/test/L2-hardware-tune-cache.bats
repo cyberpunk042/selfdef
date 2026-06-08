@@ -1222,3 +1222,13 @@ top = [k for k, v in data.items() if not isinstance(v, dict)]
 assert len(top) >= 6, f'expected >=6 top-level keys, got {len(top)}: {top}'
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml name field value equals module dir basename — TOML-name-dir-match-canonical 123)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert data.get('name') == 'hardware-tune-cache', f'name must equal hardware-tune-cache, got {data.get(\"name\")!r}'
+"
+}

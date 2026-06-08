@@ -1003,3 +1003,10 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     g=$(stat -c %G "${F}")
     [ -n "${o}" ] && [ -n "${g}" ]
 }
+
+@test "INVARIANT (YAML file mode group/other permissions exclude setuid/setgid — POSIX-no-setuid-canonical 123)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    perms=$(stat -c %a "${F}")
+    # mode is up to 3 digits; setuid/setgid would make it 4 digits (4xxx, 2xxx, 6xxx)
+    [ ${#perms} -le 3 ]
+}

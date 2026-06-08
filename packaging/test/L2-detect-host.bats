@@ -1067,3 +1067,14 @@ assert ck is None or isinstance(ck, str), f'install.check must be string or abse
     mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
     grep -qE '^\[profiles\]$' "${mtoml}"
 }
+
+@test "INVARIANT (detect-host module.toml [profiles] default field is non-empty string — TOML-profiles-default-canonical 123)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+d = (data.get('profiles') or {}).get('default', '')
+assert isinstance(d, str) and d, f'profiles.default must be non-empty string, got {d!r}'
+"
+}

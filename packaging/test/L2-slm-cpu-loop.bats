@@ -1192,3 +1192,13 @@ top = [k for k, v in data.items() if not isinstance(v, dict)]
 assert len(top) >= 6, f'expected >=6 top-level keys, got {len(top)}: {top}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml name field value equals module dir basename — TOML-name-dir-match-canonical 123)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+assert data.get('name') == 'slm-cpu-loop', f'name must equal slm-cpu-loop, got {data.get(\"name\")!r}'
+"
+}
