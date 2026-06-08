@@ -974,3 +974,8 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
     LC_ALL=C grep -qP "[!-~]" "${F}"
 }
+
+@test "INVARIANT (YAML file has non-zero byte size (file is non-empty) — POSIX-file-empty-floor-canonical 118)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    [ -s "${F}" ]
+}

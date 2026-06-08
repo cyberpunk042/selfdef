@@ -800,3 +800,8 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
     LC_ALL=C grep -qP "[!-~]" "${F}"
 }
+
+@test "INVARIANT (scheduler.service file has non-zero byte size (file is non-empty) — POSIX-file-empty-floor-canonical 118)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    [ -s "${F}" ]
+}

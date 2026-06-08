@@ -863,3 +863,8 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
     LC_ALL=C grep -qP "[!-~]" "${F}"
 }
+
+@test "INVARIANT (lib file has non-zero byte size (file is non-empty) — POSIX-file-empty-floor-canonical 118)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    [ -s "${F}" ]
+}
