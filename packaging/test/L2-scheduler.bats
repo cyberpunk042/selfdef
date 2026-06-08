@@ -670,3 +670,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst creates dirs with -p flag — idempotent-dir-create 87)" {
     grep -qE 'mkdir -p' "${POSTINST}"
 }
+@test "INVARIANT (scheduler unit declares User=root explicitly — Ring-0-elevation 88)" {
+    grep -qE '^User=root' "${UNIT}"
+}

@@ -491,3 +491,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst creates dirs with -p flag — idempotent-dir-create 87)" {
     grep -qE 'mkdir -p' "${POSTINST}"
 }
+@test "INVARIANT (postrm cleans up /var/cache state on purge — operator-cleanup 88)" {
+    grep -qE '/var/cache' "${POSTRM}"
+}

@@ -917,3 +917,14 @@ assert isinstance(data, dict)
 @test "INVARIANT (slm-cpu-loop module.toml has install_paths block 87)" {
     grep -qE '^\[install_paths\]' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
 }
+@test "INVARIANT (slm-cpu-loop module.toml install_paths.paths only absolute 88)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+for p in ps:
+    assert isinstance(p, str) and p.startswith('/'), f'{p!r} not absolute'
+"
+}

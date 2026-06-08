@@ -822,3 +822,6 @@ assert isinstance(data, dict)
 @test "INVARIANT (detect-host module.toml has install_paths block 87)" {
     grep -qE '^\[install_paths\]' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
 }
+@test "INVARIANT (detect-host module.toml install_paths declares /etc/selfdef 88)" {
+    grep -qE '/etc/selfdef' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+}

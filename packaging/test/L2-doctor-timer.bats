@@ -656,3 +656,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service file path under packaging/systemd/ — canonical-package-layout 87)" {
     case "$(readlink -f "${SERVICE}")" in */packaging/systemd/*) ;; *) false ;; esac
 }
+@test "INVARIANT (.service unit declares User=root explicitly — Ring-0-elevation 88)" {
+    grep -qE '^User=root' "${SERVICE}"
+}

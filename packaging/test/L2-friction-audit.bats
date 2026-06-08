@@ -775,3 +775,6 @@ EOF
 @test "INVARIANT (script declares jsonl emission newline-delimited — JSONL-format 87)" {
     grep -qE "printf.*\\\\\\\\n|>>" "${SCRIPT}"
 }
+@test "INVARIANT (script declares ts_ms in emit_ring function body — timestamp-presence 88)" {
+    awk '/^emit_ring\(\)/,/^}/' "${SCRIPT}" | grep -qE 'ts_ms'
+}

@@ -786,3 +786,10 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert data['kind'] == 'TracingPolicy'
 "
 }
+@test "INVARIANT (YAML apiVersion is cilium.io/v1alpha1 — Tetragon-CRD-canonical 88)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert data['apiVersion'] == 'cilium.io/v1alpha1'
+"
+}

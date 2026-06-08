@@ -733,3 +733,6 @@ setup() {
 @test "INVARIANT (lib readable as bash source — source-able-text 87)" {
     bash -n "${LIB}" 2>/dev/null || head -1 "${LIB}" | grep -qE '#'
 }
+@test "INVARIANT (lib's selfdef_injection_patterns is bash function 88)" {
+    type -t selfdef_injection_patterns | grep -q '^function$'
+}
