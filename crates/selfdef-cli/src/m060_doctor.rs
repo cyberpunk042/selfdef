@@ -6,7 +6,7 @@
 //! verifies the **producer** side via filesystem state — no daemon
 //! process required, so it works whether or not `selfdefd` is running.
 //!
-//! Checks (per domain × 6):
+//! Checks (per domain × 8):
 //!   1. Resident store at the canonical `/var/lib/selfdef/<domain>.json`
 //!      (or the `SELFDEF_<DOMAIN>_PATH` env override).
 //!   2. Published mirror file at `<selfdef_mirror_dir>/<domain>.json`
@@ -41,6 +41,13 @@ const DOMAINS: &[Domain] = &[
         published_file: "active-profile.json",
     },
     Domain {
+        id: "D-12",
+        label: "rules",
+        resident_env: "SELFDEF_RULES_PATH",
+        resident_default: "/var/lib/selfdef/rules.json",
+        published_file: "rules.json",
+    },
+    Domain {
         id: "D-13",
         label: "grants",
         resident_env: "SELFDEF_GRANTS_PATH",
@@ -60,6 +67,13 @@ const DOMAINS: &[Domain] = &[
         resident_env: "SELFDEF_SANDBOXES_PATH",
         resident_default: "/var/lib/selfdef/sandboxes.json",
         published_file: "sandboxes.json",
+    },
+    Domain {
+        id: "D-16",
+        label: "audit-chain",
+        resident_env: "SELFDEF_AUDIT_PATH",
+        resident_default: "/var/lib/selfdef/audit.json",
+        published_file: "audit.json",
     },
     Domain {
         id: "D-17",
@@ -389,8 +403,9 @@ pub(crate) fn run(json: bool, config_path: Option<&Path>, textfile: Option<&Path
         println!();
         let present_count = rows.iter().filter(|r| r.2).count();
         let published_count = rows.iter().filter(|r| r.3).count();
+        let total = DOMAINS.len();
         println!(
-            "  summary: {present_count}/6 resident stores present · {published_count}/6 published · {inconsistencies} inconsistencies"
+            "  summary: {present_count}/{total} resident stores present · {published_count}/{total} published · {inconsistencies} inconsistencies"
         );
     }
 
@@ -560,5 +575,63 @@ mod tests {
             assert!(!s.resident_present);
         }
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Pin the full 8-domain M060 cross-repo mirror chain. Future
+    /// silent removal of a domain (e.g., the bug that left D-12
+    /// rules + D-16 audit out of the doctor verb for several releases)
+    /// fails fast here. The IDs must match the M060 wire contract
+    /// the sovereign-os consumer side expects.
+    #[test]
+    fn domains_cover_full_m060_wire_contract() {
+        let ids: Vec<&str> = DOMAINS.iter().map(|d| d.id).collect();
+        let expected = [
+            "D-02", // active-profile
+            "D-12", // rules           (added — was silently missing)
+            "D-13", // grants
+            "D-14", // capability-tokens
+            "D-15", // sandboxes
+            "D-16", // audit-chain     (added — was silently missing)
+            "D-17", // quarantine
+            "D-18", // trust-scores
+        ];
+        assert_eq!(
+            ids, expected,
+            "M060 doctor domain set must match the wire contract \
+             (sovereign-os consumer expects all 8 mirrors). Silent \
+             removal here means the operator's m060-doctor triage \
+             verb will skip a domain; mirror wedge will go unseen."
+        );
+    }
+
+    /// Pin the resident-path defaults so a future rename in a
+    /// registry crate doesn't silently desync the doctor from the
+    /// daemon. The resident store is the source-of-truth the daemon
+    /// publishes from; the doctor inspects the same path.
+    #[test]
+    fn domains_resident_defaults_match_daemon_canonical_paths() {
+        use std::collections::HashMap;
+        let expected: HashMap<&str, &str> = [
+            ("D-02", "/var/lib/selfdef/flex-profile.json"),
+            ("D-12", "/var/lib/selfdef/rules.json"),
+            ("D-13", "/var/lib/selfdef/grants.json"),
+            ("D-14", "/var/lib/selfdef/capability-tokens.json"),
+            ("D-15", "/var/lib/selfdef/sandboxes.json"),
+            ("D-16", "/var/lib/selfdef/audit.json"),
+            ("D-17", "/var/lib/selfdef/quarantine.json"),
+            ("D-18", "/var/lib/selfdef/trust-scores.json"),
+        ]
+        .into_iter()
+        .collect();
+        for d in DOMAINS {
+            let want = expected
+                .get(d.id)
+                .unwrap_or_else(|| panic!("unexpected domain id {}", d.id));
+            assert_eq!(
+                d.resident_default, *want,
+                "{} resident_default drift",
+                d.id
+            );
+        }
     }
 }
