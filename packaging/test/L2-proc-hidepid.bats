@@ -1191,3 +1191,14 @@ with open('${mtoml}') as fp:
     sz=$(wc -c < "${mtoml}")
     [ "${sz}" -gt 200 ]
 }
+
+@test "INVARIANT (proc-hidepid module.toml has top-level category field with non-empty string value — TOML-category-field-canonical 109)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/proc-hidepid/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+cat = data.get('category')
+assert isinstance(cat, str) and cat, f'category must be non-empty string, got {cat!r}'
+"
+}
