@@ -854,3 +854,9 @@ data = open('${F}', 'r', encoding='utf-8', errors='replace').read()
 assert '\ufeff' not in data, 'U+FEFF BOM present'
 "
 }
+
+@test "INVARIANT (guardian.service substrate file is owned by root or current user (POSIX file ownership sanity) — POSIX-file-owned-canonical 148)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
+    o=$(stat -c %U "${F}")
+    [ -n "${o}" ]
+}

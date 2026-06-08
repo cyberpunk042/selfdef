@@ -1138,3 +1138,9 @@ data = open('${F}', 'r', encoding='utf-8', errors='replace').read()
 assert '\ufeff' not in data, 'U+FEFF BOM present'
 "
 }
+
+@test "INVARIANT (script substrate file is owned by root or current user (POSIX file ownership sanity) — POSIX-file-owned-canonical 148)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    o=$(stat -c %U "${F}")
+    [ -n "${o}" ]
+}

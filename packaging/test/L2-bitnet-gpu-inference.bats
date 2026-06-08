@@ -1516,3 +1516,14 @@ s = data.get('summary', '')
 assert isinstance(s, str) and '	' not in s, f'summary must not contain tab char'
 "
 }
+
+@test "INVARIANT (bitnet-gpu-inference module.toml summary field value is single-line — TOML-summary-single-line-canonical 148)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+s = data.get('summary', '')
+assert isinstance(s, str) and '\n' not in s and '\r' not in s, 'summary must be single-line'
+"
+}
