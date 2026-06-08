@@ -196,9 +196,10 @@ counters degrade. Remediate the event-storm source or raise
 `[bus] inproc_capacity`. Runbook: `wiki/runbooks/metrics-ingest-lag.md`.
 
 Every alert carries `runbook_url` pointing at the matching
-remediation procedure. The four-watchdog + detection-watchdog alerts
-link to `~/devops-solutions-information-hub/wiki/runbooks/` (one of
-the 20 operator runbooks shipped with the IPS spine). The M060
+remediation procedure. The four-watchdog + detection-watchdog + the
+meta-observability ingest-lag alerts link to the operator runbooks
+under `~/devops-solutions-information-hub/wiki/runbooks/` (the IPS
+spine's runbook set). The M060
 alerts link to
 `https://github.com/cyberpunk042/sovereign-os/blob/main/docs/operator/m060-deployment-guide.md#troubleshooting`
 where each M060 alert has a dedicated `####` runbook section
