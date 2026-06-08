@@ -841,3 +841,9 @@ EOF
     first3=$(head -c 3 "${F}" | od -An -tx1 | tr -d ' ')
     [ "${first3}" != "efbbbf" ]
 }
+
+@test "INVARIANT (script file size exceeds 100 bytes — POSIX-text-content-floor-canonical 108)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    sz=$(wc -c < "${F}")
+    [ "${sz}" -gt 100 ]
+}

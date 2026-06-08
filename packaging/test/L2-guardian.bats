@@ -557,3 +557,9 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     first3=$(head -c 3 "${F}" | od -An -tx1 | tr -d ' ')
     [ "${first3}" != "efbbbf" ]
 }
+
+@test "INVARIANT (guardian.service file size exceeds 100 bytes — POSIX-text-content-floor-canonical 108)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
+    sz=$(wc -c < "${F}")
+    [ "${sz}" -gt 100 ]
+}

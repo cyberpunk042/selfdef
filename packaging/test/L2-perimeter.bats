@@ -910,3 +910,9 @@ assert data['kind'] == 'TracingPolicy'
     first3=$(head -c 3 "${F}" | od -An -tx1 | tr -d ' ')
     [ "${first3}" != "efbbbf" ]
 }
+
+@test "INVARIANT (YAML file size exceeds 100 bytes — POSIX-text-content-floor-canonical 108)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    sz=$(wc -c < "${F}")
+    [ "${sz}" -gt 100 ]
+}
