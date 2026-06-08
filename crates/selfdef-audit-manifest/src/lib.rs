@@ -12,10 +12,16 @@
 //! >
 //! > "We do not minimize anything."
 //!
-//! Every selfdef module ships an `audit-manifest.toml` declaring its
-//! standing on each of the 8 operator-named minimization patterns.
-//! The sovereign-os anti-minimization audit can fold these into its
-//! cross-repo coverage matrix in a future round.
+//! **Intended model** (not yet realized — see status note below): each
+//! selfdef module ships an `audit-manifest.toml` declaring its standing on
+//! each of the 8 operator-named minimization patterns, and the sovereign-os
+//! anti-minimization audit folds these into its cross-repo coverage matrix.
+//!
+//! **Current status:** this crate is the parser + wire-format + validation
+//! for that manifest. No module ships an `audit-manifest.toml` yet and no
+//! generator emits them, so the per-module manifests and the cross-repo
+//! fold-in are the open follow-up — not a present invariant. Stating it as
+//! already-shipped would itself be the minimization the §1g rule forbids.
 //!
 //! ## 8 minimization patterns (mirror of sovereign-os R456 PATTERNS)
 //!
