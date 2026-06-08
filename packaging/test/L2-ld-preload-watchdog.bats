@@ -1307,3 +1307,8 @@ v = (data.get('install') or {}).get('uninstall', '')
 assert isinstance(v, str) and v and v.endswith('.sh'), f'install.uninstall must be non-empty .sh path, got {v!r}'
 "
 }
+
+@test "INVARIANT (ld-preload-watchdog module.toml has [profiles] section header — TOML-profiles-section-canonical 122)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ld-preload-watchdog/module.toml"
+    grep -qE '^\[profiles\]$' "${mtoml}"
+}
