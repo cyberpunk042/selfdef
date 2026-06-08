@@ -1054,3 +1054,9 @@ assert '\\x00' not in data and '\\u0000' not in data, 'literal NUL-escape sequen
     h2=$(md5sum "${F}" | cut -d' ' -f1)
     [ "${h1}" = "${h2}" ] && [ -n "${h1}" ]
 }
+
+@test "INVARIANT (lib substrate file SHA-256 digest is computable and 64 hex chars — POSIX-content-sha256-canonical 144)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    h=$(sha256sum "${F}" | cut -d' ' -f1)
+    [ "${#h}" = "64" ]
+}
