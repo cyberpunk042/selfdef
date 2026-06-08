@@ -86,6 +86,39 @@ thermal_critical_celsius = 95
 # `nvidia-gpu-`). 0 = use thermal_critical_celsius for GPUs too.
 gpu_critical_celsius = 0
 
+[security]
+# Rule signing (SDD-006). When require_signed_rules = true, the correlator
+# REFUSES to load any rule YAML that lacks a valid detached minisign
+# signature (`<rule>.minisig`) verified against signing_public_key_file.
+# Default false preserves the existing unsigned-rules workflow; flip it on
+# once your rules are signed with the policy key.
+require_signed_rules = false
+# minisign-format public key used to verify rule signatures. REQUIRED when
+# require_signed_rules = true; ignored otherwise.
+# signing_public_key_file = "/etc/selfdef/keys/policy.pub"
+
+[perimeter]
+# MS047 real-time security perimeter (Tetragon kernel-fence) — overlap
+# discipline between selfdef's TracingPolicies and sovereign-os's
+# host-scoped allowlist, so the two policy authors don't fence the same
+# syscalls twice.
+# Run `perimeter check-overlap` before installing a new TracingPolicy.
+# Unset resolves per deployment target (on for sain01, off for generic).
+# check_overlap_on_apply = true
+# sovereign-os's host-scoped allowlist selfdef reads to know what NOT to
+# overlap with. Empty = no peer author (overlap check vacuously passes).
+sovereign_kernel_fence_path = "/etc/tetragon/tracing-policies/sovereign-kernel-fence.yaml"
+# Directory holding all Tetragon TracingPolicy YAMLs (Tetragon's stock
+# load path; both policy authors write here).
+policies_dir = "/etc/tetragon/tracing-policies"
+# When true, overlap detection emits a WARN but does NOT fail apply.
+# Default false (block on overlap).
+overlap_warn_only = false
+# Stance toward THIRD-PARTY Tetragon policies (files not prefixed
+# `sovereign-` or `agent-guard-`): "warn" (default — log, don't block) |
+# "ignore" (silent) | "block" (treat like agent-guard for overlap; strict).
+third_party_policy_stance = "warn"
+
 [collectors]
 # Each collector has its own table; all default to disabled.
 
