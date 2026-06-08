@@ -1501,3 +1501,14 @@ r = data.get('instanced')
 assert isinstance(r, bool), f'instanced must be bool, got {type(r).__name__}'
 "
 }
+
+@test "INVARIANT (listening-ports-watchdog module.toml [install] uninstall value is non-empty string ending with .sh — TOML-install-uninstall-shape-canonical 121)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/listening-ports-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = (data.get('install') or {}).get('uninstall', '')
+assert isinstance(v, str) and v and v.endswith('.sh'), f'install.uninstall must be non-empty .sh path, got {v!r}'
+"
+}
