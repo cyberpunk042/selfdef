@@ -1758,3 +1758,16 @@ paths = ip.get('paths') or []
 assert isinstance(paths, list) and len(paths) >= 1, f'install_paths.paths must be non-empty list, got {paths!r}'
 "
 }
+
+@test "INVARIANT (ssh-hostkey-watchdog module.toml install_paths.paths elements have no leading/trailing whitespace — TOML-install-paths-no-edge-whitespace-canonical 145)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ssh-hostkey-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths') or {}
+paths = ip.get('paths') or []
+for el in paths:
+    assert el == el.strip(), f'install_paths.paths element must not have edge-whitespace, got {el!r}'
+"
+}
