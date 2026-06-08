@@ -1147,3 +1147,8 @@ assert any('/var/lib/' in p or '/var/log/' in p or '/var/cache/' in p for p in p
     mtoml="${BATS_TEST_DIRNAME}/../../modules/home-perms-baseline/module.toml"
     grep -qE '^name[[:space:]]*=' "${mtoml}"
 }
+
+@test "INVARIANT (home-perms-baseline module.toml name field uses double-quoted string syntax — TOML-string-quote 97)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/home-perms-baseline/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

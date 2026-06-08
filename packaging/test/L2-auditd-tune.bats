@@ -1151,3 +1151,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-tune/module.toml"
     grep -qE '^name[[:space:]]*=' "${mtoml}"
 }
+
+@test "INVARIANT (auditd-tune module.toml name field uses double-quoted string syntax — TOML-string-quote 97)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-tune/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

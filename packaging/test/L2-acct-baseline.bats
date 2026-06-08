@@ -1150,3 +1150,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/acct-baseline/module.toml"
     grep -qE '^name[[:space:]]*=' "${mtoml}"
 }
+
+@test "INVARIANT (acct-baseline module.toml name field uses double-quoted string syntax — TOML-string-quote 97)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/acct-baseline/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

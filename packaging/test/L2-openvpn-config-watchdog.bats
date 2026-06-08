@@ -1117,3 +1117,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/openvpn-config-watchdog/module.toml"
     grep -qE '^name[[:space:]]*=' "${mtoml}"
 }
+
+@test "INVARIANT (openvpn-config-watchdog module.toml name field uses double-quoted string syntax — TOML-string-quote 97)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/openvpn-config-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

@@ -1136,3 +1136,8 @@ assert len(ps) >= 1
     mtoml="${BATS_TEST_DIRNAME}/../../modules/unowned-files-watchdog/module.toml"
     grep -qE '^name[[:space:]]*=' "${mtoml}"
 }
+
+@test "INVARIANT (unowned-files-watchdog module.toml name field uses double-quoted string syntax — TOML-string-quote 97)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/unowned-files-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}
