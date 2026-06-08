@@ -802,3 +802,6 @@ EOF
 @test "INVARIANT (script declares hostname field in OCSF emission 96)" {
     grep -qE 'hostname|HOSTNAME' "${SCRIPT}"
 }
+@test "INVARIANT (script declares device.hostname in OCSF emission — OCSF-device-axis 97)" {
+    grep -qE 'device.hostname|hostname' "${SCRIPT}"
+}

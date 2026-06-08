@@ -697,3 +697,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service uses SystemCallArchitectures=native — 32bit-syscall-bypass anti 96)" {
     grep -qE '^SystemCallArchitectures=native' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service uses MemoryDenyWriteExecute — W^X 97)" {
+    grep -qE '^MemoryDenyWriteExecute=true' "${UNIT}"
+}

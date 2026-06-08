@@ -855,3 +855,10 @@ ma = data['spec']['kprobes'][0]['selectors'][0].get('matchActions', [])
 assert isinstance(ma, list) and len(ma) >= 1
 "
 }
+@test "INVARIANT (YAML metadata.name is non-empty 97)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert data['metadata']['name']
+"
+}

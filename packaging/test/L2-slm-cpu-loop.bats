@@ -989,3 +989,6 @@ assert any(p.startswith('/etc/') for p in ps)
 @test "INVARIANT (slm-cpu-loop module.toml uses TOML key-value syntax 96)" {
     grep -qE '^name[[:space:]]*=' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
 }
+@test "INVARIANT (slm-cpu-loop module.toml name field uses double-quoted syntax 97)" {
+    grep -qE '^name[[:space:]]*=[[:space:]]*"' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+}

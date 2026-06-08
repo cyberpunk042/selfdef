@@ -518,3 +518,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service uses SystemCallArchitectures=native — 32bit-syscall-bypass anti 96)" {
     grep -qE '^SystemCallArchitectures=native' "${UNIT}"
 }
+@test "INVARIANT (guardian.service uses MemoryDenyWriteExecute — W^X 97)" {
+    grep -qE '^MemoryDenyWriteExecute=true' "${UNIT}"
+}

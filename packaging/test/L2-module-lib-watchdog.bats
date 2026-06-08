@@ -760,3 +760,6 @@ setup() {
 @test "INVARIANT (lib's selfdef_injection_patterns is bash function 96)" {
     type -t selfdef_injection_patterns | grep -q '^function$'
 }
+@test "INVARIANT (lib defines toml_get helper as bash function 97)" {
+    declare -F toml_get >/dev/null
+}
