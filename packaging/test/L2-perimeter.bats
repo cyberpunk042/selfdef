@@ -1123,3 +1123,12 @@ bn = os.path.basename('${F}')
 assert re.fullmatch(r'[A-Za-z0-9._-]+', bn), f'basename has unsafe chars: {bn!r}'
 "
 }
+
+@test "INVARIANT (YAML substrate file does not contain backslash-NUL escape literal — POSIX-text-no-NUL-escape-canonical 138)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    python3 -c "
+data = open('${F}', 'r', encoding='utf-8', errors='replace').read()
+# raw backslash-zero escape sequence in source text
+assert '\\x00' not in data and '\\u0000' not in data, 'literal NUL-escape sequence present'
+"
+}
