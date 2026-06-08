@@ -1184,3 +1184,9 @@ with open('${mtoml}') as fp:
     mtoml="${BATS_TEST_DIRNAME}/../../modules/rsh-telnet-disable/module.toml"
     ! grep -qP '^\t' "${mtoml}"
 }
+
+@test "INVARIANT (rsh-telnet-disable module.toml does not start with UTF-8 BOM — TOML-no-BOM-canonical 107)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/rsh-telnet-disable/module.toml"
+    first3=$(head -c 3 "${mtoml}" | od -An -tx1 | tr -d ' ')
+    [ "${first3}" != "efbbbf" ]
+}
