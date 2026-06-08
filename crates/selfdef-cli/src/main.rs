@@ -3214,8 +3214,11 @@ enum EventsAction {
         #[arg(long)]
         host_tag: Option<String>,
         /// JSONL file to append to. The daemon's `eventstream` collector
-        /// should be configured to tail this path.
-        #[arg(long)]
+        /// should be configured to tail this path. Defaults to the
+        /// per-producer CLI emission file `/var/lib/selfdef/eventstream/
+        /// cli-emit.jsonl` (F-2026-055) — add that path to
+        /// `[collectors.eventstream].paths` so the daemon ingests it.
+        #[arg(long, default_value = "/var/lib/selfdef/eventstream/cli-emit.jsonl")]
         out: PathBuf,
     },
 }
