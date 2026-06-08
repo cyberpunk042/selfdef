@@ -1526,3 +1526,16 @@ for el in c:
     assert isinstance(el, str) and el, f'depends_on element must be non-empty string, got {el!r}'
 "
 }
+
+@test "INVARIANT (host-sentinel module.toml install_paths.paths list elements are all absolute paths (starting with /) — TOML-install-paths-paths-absolute-canonical 135)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/host-sentinel/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths') or {}
+paths = ip.get('paths') or []
+for el in paths:
+    assert isinstance(el, str) and el and el.startswith('/'), f'install_paths.paths element must be absolute path, got {el!r}'
+"
+}
