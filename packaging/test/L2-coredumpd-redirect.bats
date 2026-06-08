@@ -1637,3 +1637,15 @@ v = data.get('version', '')
 assert isinstance(v, str) and v.startswith('0.'), f'version must start with 0. (pre-1.0), got {v!r}'
 "
 }
+
+@test "INVARIANT (coredumpd-redirect module.toml install_paths.paths list is non-empty (at least 1 element) — TOML-install-paths-paths-nonempty-canonical 144)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths') or {}
+paths = ip.get('paths') or []
+assert isinstance(paths, list) and len(paths) >= 1, f'install_paths.paths must be non-empty list, got {paths!r}'
+"
+}
