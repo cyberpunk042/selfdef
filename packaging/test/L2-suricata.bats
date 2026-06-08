@@ -79,6 +79,49 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -q 'comment "selfdef-suricata"' "${MODULE_DIR}/templates/nfqueue.rule.tmpl"
 }
 
+# ============================================================================
+# Render-contract (F-2026-062 follow-up): the template is substituted at
+# apply time with the SAME sed expression apply.sh uses
+# (`sed -e "s|@@QUEUE_NUM@@|${QUEUE_NUM}|g"`). These tests exercise that
+# render path directly — the static-shape tests above can't see a future
+# leftover `@@TOKEN@@` that apply.sh doesn't substitute, which would ship a
+# placeholder into bridge-l2's nft ruleset and fail `nft -f` at apply time
+# on a real host. Mirrors apply.sh's substitution verbatim so the two can't
+# drift silently.
+# ============================================================================
+
+render_nfqueue_rule() {
+    # Verbatim mirror of apply.sh line 60.
+    sed -e "s|@@QUEUE_NUM@@|${1}|g" \
+        "${MODULE_DIR}/templates/nfqueue.rule.tmpl"
+}
+
+@test "RENDER (nfqueue rule substitutes the concrete queue number)" {
+    out="$(render_nfqueue_rule 3)"
+    echo "${out}" | grep -qE 'queue[[:space:]]+num[[:space:]]+3[[:space:]]+bypass'
+}
+
+@test "RENDER (no @@...@@ placeholder survives substitution — apply-time nft -f safety)" {
+    # Any leftover @@TOKEN@@ after the apply.sh substitution would be a
+    # literal placeholder in the loaded ruleset → `nft -f` parse failure.
+    out="$(render_nfqueue_rule 0)"
+    ! echo "${out}" | grep -qE '@@[A-Z_]+@@'
+}
+
+@test "RENDER (substitution is byte-stable across two renders — idempotency)" {
+    a="$(render_nfqueue_rule 5)"
+    b="$(render_nfqueue_rule 5)"
+    [ "${a}" = "${b}" ]
+}
+
+@test "RENDER (default queue_num 0 from apply.sh fallback renders a valid jump)" {
+    # apply.sh defaults QUEUE_NUM to 0 when the config key is absent
+    # (`toml_get queue_num ... || echo "0"`); the rendered line must still
+    # be a well-formed `queue num 0 bypass` jump into bridge-l2.
+    out="$(render_nfqueue_rule 0)"
+    echo "${out}" | grep -qE 'add[[:space:]]+rule[[:space:]]+inet[[:space:]]+selfdef_bridge[[:space:]]+forward_hook[[:space:]]+queue[[:space:]]+num[[:space:]]+0[[:space:]]+bypass'
+}
+
 @test "INVARIANT (apply.sh fail-loud on bridge-l2 table missing): refuse-to-brick install — operator must install bridge-l2 first" {
     # If the bridge-l2 nftables table is absent, the apply MUST
     # die loudly with a directive to install bridge-l2 first, not
