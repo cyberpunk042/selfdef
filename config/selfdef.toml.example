@@ -250,8 +250,11 @@ enable_kprobe_unlink = false    # kprobe:do_unlinkat — noisy on busy hosts
 
 [correlator]
 rules_dir = "/etc/selfdef/rules"
-# Reload rules on SIGHUP without restarting the daemon.
-hot_reload = true
+# Rule hot-reload on SIGHUP (without restarting the daemon) is ALWAYS ON —
+# `selfdefctl reload` / `kill -HUP` reloads rules_dir and keeps the prior
+# ruleset if the new one fails to verify. It is not a toggle (a stale
+# `hot_reload = true/false` key here was a phantom: not a real field, so
+# it was silently ignored — removed to avoid implying it can be disabled).
 # `window_secs` and `threshold` are vestigial — Sigma rules carry
 # their own time window and threshold per-rule. The daemon does not
 # read these fields. Closes F-2026-015. Safe to omit.
