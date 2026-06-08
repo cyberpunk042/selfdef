@@ -37,6 +37,40 @@ canonical doc enumerates them with concrete examples.
 - **EngineHarness** for daemon-engine pipeline tests
   (`crates/selfdef-daemon/tests/m_notify_engine.rs`).
 
+## Cross-repo contract gates
+
+selfdef is the producer in a 3-repo seam: the **sovereign-os** cockpit
+consumes selfdef's `/metrics` series + scheduler decisions, and the
+**devops-solutions-information-hub** hosts the operator runbooks that
+selfdef's alerts link to. Several `scripts/test/L1-*.sh` gates enforce
+those contracts, but they **skip** unless the sister repo is reachable —
+so they need an env var pointing at a checkout:
+
+| Gate | Needs | Env var | Checks |
+|---|---|---|---|
+| `L1-prometheus-alerts.sh` (Gate 3b) | info-hub | `INFOHUB_RUNBOOKS` | every alert `runbook_url` target file exists |
+| `L1-info-hub-doc-references.sh` | info-hub | `SELFDEF_INFO_HUB_REPO` | every `…/information-hub/blob/…` doc reference resolves |
+| `L1-cross-repo-alert-runbook-binding.sh` | sovereign-os | `SOVEREIGN_OS_REPO` | MS048 runbook ↔ sovereign-os scheduler-alert symmetry + anchors |
+| `L1-mirror-schema-version-coherence.sh` | sovereign-os | `SOVEREIGN_OS_REPO` | the mirror schema version sovereign-os consumers accept matches what selfdef emits |
+
+CI's `coherence` job checks both sister repos out (read-only, no token —
+they're public-ish) and sets all three env vars, so these gates run on
+every push. A sister checkout that fails is `continue-on-error`, so the
+gate degrades to its skip path rather than breaking CI. To run them
+locally, clone the sisters adjacent and:
+
+```bash
+SOVEREIGN_OS_REPO=../sovereign-os \
+SELFDEF_INFO_HUB_REPO=../devops-solutions-information-hub \
+INFOHUB_RUNBOOKS=../devops-solutions-information-hub/wiki/runbooks \
+  bash scripts/test/coherence.sh
+```
+
+The mirror direction (sovereign-os asserting selfdef emits what its cockpit
+panels reference) lives in sovereign-os's own `cross-repo-lint` CI job,
+which checks selfdef out as a sibling and runs its `$SELFDEF_REPO_ROOT`
+gates symmetrically.
+
 ## How the contract stays fresh
 
 Per [D-018 in the decisions log](https://github.com/cyberpunk042/selfdef/blob/main/docs/decisions.md):
