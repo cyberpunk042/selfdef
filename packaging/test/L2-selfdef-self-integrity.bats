@@ -1695,3 +1695,14 @@ s = data.get('summary', '')
 assert isinstance(s, str) and '\t' not in s, f'summary must not contain tab char'
 "
 }
+
+@test "INVARIANT (selfdef-self-integrity module.toml summary field value is single-line (no newlines, no CR) — TOML-summary-single-line-canonical 148)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+s = data.get('summary', '')
+assert isinstance(s, str) and '\n' not in s and '\r' not in s, f'summary must be single-line, found newline/CR'
+"
+}
