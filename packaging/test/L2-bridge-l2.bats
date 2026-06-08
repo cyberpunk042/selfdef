@@ -1271,3 +1271,15 @@ for el in p:
     assert isinstance(el, str) and el, f'provides element must be non-empty string, got {el!r}'
 "
 }
+
+@test "INVARIANT (bridge-l2 module.toml conflicts items are non-empty strings — TOML-conflicts-elements-string-canonical 132)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+c = data.get('conflicts') or []
+for el in c:
+    assert isinstance(el, str) and el, f'conflicts element must be non-empty string, got {el!r}'
+"
+}

@@ -970,3 +970,9 @@ except UnicodeDecodeError as e:
     bn=$(basename "${F}")
     case "${bn}" in .*) return 1 ;; *) ;; esac
 }
+
+@test "INVARIANT (lib parent directory name is canonical packaging-subpath component — POSIX-parent-dir-canonical 132)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    pdir=$(dirname "${F}" | xargs basename)
+    case "${pdir}" in systemd|scripts|lib|tetragon-policies) ;; *) return 1 ;; esac
+}
