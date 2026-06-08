@@ -902,3 +902,7 @@ assert isinstance(data, dict)
     uni="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh"
     [ -s "${uni}" ]
 }
+@test "INVARIANT (slm-cpu-loop install/apply.sh has strict-mode prologue — Bash-strict 84)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/apply.sh"
+    head -30 "${apply}" | grep -qE 'set -euo'
+}

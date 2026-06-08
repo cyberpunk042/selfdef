@@ -885,3 +885,8 @@ assert isinstance(data, dict)
     uni="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install/uninstall.sh"
     [ -s "${uni}" ]
 }
+
+@test "INVARIANT (bitnet-gpu-inference install/apply.sh declares first 30 lines with set -euo pipefail — strict-mode-prologue 84)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install/apply.sh"
+    head -30 "${apply}" | grep -qE 'set -euo'
+}

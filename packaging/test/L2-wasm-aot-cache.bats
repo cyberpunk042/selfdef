@@ -920,3 +920,8 @@ assert isinstance(data, dict)
     uni="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install/uninstall.sh"
     [ -s "${uni}" ]
 }
+
+@test "INVARIANT (wasm-aot-cache install/apply.sh declares first 30 lines with set -euo pipefail — strict-mode-prologue 84)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/install/apply.sh"
+    head -30 "${apply}" | grep -qE 'set -euo'
+}

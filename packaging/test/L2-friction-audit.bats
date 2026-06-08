@@ -763,3 +763,6 @@ EOF
 @test "INVARIANT (script uses set -e flag — exit-on-error contract 83)" {
     grep -qE '^set -e' "${SCRIPT}"
 }
+@test "INVARIANT (script uses set -u — undefined-var strict 84)" {
+    grep -qE 'set -u|set -.*u' "${SCRIPT}"
+}

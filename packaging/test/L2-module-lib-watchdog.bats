@@ -721,3 +721,6 @@ setup() {
 @test "INVARIANT (lib defines die helper — fail-loud canonical 83)" {
     declare -F die >/dev/null
 }
+@test "INVARIANT (lib defines emit_status helper — status-emit canonical 84)" {
+    declare -F emit_status >/dev/null
+}

@@ -478,3 +478,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postrm is non-empty file — non-trivial-postrm 83)" {
     [ -s "${POSTRM}" ]
 }
+@test "INVARIANT (postinst + postrm both exist — Debian-lifecycle pair 84)" {
+    [ -f "${POSTINST}" ]
+    [ -f "${POSTRM}" ]
+}

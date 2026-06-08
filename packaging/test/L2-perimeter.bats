@@ -757,3 +757,10 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert isinstance(data.get('metadata'), dict)
 "
 }
+@test "INVARIANT (YAML parses as dict at root — well-formed-CRD-root 84)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert isinstance(data, dict)
+"
+}

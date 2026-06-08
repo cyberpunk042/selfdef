@@ -817,3 +817,8 @@ assert ch == 'install/check.sh'
     uni="${BATS_TEST_DIRNAME}/../../modules/suricata/install/uninstall.sh"
     [ -s "${uni}" ]
 }
+
+@test "INVARIANT (suricata install/apply.sh declares first 30 lines with set -euo pipefail — strict-mode-prologue 84)" {
+    apply="${BATS_TEST_DIRNAME}/../../modules/suricata/install/apply.sh"
+    head -30 "${apply}" | grep -qE 'set -euo'
+}

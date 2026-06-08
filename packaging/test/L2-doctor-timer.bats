@@ -643,3 +643,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer file [Install] section has WantedBy directive — enable-graph 83)" {
     grep -qE '^WantedBy=' "${TIMER}"
 }
+@test "INVARIANT (.timer + .service files both exist and readable — paired-units-readable 84)" {
+    [ -r "${TIMER}" ]
+    [ -r "${SERVICE}" ]
+}

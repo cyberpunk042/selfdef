@@ -810,3 +810,6 @@ assert isinstance(data, dict)
 @test "INVARIANT (detect-host module.toml declares version field — version-required 83)" {
     grep -qE '^version' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
 }
+@test "INVARIANT (detect-host module.toml first 5 lines have at least one comment — header-documentation 84)" {
+    head -5 "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml" | grep -qE '^#'
+}
