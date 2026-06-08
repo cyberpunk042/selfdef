@@ -327,6 +327,16 @@ impl Config {
                     .into(),
             ));
         }
+
+        // Perimeter third-party policy stance is a closed vocabulary; a typo
+        // (e.g. "blok") would otherwise be silently mishandled at apply time.
+        const VALID_STANCES: [&str; 3] = ["warn", "ignore", "block"];
+        if !VALID_STANCES.contains(&self.perimeter.third_party_policy_stance.as_str()) {
+            return Err(ConfigError::Invalid(format!(
+                "[perimeter] third_party_policy_stance must be one of {VALID_STANCES:?}, got {:?}",
+                self.perimeter.third_party_policy_stance
+            )));
+        }
         Ok(())
     }
 }
@@ -1558,6 +1568,21 @@ mod tests {
     fn defaults_validate_and_load() {
         // The default config (require_signed_rules=false) must pass validate.
         Config::default().validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_unknown_perimeter_stance() {
+        let mut cfg = Config::default();
+        cfg.perimeter.third_party_policy_stance = "panic".to_owned();
+        let err = cfg.validate().unwrap_err();
+        assert!(matches!(err, ConfigError::Invalid(_)), "got {err:?}");
+        assert!(err.to_string().contains("third_party_policy_stance"));
+        // All three documented stances validate.
+        for stance in ["warn", "ignore", "block"] {
+            cfg.perimeter.third_party_policy_stance = stance.to_owned();
+            cfg.validate()
+                .unwrap_or_else(|e| panic!("stance {stance:?} must be valid, got {e:?}"));
+        }
     }
 
     #[test]
