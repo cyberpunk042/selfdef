@@ -921,3 +921,8 @@ for ln in lines:
 assert mx <= 4, f'consecutive blank-line block of {mx} exceeds 4'
 "
 }
+
+@test "INVARIANT (lib file has at least one non-blank line — POSIX-text-non-blank-floor-canonical 125)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    grep -qE '[^[:space:]]' "${F}"
+}

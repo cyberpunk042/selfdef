@@ -1032,3 +1032,8 @@ for ln in lines:
 assert mx <= 4, f'consecutive blank-line block of {mx} exceeds 4'
 "
 }
+
+@test "INVARIANT (YAML file has at least one non-blank line — POSIX-text-non-blank-floor-canonical 125)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    grep -qE '[^[:space:]]' "${F}"
+}

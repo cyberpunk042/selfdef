@@ -679,3 +679,8 @@ for ln in lines:
 assert mx <= 4, f'consecutive blank-line block of {mx} exceeds 4'
 "
 }
+
+@test "INVARIANT (guardian.service file has at least one non-blank line — POSIX-text-non-blank-floor-canonical 125)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
+    grep -qE '[^[:space:]]' "${F}"
+}

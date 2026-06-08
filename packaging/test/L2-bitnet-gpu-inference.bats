@@ -1227,3 +1227,14 @@ v = data.get('version', '')
 assert isinstance(v, str) and v, f'version must be non-empty string, got {v!r}'
 "
 }
+
+@test "INVARIANT (bitnet-gpu-inference module.toml summary field value is a non-empty string — TOML-summary-nonempty-canonical 125)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+s = data.get('summary', '')
+assert isinstance(s, str) and s, f'summary must be non-empty string, got {s!r}'
+"
+}
