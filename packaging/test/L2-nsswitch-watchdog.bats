@@ -1140,3 +1140,14 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any('libexec/selfdef' in p for p in ps)
 "
 }
+
+@test "INVARIANT (nsswitch-watchdog module.toml install_paths.paths has /var/ entry 93 — state-staging)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/nsswitch-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert any(p.startswith('/var/') for p in ps)
+"
+}

@@ -1111,3 +1111,14 @@ sc = (data.get('install_paths') or {}).get('scope', '')
 assert sc in ('system', 'user', '')
 "
 }
+
+@test "INVARIANT (pam-history module.toml install_paths.paths has /var/lib/selfdef/ entry 93 — state-staging-canonical)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-history/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert any('/var/lib/' in p or '/var/log/' in p or '/var/cache/' in p for p in ps)
+"
+}

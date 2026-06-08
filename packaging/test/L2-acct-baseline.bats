@@ -1124,3 +1124,14 @@ sc = (data.get('install_paths') or {}).get('scope', '')
 assert sc in ('system', 'user', '')
 "
 }
+
+@test "INVARIANT (acct-baseline module.toml install_paths.paths has /etc/selfdef/ entry 93 — selfdef-config-staging-canonical)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/acct-baseline/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert any('/etc/selfdef/' in p for p in ps)
+"
+}
