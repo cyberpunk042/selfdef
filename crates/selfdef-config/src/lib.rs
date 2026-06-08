@@ -360,6 +360,20 @@ impl Config {
                 )));
             }
         }
+
+        // journald mode selects between two entirely different collectors:
+        // the daemon treats "file" as file-tail mode and ANY other value as
+        // journalctl-subprocess mode (`mode == "file"` else Journalctl). So a
+        // typo like "fil" silently runs journalctl and ignores the operator's
+        // input_path. Closed vocabulary {journalctl, file}; empty = unset.
+        const VALID_JOURNALD_MODE: [&str; 2] = ["journalctl", "file"];
+        let jmode = &self.collectors.journald.mode;
+        if !jmode.is_empty() && !VALID_JOURNALD_MODE.contains(&jmode.as_str()) {
+            return Err(ConfigError::Invalid(format!(
+                "[collectors.journald] mode must be one of {VALID_JOURNALD_MODE:?} (or unset), got {jmode:?} \
+                 (an unrecognized value silently falls back to journalctl mode, ignoring input_path)"
+            )));
+        }
         Ok(())
     }
 }
@@ -1591,6 +1605,22 @@ mod tests {
     fn defaults_validate_and_load() {
         // The default config (require_signed_rules=false) must pass validate.
         Config::default().validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_unknown_journald_mode() {
+        let mut cfg = Config::default();
+        cfg.collectors.journald.mode = "fil".to_owned();
+        let err = cfg.validate().unwrap_err();
+        assert!(matches!(err, ConfigError::Invalid(_)), "got {err:?}");
+        assert!(err.to_string().contains("mode"));
+        assert!(err.to_string().contains("journald"));
+        for mode in ["journalctl", "file", ""] {
+            let mut c = Config::default();
+            c.collectors.journald.mode = mode.to_owned();
+            c.validate()
+                .unwrap_or_else(|e| panic!("mode {mode:?} must be valid, got {e:?}"));
+        }
     }
 
     #[test]
