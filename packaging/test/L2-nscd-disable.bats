@@ -1278,3 +1278,14 @@ r = data.get('conflicts')
 assert isinstance(r, list), f'conflicts must be list, got {type(r).__name__}'
 "
 }
+
+@test "INVARIANT (nscd-disable module.toml top-level depends_on field is a TOML list — TOML-depends-on-list-canonical 118)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/nscd-disable/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('depends_on')
+assert isinstance(r, list), f'depends_on must be list, got {type(r).__name__}'
+"
+}
