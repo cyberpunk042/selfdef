@@ -1521,3 +1521,16 @@ a = (data.get('profiles') or {}).get('available') or []
 assert isinstance(a, list) and len(a) >= 1, f'profiles.available must be non-empty list, got {a!r}'
 "
 }
+
+@test "INVARIANT (ssh-moduli-harden module.toml [profiles] default value appears in [profiles] available list (semantic consistency) — TOML-profiles-default-in-available-canonical 126)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+p = data.get('profiles') or {}
+default = p.get('default')
+available = p.get('available') or []
+assert default in available, f'profiles.default {default!r} must appear in available {available!r}'
+"
+}
