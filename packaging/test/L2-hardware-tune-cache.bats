@@ -1211,3 +1211,14 @@ v = (data.get('install') or {}).get('uninstall', '')
 assert isinstance(v, str) and v and v.endswith('.sh'), f'install.uninstall must be non-empty .sh path, got {v!r}'
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml has at least 6 top-level keys (substantive manifest content) — TOML-content-key-floor-canonical 122)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+top = [k for k, v in data.items() if not isinstance(v, dict)]
+assert len(top) >= 6, f'expected >=6 top-level keys, got {len(top)}: {top}'
+"
+}

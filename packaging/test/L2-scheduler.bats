@@ -822,3 +822,10 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     s2=$(stat -c %s "${F}")
     [ "${s1}" = "${s2}" ]
 }
+
+@test "INVARIANT (scheduler.service file has owner+group reported by stat — POSIX-file-ownership-canonical 122)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    o=$(stat -c %U "${F}")
+    g=$(stat -c %G "${F}")
+    [ -n "${o}" ] && [ -n "${g}" ]
+}

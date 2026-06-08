@@ -1181,3 +1181,14 @@ ck = (data.get('install') or {}).get('check')
 assert ck is None or isinstance(ck, str), f'install.check must be string or absent, got type {type(ck).__name__}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml has at least 6 top-level keys (substantive manifest content) — TOML-content-key-floor-canonical 122)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+top = [k for k, v in data.items() if not isinstance(v, dict)]
+assert len(top) >= 6, f'expected >=6 top-level keys, got {len(top)}: {top}'
+"
+}

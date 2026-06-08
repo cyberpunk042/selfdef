@@ -1062,3 +1062,8 @@ ck = (data.get('install') or {}).get('check')
 assert ck is None or isinstance(ck, str), f'install.check must be string or absent, got type {type(ck).__name__}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml has [profiles] section header — TOML-profiles-section-canonical 122)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    grep -qE '^\[profiles\]$' "${mtoml}"
+}
