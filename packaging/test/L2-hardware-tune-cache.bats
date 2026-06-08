@@ -1452,3 +1452,14 @@ for el in paths:
     assert '//' not in el, f'install_paths.paths element must not contain //, got {el!r}'
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml name field length is in [3,50] — TOML-name-length-bounded-canonical 142)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+n = data.get('name', '')
+assert isinstance(n, str) and 3 <= len(n) <= 50, f'name length must be in [3,50], got len={len(n)} value={n!r}'
+"
+}

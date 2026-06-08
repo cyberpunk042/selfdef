@@ -1082,3 +1082,10 @@ assert '\\x00' not in data and '\\u0000' not in data, 'literal NUL-escape sequen
     abs=$(readlink -f "${F}")
     case "${abs}" in *//*) return 1 ;; *) ;; esac
 }
+
+@test "INVARIANT (script substrate file basename length is in [3,80] chars — POSIX-filename-length-bounded-canonical 142)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    bn=$(basename "${F}")
+    L=${#bn}
+    [ "${L}" -ge 3 ] && [ "${L}" -le 80 ]
+}
