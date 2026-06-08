@@ -890,3 +890,8 @@ assert isinstance(data, dict)
     apply="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install/apply.sh"
     head -30 "${apply}" | grep -qE 'set -euo'
 }
+
+@test "INVARIANT (bitnet-gpu-inference install/check.sh first 30 lines have set -euo prologue — strict-mode-prologue 85)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/install/check.sh"
+    head -30 "${chk}" | grep -qE 'set -euo'
+}

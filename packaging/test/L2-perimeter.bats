@@ -764,3 +764,10 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert isinstance(data, dict)
 "
 }
+@test "INVARIANT (YAML spec.kprobes is list — well-formed-kprobes-typed 85)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert isinstance(data['spec'].get('kprobes'), list)
+"
+}

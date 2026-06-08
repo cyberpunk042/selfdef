@@ -766,3 +766,6 @@ EOF
 @test "INVARIANT (script uses set -u — undefined-var strict 84)" {
     grep -qE 'set -u|set -.*u' "${SCRIPT}"
 }
+@test "INVARIANT (script uses set -o pipefail — pipe-error contract 85)" {
+    grep -qE 'pipefail' "${SCRIPT}"
+}

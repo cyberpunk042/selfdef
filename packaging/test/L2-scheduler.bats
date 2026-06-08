@@ -661,3 +661,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     [ -f "${POSTINST}" ]
     [ -f "${POSTRM}" ]
 }
+@test "INVARIANT (postrm references /etc/systemd/system/ unit removal — purge-cleanup-target 85)" {
+    grep -qE '/etc/systemd/system' "${POSTRM}"
+}

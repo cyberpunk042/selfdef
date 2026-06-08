@@ -724,3 +724,6 @@ setup() {
 @test "INVARIANT (lib defines emit_status helper — status-emit canonical 84)" {
     declare -F emit_status >/dev/null
 }
+@test "INVARIANT (lib's SELFDEF_MODULE_LIB_VERSION is integer — version-numeric 85)" {
+    [[ "${SELFDEF_MODULE_LIB_VERSION}" =~ ^[0-9]+$ ]]
+}

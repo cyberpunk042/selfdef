@@ -813,3 +813,6 @@ assert isinstance(data, dict)
 @test "INVARIANT (detect-host module.toml first 5 lines have at least one comment — header-documentation 84)" {
     head -5 "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml" | grep -qE '^#'
 }
+@test "INVARIANT (detect-host module.toml declares conflicts field — mutual-exclusion 85)" {
+    grep -qE '^conflicts' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+}

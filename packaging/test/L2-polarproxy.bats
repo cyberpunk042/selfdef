@@ -775,3 +775,8 @@ assert ch == 'install/check.sh'
     apply="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/apply.sh"
     head -30 "${apply}" | grep -qE 'set -euo'
 }
+
+@test "INVARIANT (polarproxy install/check.sh first 30 lines have set -euo prologue — strict-mode-prologue 85)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/polarproxy/install/check.sh"
+    head -30 "${chk}" | grep -qE 'set -euo'
+}
