@@ -91,12 +91,15 @@ $ cargo fmt --check && cargo clippy -p selfdef-store -p selfdef-daemon
 
 ## Open questions
 
-- **D-1**: Emit `selfdef_store_retention_pruned_total` (counter) +
-  `selfdef_store_events` (already exists) so Grafana can chart retention
-  working? **Recommendation:** yes, cheap follow-up — wire the pruned
-  count into the existing `selfdef-api::Metrics` handle (constructed just
-  after the sweep task in `main.rs`; needs a small ordering tweak to pass
-  the handle in). Logged in the meantime.
+- **D-1**: Emit a retention counter so Grafana can chart retention
+  working? **answered — implemented.** `selfdef-api::Metrics` gained
+  `selfdef_store_retention_sweeps_total` + `selfdef_store_retention_pruned_total`
+  (cumulative) at `/metrics`, recorded by the sweep loop via
+  `record_retention_sweep(pruned)`. `main.rs` now constructs ONE shared
+  Metrics handle before the retention + mirror loops (the "small ordering
+  tweak") so retention, mirror, and the API ingest task all record into
+  the same Arc. With `selfdef_store_events` (live size), an operator can
+  chart the store being bounded rather than trust the log line.
 - **D-2**: Make `SWEEP_INTERVAL_SECS` configurable via a `[store]`
   field? **Recommendation:** not yet — 6h is fine for a days-granularity
   horizon; add a knob only if an operator needs it.

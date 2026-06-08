@@ -388,15 +388,28 @@ async fn main() -> Result<()> {
         tokio::spawn(async move { run_store_sink(s, store_sub, sd).await })
     };
 
+    // The shared Metrics handle. Constructed here (before the retention +
+    // mirror loops) so every producer records into the SAME Arc that the
+    // API /metrics surface renders. Cheap + Arc'd; only the /metrics scrape
+    // endpoint + bus-ingest task are gated by [api].enabled, so when the
+    // API is off there is no handle and producers simply skip recording.
+    let metrics_handle: Option<Arc<selfdef_api::Metrics>> = if cfg.api.enabled {
+        Some(Arc::new(selfdef_api::Metrics::new(host_tag.clone())))
+    } else {
+        None
+    };
+
     // SD-R retention sweep (SDD-081): enforce StoreConfig::hot_retention_days.
     // Without it the knob is dead config and the hot store grows unbounded
     // (F-2026-016). Disabled when hot_retention_days==0 (operator opt-out).
+    // Records selfdef_store_retention_{sweeps,pruned}_total (SDD-081 D-1).
     let _retention_task = {
         let s = Arc::clone(&store);
         let sd = shutdown.clone();
         let days = cfg.store.hot_retention_days;
+        let m = metrics_handle.clone();
         tokio::spawn(
-            async move { retention_sweep_loop::run_retention_sweep_loop(s, days, sd).await },
+            async move { retention_sweep_loop::run_retention_sweep_loop(s, days, sd, m).await },
         )
     };
 
@@ -430,18 +443,12 @@ async fn main() -> Result<()> {
     // profile snapshot READ-ONLY for the sovereign-os cockpit. Lives for
     // the daemon's lifetime + observes the same shutdown signal.
     //
-    // Construct the Metrics handle BEFORE spawning the mirror loop so
-    // the loop can bump per-artifact publish counters from the start.
-    // The metrics ingest task below also takes a clone of this same
-    // handle. When the API is disabled, we still construct + clone the
-    // handle (cheap, Arc'd) so the mirror loop has a place to record;
-    // it's only the /metrics scrape surface + bus-ingest task that the
-    // API flag gates.
-    let mirror_metrics = if cfg.api.enabled {
-        Some(Arc::new(selfdef_api::Metrics::new(host_tag.clone())))
-    } else {
-        None
-    };
+    // Reuse the shared Metrics handle constructed above (retention + mirror
+    // + the API ingest task all record into the SAME Arc, so /metrics shows
+    // a single coherent view). The mirror loop bumps per-artifact publish
+    // counters; when the API is disabled the handle is None and the loop
+    // simply skips recording.
+    let mirror_metrics = metrics_handle.clone();
     let _mirror_export_task = if cfg.deployment.selfdef_mirror_dir.is_empty() {
         None
     } else {

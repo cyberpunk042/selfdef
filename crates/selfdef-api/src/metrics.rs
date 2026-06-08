@@ -46,6 +46,15 @@ pub struct Metrics {
     /// under-counting and the operator should resize the bus.
     ingest_lag_events: AtomicU64,
 
+    /// SDD-081 retention sweeps run + cumulative events pruned.
+    /// `selfdef_store_events` shows the live hot-store size; these show
+    /// the retention enforcement actually WORKING (sweeps executed +
+    /// events deleted past the horizon), so an operator can chart that
+    /// `hot_retention_days` is bounding the store rather than just trust
+    /// the log line.
+    retention_sweeps_total: AtomicU64,
+    retention_pruned_total: AtomicU64,
+
     /// M060 mirror-export per-artifact publish counters. Keys are the
     /// canonical artifact filename (e.g. `"grants.json"`); values are
     /// (ok_count, failed_count). Set + bumped by the daemon's
@@ -74,6 +83,8 @@ impl Metrics {
             events_total: AtomicU64::new(0),
             findings_total: AtomicU64::new(0),
             ingest_lag_events: AtomicU64::new(0),
+            retention_sweeps_total: AtomicU64::new(0),
+            retention_pruned_total: AtomicU64::new(0),
             m060_publish_counts: Mutex::new(HashMap::new()),
             m060_last_publish_unix: Mutex::new(HashMap::new()),
         }
@@ -145,6 +156,15 @@ impl Metrics {
     /// Count one missed-event lag from the bus broadcast subscriber.
     pub fn record_ingest_lag(&self, n: u64) {
         self.ingest_lag_events.fetch_add(n, Ordering::Relaxed);
+    }
+
+    /// Record one SDD-081 retention sweep: bump the sweep counter and add
+    /// `pruned` to the cumulative pruned-events counter. `pruned` may be 0
+    /// (a sweep that found nothing past the horizon still counts).
+    pub fn record_retention_sweep(&self, pruned: u64) {
+        self.retention_sweeps_total.fetch_add(1, Ordering::Relaxed);
+        self.retention_pruned_total
+            .fetch_add(pruned, Ordering::Relaxed);
     }
 
     /// Render the current counters as a Prometheus exposition-format
@@ -270,6 +290,27 @@ impl Metrics {
             out,
             "selfdef_ingest_lag_events_total {}",
             self.ingest_lag_events.load(Ordering::Relaxed),
+        )
+        .unwrap();
+
+        out.push_str(
+            "# HELP selfdef_store_retention_sweeps_total Retention sweeps run (SDD-081).\n",
+        );
+        out.push_str("# TYPE selfdef_store_retention_sweeps_total counter\n");
+        writeln!(
+            out,
+            "selfdef_store_retention_sweeps_total {}",
+            self.retention_sweeps_total.load(Ordering::Relaxed),
+        )
+        .unwrap();
+        out.push_str(
+            "# HELP selfdef_store_retention_pruned_total Events deleted by retention past the hot_retention_days horizon (cumulative, SDD-081).\n",
+        );
+        out.push_str("# TYPE selfdef_store_retention_pruned_total counter\n");
+        writeln!(
+            out,
+            "selfdef_store_retention_pruned_total {}",
+            self.retention_pruned_total.load(Ordering::Relaxed),
         )
         .unwrap();
 

@@ -24,6 +24,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use selfdef_api::Metrics;
 use selfdef_store::SqliteStore;
 use time::OffsetDateTime;
 use tokio_util::sync::CancellationToken;
@@ -41,6 +42,7 @@ pub(crate) async fn run_retention_sweep_loop(
     store: Arc<SqliteStore>,
     hot_retention_days: u32,
     shutdown: CancellationToken,
+    metrics: Option<Arc<Metrics>>,
 ) {
     if hot_retention_days == 0 {
         info!("SD-R retention: hot_retention_days=0 → retention disabled (events kept forever)");
@@ -65,14 +67,14 @@ pub(crate) async fn run_retention_sweep_loop(
                 return;
             }
             _ = tick.tick() => {
-                sweep_once(&store, hot_retention_days).await;
+                sweep_once(&store, hot_retention_days, metrics.as_deref()).await;
             }
         }
     }
 }
 
 /// One retention pass. Isolated for unit testing.
-async fn sweep_once(store: &SqliteStore, hot_retention_days: u32) {
+async fn sweep_once(store: &SqliteStore, hot_retention_days: u32, metrics: Option<&Metrics>) {
     let now_ns = OffsetDateTime::now_utc().unix_timestamp_nanos();
     let cutoff_ns_i128 = now_ns - (i128::from(hot_retention_days) * NANOS_PER_DAY);
     // The store column is i64 nanos; clamp defensively (a cutoff that
@@ -86,6 +88,9 @@ async fn sweep_once(store: &SqliteStore, hot_retention_days: u32) {
                 hot_retention_days,
                 "SD-R retention: sweep complete; 0 events past horizon"
             );
+            if let Some(m) = metrics {
+                m.record_retention_sweep(0);
+            }
         }
         Ok(deleted) => {
             let remaining = store.count().await.unwrap_or(0);
@@ -93,6 +98,9 @@ async fn sweep_once(store: &SqliteStore, hot_retention_days: u32) {
                 hot_retention_days,
                 deleted, remaining, "SD-R retention: pruned aged events past horizon"
             );
+            if let Some(m) = metrics {
+                m.record_retention_sweep(deleted);
+            }
         }
         Err(e) => {
             warn!(error = %e, "SD-R retention: prune failed; will retry next sweep");
@@ -126,7 +134,7 @@ mod tests {
         }
         assert_eq!(store.count().await.unwrap(), 5);
 
-        sweep_once(&store, 30).await;
+        sweep_once(&store, 30, None).await;
         assert_eq!(
             store.count().await.unwrap(),
             2,
@@ -141,7 +149,33 @@ mod tests {
         for i in 0..4 {
             store.insert(&aged_event(i, 1)).await.unwrap();
         }
-        sweep_once(&store, 30).await;
+        sweep_once(&store, 30, None).await;
         assert_eq!(store.count().await.unwrap(), 4);
+    }
+
+    #[tokio::test]
+    async fn sweep_once_records_retention_metrics() {
+        let dir = tempdir().unwrap();
+        let store = SqliteStore::open(dir.path().join("s.sqlite")).unwrap();
+        for i in 0..3 {
+            store.insert(&aged_event(i, 45)).await.unwrap(); // old
+        }
+        store.insert(&aged_event(99, 1)).await.unwrap(); // fresh
+
+        let metrics = Metrics::new("test-host");
+        // First sweep prunes the 3 aged events.
+        sweep_once(&store, 30, Some(&metrics)).await;
+        // Second sweep finds nothing past the horizon (still counts as a sweep).
+        sweep_once(&store, 30, Some(&metrics)).await;
+
+        let body = metrics.render(store.count().await.unwrap());
+        assert!(
+            body.contains("selfdef_store_retention_sweeps_total 2"),
+            "two sweeps recorded:\n{body}"
+        );
+        assert!(
+            body.contains("selfdef_store_retention_pruned_total 3"),
+            "three events pruned cumulatively:\n{body}"
+        );
     }
 }
