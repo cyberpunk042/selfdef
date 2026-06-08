@@ -1432,3 +1432,17 @@ for el in r:
     assert 'kind' in el and 'value' in el, f'requires element must have kind+value keys, got {sorted(el.keys())!r}'
 "
 }
+
+@test "INVARIANT (xdg-autostart-watchdog module.toml requires items have kind in bounded vocab {binary, package, kernel-feature} — TOML-requires-kind-vocab-canonical 129)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/xdg-autostart-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('requires') or []
+allowed = {'binary', 'package', 'kernel-feature'}
+for el in r:
+    k = el.get('kind', '')
+    assert k in allowed, f'requires.kind must be in {allowed}, got {k!r}'
+"
+}
