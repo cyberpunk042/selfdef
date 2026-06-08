@@ -1049,3 +1049,10 @@ assert re.match(r'^\d+\.\d+\.\d+$', v), f'version must be X.Y.Z semver, got {v!r
         grep -qE '^[a-zA-Z_]+=' "${s}"
     done
 }
+
+@test "INVARIANT (coredump-pattern-watchdog .sh script path matches systemd dir layout — canonical-script-co-location 85)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/systemd"
+    [ -d "${script_dir}" ]
+    n=$(ls "${script_dir}"/*.sh 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

@@ -1069,3 +1069,10 @@ assert 'install' in data, 'install missing'
         grep -qE '^[a-zA-Z_]+=' "${s}"
     done
 }
+
+@test "INVARIANT (acpi-hooks-watchdog .sh script path matches systemd dir layout — canonical-script-co-location 85)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/acpi-hooks-watchdog/systemd"
+    [ -d "${script_dir}" ]
+    n=$(ls "${script_dir}"/*.sh 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

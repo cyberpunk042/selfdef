@@ -1081,3 +1081,10 @@ seed_benign() {
         grep -qE '^[a-zA-Z_]+=' "${s}"
     done
 }
+
+@test "INVARIANT (bash-completion-watchdog .sh script path matches systemd dir layout — canonical-script-co-location 85)" {
+    script_dir="${BATS_TEST_DIRNAME}/../../modules/bash-completion-watchdog/systemd"
+    [ -d "${script_dir}" ]
+    n=$(ls "${script_dir}"/*.sh 2>/dev/null | wc -l)
+    [ "${n}" -ge 1 ]
+}

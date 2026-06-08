@@ -1083,3 +1083,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     apply="${BATS_TEST_DIRNAME}/../../modules/apport-disable/install/apply.sh"
     head -30 "${apply}" | grep -qE 'set -euo'
 }
+
+@test "INVARIANT (apport-disable install/check.sh first 30 lines have set -euo prologue — strict-mode-prologue 85)" {
+    chk="${BATS_TEST_DIRNAME}/../../modules/apport-disable/install/check.sh"
+    head -30 "${chk}" | grep -qE 'set -euo'
+}
