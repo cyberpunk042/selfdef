@@ -1085,3 +1085,14 @@ assert ph is None or ph in ('main','pre','post'), f'phase if present must be mai
     mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
     grep -qE '^\[install\]$' "${mtoml}"
 }
+
+@test "INVARIANT (bitnet-gpu-inference module.toml [install] check value is non-empty string ending with .sh — TOML-install-check-shape-canonical 112)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ck = (data.get('install') or {}).get('check', '')
+assert isinstance(ck, str) and ck and ck.endswith('.sh'), f'install.check must be non-empty .sh path, got {ck!r}'
+"
+}

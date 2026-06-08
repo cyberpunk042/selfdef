@@ -952,3 +952,14 @@ assert ph is None or ph in ('main','pre','post'), f'phase if present must be mai
     mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
     grep -qE '^\[install\]$' "${mtoml}"
 }
+
+@test "INVARIANT (detect-host module.toml [install] apply value is a string (when present) — TOML-install-apply-type-canonical 112)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ap = (data.get('install') or {}).get('apply')
+assert ap is None or isinstance(ap, str), f'install.apply must be string or absent, got type {type(ap).__name__}'
+"
+}

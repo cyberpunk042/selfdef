@@ -582,3 +582,9 @@ assert b'\x00' not in data, 'NUL byte present'
     sz=$(wc -c < "${F}")
     [ "${sz}" -lt 102400 ]
 }
+
+@test "INVARIANT (guardian.service file mode is not world-writable — POSIX-perm-no-world-write-canonical 112)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
+    mode=$(stat -c %a "${F}")
+    [ $((8#$mode & 8#002)) -eq 0 ]
+}
