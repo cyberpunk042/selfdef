@@ -1056,3 +1056,15 @@ assert any(p.startswith('/usr/') for p in ps), f'paths must include ≥1 /usr/ t
     uni="${BATS_TEST_DIRNAME}/../../modules/bootloader-password-detect/install/uninstall.sh"
     head -30 "${uni}" | grep -qE 'set -euo'
 }
+
+@test "INVARIANT (bootloader-password-detect module.toml install_paths.paths list contains string entries 87 — typed-paths-list)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bootloader-password-detect/module.toml"
+    [ -f "${mtoml}" ]
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert isinstance(ps, list)
+"
+}

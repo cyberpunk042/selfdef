@@ -1107,3 +1107,14 @@ seed_benign() {
     mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-plugins-watchdog/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (auditd-plugins-watchdog module.toml install_paths.paths non-empty list 87)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-plugins-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert isinstance(ps, list) and len(ps) > 0
+"
+}

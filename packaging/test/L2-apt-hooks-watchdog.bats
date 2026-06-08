@@ -1132,3 +1132,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     mtoml="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (apt-hooks-watchdog module.toml install_paths.paths non-empty list 87)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert isinstance(ps, list) and len(ps) > 0
+"
+}
