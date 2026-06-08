@@ -1099,3 +1099,11 @@ except UnicodeDecodeError as e:
     abs=$(readlink -f "${F}")
     case "${abs}" in */packaging/*) ;; *) return 1 ;; esac
 }
+
+@test "INVARIANT (YAML file path matches the expected substrate suffix — POSIX-substrate-suffix-canonical 135)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    case "${F}" in
+        *packaging/tetragon-policies/sovereign-perimeter.yaml) ;;
+        *) return 1 ;;
+    esac
+}

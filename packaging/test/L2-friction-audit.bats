@@ -1030,3 +1030,11 @@ except UnicodeDecodeError as e:
     abs=$(readlink -f "${F}")
     case "${abs}" in */packaging/*) ;; *) return 1 ;; esac
 }
+
+@test "INVARIANT (script file path matches the expected substrate suffix — POSIX-substrate-suffix-canonical 135)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    case "${F}" in
+        *packaging/scripts/friction-audit.sh) ;;
+        *) return 1 ;;
+    esac
+}
