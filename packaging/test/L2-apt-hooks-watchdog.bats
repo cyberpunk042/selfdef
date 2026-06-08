@@ -1683,3 +1683,14 @@ n = data.get('name', '')
 assert isinstance(n, str) and 3 <= len(n) <= 50, f'name length must be in [3,50], got len={len(n)} value={n!r}'
 "
 }
+
+@test "INVARIANT (apt-hooks-watchdog module.toml version field starts with 0. (pre-1.0 development) — TOML-version-pre-1-0-canonical 143)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('version', '')
+assert isinstance(v, str) and v.startswith('0.'), f'version must start with 0. (pre-1.0), got {v!r}'
+"
+}
