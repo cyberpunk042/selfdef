@@ -1139,3 +1139,8 @@ assert '\\x00' not in data and '\\u0000' not in data, 'literal NUL-escape sequen
     abs=$(readlink -f "${F}")
     case "${abs}" in *"${expected}") ;; *) return 1 ;; esac
 }
+
+@test "INVARIANT (YAML substrate file is not the empty string at byte 0 — POSIX-non-zero-content-canonical 140)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    [ "$(wc -c < "${F}")" -gt 0 ]
+}

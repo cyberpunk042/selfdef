@@ -1410,3 +1410,16 @@ for el in paths:
     assert any(el.startswith(pf) for pf in prefixes), f'install_paths.paths element must use FHS-canonical prefix, got {el!r}'
 "
 }
+
+@test "INVARIANT (bitnet-gpu-inference module.toml install_paths.paths elements do not end with / — TOML-install-paths-no-trailing-slash-canonical 140)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths') or {}
+paths = ip.get('paths') or []
+for el in paths:
+    assert not el.endswith('/'), f'install_paths.paths element must not end with /, got {el!r}'
+"
+}
