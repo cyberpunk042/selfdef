@@ -1000,3 +1000,9 @@ except UnicodeDecodeError as e:
         *) return 1 ;;
     esac
 }
+
+@test "INVARIANT (script file basename does not contain spaces — POSIX-portable-no-space-canonical 130)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    bn=$(basename "${F}")
+    case "${bn}" in *' '*) return 1 ;; *) ;; esac
+}
