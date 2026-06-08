@@ -551,3 +551,9 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
     ! grep -qP '[ \t]+$' "${F}"
 }
+
+@test "INVARIANT (guardian.service file does not start with UTF-8 BOM — POSIX-text-no-BOM-canonical 107)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
+    first3=$(head -c 3 "${F}" | od -An -tx1 | tr -d ' ')
+    [ "${first3}" != "efbbbf" ]
+}

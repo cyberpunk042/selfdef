@@ -835,3 +835,9 @@ EOF
     F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
     ! grep -qP '[ \t]+$' "${F}"
 }
+
+@test "INVARIANT (script file does not start with UTF-8 BOM — POSIX-text-no-BOM-canonical 107)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    first3=$(head -c 3 "${F}" | od -An -tx1 | tr -d ' ')
+    [ "${first3}" != "efbbbf" ]
+}

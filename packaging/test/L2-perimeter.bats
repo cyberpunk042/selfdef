@@ -904,3 +904,9 @@ assert data['kind'] == 'TracingPolicy'
     F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
     ! grep -qP '[ \t]+$' "${F}"
 }
+
+@test "INVARIANT (YAML file does not start with UTF-8 BOM — POSIX-text-no-BOM-canonical 107)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    first3=$(head -c 3 "${F}" | od -An -tx1 | tr -d ' ')
+    [ "${first3}" != "efbbbf" ]
+}

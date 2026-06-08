@@ -717,3 +717,9 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
     ! grep -qP '[ \t]+$' "${F}"
 }
+
+@test "INVARIANT (.service file does not start with UTF-8 BOM — POSIX-text-no-BOM-canonical 107)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
+    first3=$(head -c 3 "${F}" | od -An -tx1 | tr -d ' ')
+    [ "${first3}" != "efbbbf" ]
+}

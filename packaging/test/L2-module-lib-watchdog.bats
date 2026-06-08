@@ -793,3 +793,9 @@ setup() {
     F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
     ! grep -qP '[ \t]+$' "${F}"
 }
+
+@test "INVARIANT (lib file does not start with UTF-8 BOM — POSIX-text-no-BOM-canonical 107)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    first3=$(head -c 3 "${F}" | od -An -tx1 | tr -d ' ')
+    [ "${first3}" != "efbbbf" ]
+}
