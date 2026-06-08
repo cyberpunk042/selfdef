@@ -1124,3 +1124,8 @@ assert len(ps) >= 1
     mtoml="${BATS_TEST_DIRNAME}/../../modules/hidden-process-watchdog/module.toml"
     grep -qE '^\[install\]' "${mtoml}"
 }
+
+@test "INVARIANT (hidden-process-watchdog module.toml uses TOML key-value syntax — well-formed-TOML 96)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hidden-process-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=' "${mtoml}"
+}

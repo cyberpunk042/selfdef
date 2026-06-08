@@ -1122,3 +1122,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/incron-watchdog/module.toml"
     grep -qE '^\[install\]' "${mtoml}"
 }
+
+@test "INVARIANT (incron-watchdog module.toml uses TOML key-value syntax — well-formed-TOML 96)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/incron-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=' "${mtoml}"
+}

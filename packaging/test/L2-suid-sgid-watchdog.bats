@@ -1194,3 +1194,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/suid-sgid-watchdog/module.toml"
     grep -qE '^\[install\]' "${mtoml}"
 }
+
+@test "INVARIANT (suid-sgid-watchdog module.toml uses TOML key-value syntax — well-formed-TOML 96)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/suid-sgid-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=' "${mtoml}"
+}

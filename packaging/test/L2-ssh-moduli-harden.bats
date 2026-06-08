@@ -1269,3 +1269,8 @@ assert any('/var/lib/' in p or '/var/log/' in p or '/var/cache/' in p for p in p
     mtoml="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/module.toml"
     grep -qE '^\[install\]' "${mtoml}"
 }
+
+@test "INVARIANT (ssh-moduli-harden module.toml uses TOML key-value assignment syntax — well-formed-TOML 96)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/module.toml"
+    grep -qE '^name[[:space:]]*=' "${mtoml}"
+}

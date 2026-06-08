@@ -1125,3 +1125,8 @@ assert len(ps) >= 1
     mtoml="${BATS_TEST_DIRNAME}/../../modules/timestomp-watchdog/module.toml"
     grep -qE '^\[install\]' "${mtoml}"
 }
+
+@test "INVARIANT (timestomp-watchdog module.toml uses TOML key-value syntax — well-formed-TOML 96)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/timestomp-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=' "${mtoml}"
+}

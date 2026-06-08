@@ -1150,3 +1150,8 @@ assert len(ps) >= 1
     mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/module.toml"
     grep -qE '^\[install\]' "${mtoml}"
 }
+
+@test "INVARIANT (coredump-pattern-watchdog module.toml uses TOML key-value syntax — well-formed-TOML 96)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-pattern-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=' "${mtoml}"
+}

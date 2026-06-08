@@ -1119,3 +1119,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/rsh-telnet-disable/module.toml"
     grep -qE '^\[install\]' "${mtoml}"
 }
+
+@test "INVARIANT (rsh-telnet-disable module.toml uses TOML key-value assignment syntax — well-formed-TOML 96)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/rsh-telnet-disable/module.toml"
+    grep -qE '^name[[:space:]]*=' "${mtoml}"
+}

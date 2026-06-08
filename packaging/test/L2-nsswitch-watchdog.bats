@@ -1161,3 +1161,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/nsswitch-watchdog/module.toml"
     grep -qE '^\[install\]' "${mtoml}"
 }
+
+@test "INVARIANT (nsswitch-watchdog module.toml uses TOML key-value syntax — well-formed-TOML 96)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/nsswitch-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=' "${mtoml}"
+}

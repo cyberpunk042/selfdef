@@ -1108,3 +1108,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/sysctl-network-baseline/module.toml"
     grep -qE '^\[install\]' "${mtoml}"
 }
+
+@test "INVARIANT (sysctl-network-baseline module.toml uses TOML key-value assignment syntax — well-formed-TOML 96)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/sysctl-network-baseline/module.toml"
+    grep -qE '^name[[:space:]]*=' "${mtoml}"
+}

@@ -1136,3 +1136,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/module.toml"
     grep -qE '^\[install\]' "${mtoml}"
 }
+
+@test "INVARIANT (coredump-suid-restrict module.toml uses TOML key-value assignment syntax — well-formed-TOML 96)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/module.toml"
+    grep -qE '^name[[:space:]]*=' "${mtoml}"
+}
