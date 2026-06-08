@@ -68,8 +68,10 @@ into the daemon journal, **never** fatal. Subsequent ticks re-attempt;
 the operator's only visible signal is the dashboard's "last update"
 timestamp drifting + the per-domain mirror-status banner flipping to
 offline. Prometheus counters at `<api>/metrics`
-(`selfdef_m060_publish_total{artifact,outcome}`) make it observable
-without staring at the journal.
+(`selfdef_m060_mirror_publish_total{artifact,result}` —
+`result="ok"|"failed"` — plus
+`selfdef_m060_mirror_last_publish_unix{artifact}` for staleness
+detection) make it observable without staring at the journal.
 
 ---
 
@@ -163,7 +165,7 @@ done
 curl -s http://localhost:7700/v1/m060/health | jq '.summary'
 
 # 3. Prometheus counters (rolling per-artifact publish success/failure).
-curl -s http://localhost:7700/metrics | grep selfdef_m060_publish_total
+curl -s http://localhost:7700/metrics | grep selfdef_m060_mirror_publish_total
 
 # 4. Cross-cutting doctor — exit 0 if every artifact in the resident
 #    set published this tick, non-zero with per-domain diagnosis if not.
