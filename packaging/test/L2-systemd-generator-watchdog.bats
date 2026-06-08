@@ -1139,3 +1139,8 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any(p.startswith('/var/') for p in ps)
 "
 }
+
+@test "INVARIANT (systemd-generator-watchdog module.toml [install_paths] declared at line beginning — TOML-section-header 94)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/systemd-generator-watchdog/module.toml"
+    grep -qE '^\[install_paths\]' "${mtoml}"
+}

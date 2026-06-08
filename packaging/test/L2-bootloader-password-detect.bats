@@ -1138,3 +1138,8 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any('/etc/selfdef/' in p for p in ps)
 "
 }
+
+@test "INVARIANT (bootloader-password-detect module.toml [install_paths] block declared at line beginning — TOML-section-header 94)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bootloader-password-detect/module.toml"
+    grep -qE '^\[install_paths\]' "${mtoml}"
+}

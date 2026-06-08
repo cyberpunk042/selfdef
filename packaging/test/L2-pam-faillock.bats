@@ -1093,3 +1093,8 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any('/etc/selfdef/' in p for p in ps)
 "
 }
+
+@test "INVARIANT (pam-faillock module.toml [install_paths] block declared at line beginning — TOML-section-header 94)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-faillock/module.toml"
+    grep -qE '^\[install_paths\]' "${mtoml}"
+}

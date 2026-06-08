@@ -1174,3 +1174,8 @@ ps = ip.get('paths', [])
 assert len(ps) >= 1
 "
 }
+
+@test "INVARIANT (nfs-mount-watchdog module.toml [install_paths] declared at line beginning — TOML-section-header 94)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/nfs-mount-watchdog/module.toml"
+    grep -qE '^\[install_paths\]' "${mtoml}"
+}

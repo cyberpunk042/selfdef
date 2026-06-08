@@ -1309,3 +1309,8 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any(p.startswith('/var/') for p in ps)
 "
 }
+
+@test "INVARIANT (cron-job-watchdog module.toml [install_paths] declared at line beginning — TOML-section-header 94)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/cron-job-watchdog/module.toml"
+    grep -qE '^\[install_paths\]' "${mtoml}"
+}
