@@ -115,7 +115,7 @@ fn uninstall_runs_modules_in_reverse_dependency_order() {
         i_beta < i_alpha,
         "beta (dependent) must uninstall before alpha:\n{stdout}",
     );
-    assert!(stdout.contains("Summary: 2 ok"), "stdout: {stdout}");
+    assert!(stdout.contains("Summary: 2 ok, 0 skipped, 0 failed"), "stdout: {stdout}");
 }
 
 #[test]
@@ -268,7 +268,7 @@ fn uninstall_with_matching_confirm_proceeds() {
         String::from_utf8_lossy(&out.stderr),
     );
     assert!(stdout.contains("live uninstall"), "stdout: {stdout}");
-    assert!(stdout.contains("Summary: 1 ok"), "stdout: {stdout}");
+    assert!(stdout.contains("Summary: 1 ok, 0 skipped, 0 failed"), "stdout: {stdout}");
 }
 
 #[test]
@@ -306,5 +306,5 @@ fn uninstall_only_filter_restricts_modules() {
     assert!(out.status.success(), "stdout: {stdout}");
     assert!(stdout.contains("beta [uninstall]"), "stdout: {stdout}");
     assert!(!stdout.contains("alpha [uninstall]"), "stdout: {stdout}");
-    assert!(stdout.contains("Summary: 1 ok"), "stdout: {stdout}");
+    assert!(stdout.contains("Summary: 1 ok, 0 skipped, 0 failed"), "stdout: {stdout}");
 }

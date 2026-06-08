@@ -106,7 +106,7 @@ fn apply_runs_modules_in_dependency_order() {
     let i_alpha = stdout.find("alpha [apply]").expect("alpha line");
     let i_beta = stdout.find("beta [apply]").expect("beta line");
     assert!(i_alpha < i_beta, "alpha did not run before beta:\n{stdout}");
-    assert!(stdout.contains("Summary: 2 ok"), "stdout: {stdout}");
+    assert!(stdout.contains("Summary: 2 ok, 0 skipped, 0 failed"), "stdout: {stdout}");
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn check_reports_ok_for_active_modules() {
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "stdout: {stdout}");
-    assert!(stdout.contains("Summary: 2 ok"), "stdout: {stdout}");
+    assert!(stdout.contains("Summary: 2 ok, 0 skipped, 0 failed"), "stdout: {stdout}");
 }
 
 #[test]
@@ -266,7 +266,7 @@ fn apply_runs_multiple_instances_of_a_multi_instance_module() {
         stdout.contains(tunnel_cfg.to_str().unwrap()),
         "stdout did not mention tunnel cfg: {stdout}"
     );
-    assert!(stdout.contains("Summary: 2 ok"), "stdout: {stdout}");
+    assert!(stdout.contains("Summary: 2 ok, 0 skipped, 0 failed"), "stdout: {stdout}");
 }
 
 /// SD-R14 + SD-R16: end-to-end gate exercise via the CLI surface.
@@ -342,7 +342,7 @@ fn sdr16_apply_skips_modules_unmet_hardware_requirements_e2e() {
         "beta should not have applied: {stdout}"
     );
     assert!(
-        stdout.contains("Summary: 1 ok"),
+        stdout.contains("Summary: 1 ok, 0 skipped, 0 failed"),
         "summary count wrong: {stdout}"
     );
 }
