@@ -1132,3 +1132,10 @@ data = open('${F}', 'r', encoding='utf-8', errors='replace').read()
 assert '\\x00' not in data and '\\u0000' not in data, 'literal NUL-escape sequence present'
 "
 }
+
+@test "INVARIANT (YAML substrate path under packaging/ contains the canonical relpath suffix — POSIX-rel-path-canonical 139)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    expected="packaging/tetragon-policies/sovereign-perimeter.yaml"
+    abs=$(readlink -f "${F}")
+    case "${abs}" in *"${expected}") ;; *) return 1 ;; esac
+}
