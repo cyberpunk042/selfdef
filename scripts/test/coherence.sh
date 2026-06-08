@@ -140,6 +140,9 @@ run_layer "L1: JSON Schema fleet integrity (docs/schemas/*.schema.json — \$sch
 run_layer "L1: systemd drop-in integrity (selfdefd.service.d/ebpf.conf: 3 required caps + no escalation)" \
     bash scripts/test/L1-systemd-dropin-integrity.sh
 
+run_layer "L1: CLI test-helper dedup (module_*.rs consume common/mod.rs; F-2026-060)" \
+    bash scripts/test/L1-test-helper-dedup-coherence.sh
+
 run_layer "L1: coherence harness self-coverage (every L1-*.sh is wired here)" \
     bash scripts/test/L1-coherence-harness-coverage.sh
 
