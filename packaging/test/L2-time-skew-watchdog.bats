@@ -1128,3 +1128,14 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any(p.startswith('/etc/') for p in ps)
 "
 }
+
+@test "INVARIANT (time-skew-watchdog module.toml install_paths.paths has /usr/local/libexec/selfdef/ entry 92)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert any('libexec/selfdef' in p for p in ps)
+"
+}
