@@ -673,3 +673,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler unit declares User=root explicitly — Ring-0-elevation 88)" {
     grep -qE '^User=root' "${UNIT}"
 }
+@test "INVARIANT (scheduler unit declares Group=root explicitly — Ring-0-group 89)" {
+    grep -qE '^Group=root' "${UNIT}"
+}

@@ -494,3 +494,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postrm cleans up /var/cache state on purge — operator-cleanup 88)" {
     grep -qE '/var/cache' "${POSTRM}"
 }
+@test "INVARIANT (postinst signals daemon-reload after install — systemd-cache-refresh 89)" {
+    grep -qE 'systemctl daemon-reload|daemon-reload' "${POSTINST}"
+}

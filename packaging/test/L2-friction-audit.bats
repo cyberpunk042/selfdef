@@ -778,3 +778,6 @@ EOF
 @test "INVARIANT (script declares ts_ms in emit_ring function body — timestamp-presence 88)" {
     awk '/^emit_ring\(\)/,/^}/' "${SCRIPT}" | grep -qE 'ts_ms'
 }
+@test "INVARIANT (script writes to OCSF_PATH via canonical >>append redirect — JSONL-append 89)" {
+    grep -qE '>>.*OCSF_PATH|>>.*ocsf' "${SCRIPT}"
+}

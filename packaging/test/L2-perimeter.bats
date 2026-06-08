@@ -793,3 +793,11 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert data['apiVersion'] == 'cilium.io/v1alpha1'
 "
 }
+@test "INVARIANT (YAML spec.kprobes non-empty list — non-vacuous-perimeter 89)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+k = data['spec']['kprobes']
+assert isinstance(k, list) and len(k) >= 1
+"
+}
