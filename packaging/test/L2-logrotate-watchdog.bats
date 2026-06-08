@@ -1266,3 +1266,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/logrotate-watchdog/module.toml"
     grep -qE '^name[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (logrotate-watchdog module.toml version field uses double-quoted string syntax — TOML-string-quote 98)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/logrotate-watchdog/module.toml"
+    grep -qE '^version[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

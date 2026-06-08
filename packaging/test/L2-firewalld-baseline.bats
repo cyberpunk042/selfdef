@@ -1201,3 +1201,8 @@ assert any('/var/lib/' in p or '/var/log/' in p or '/var/cache/' in p for p in p
     mtoml="${BATS_TEST_DIRNAME}/../../modules/firewalld-baseline/module.toml"
     grep -qE '^name[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (firewalld-baseline module.toml version field uses double-quoted string syntax — TOML-string-quote 98)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/firewalld-baseline/module.toml"
+    grep -qE '^version[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

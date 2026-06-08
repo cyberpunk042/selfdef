@@ -1120,3 +1120,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/swap-encryption-detect/module.toml"
     grep -qE '^name[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (swap-encryption-detect module.toml version field uses double-quoted string syntax — TOML-string-quote 98)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/swap-encryption-detect/module.toml"
+    grep -qE '^version[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}
