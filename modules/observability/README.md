@@ -149,9 +149,10 @@ checked-in template propagate.
 
 ## Alert rules
 
-`assets/alerts/selfdef.yml.template` ships 15 Prometheus alert rules
-across 3 groups: the MS027 four-watchdog set, the M060 cross-repo
-mirror-export loop, and the SDD-062 detection-watchdog finding stream.
+`assets/alerts/selfdef.yml.template` ships 16 Prometheus alert rules
+across 4 groups: the MS027 four-watchdog set, the M060 cross-repo
+mirror-export loop, the SDD-062 detection-watchdog finding stream, and
+the meta-observability ingest-lag warning.
 
 ### MS027 four-watchdog set (MS046 + MS047 + MS044 + MS048)
 
@@ -182,6 +183,17 @@ mirror-export loop, and the SDD-062 detection-watchdog finding stream.
 | Severity | Alert | Triggers when |
 |---|---|---|
 | warning | SelfdefWatchdogAlertFinding | a host watchdog emitted an alert-tier finding in 10m |
+
+### Meta-observability (F-2026-084)
+
+| Severity | Alert | Triggers when |
+|---|---|---|
+| warning | SelfdefMetricsIngestLag | `selfdef_ingest_lag_events_total` rises in 10m — the metrics-ingest subscriber dropped bus events, so `/metrics` under-counts and the counter-based alerts above may not fire for events in a dropped batch |
+
+This one watches the observability path itself: detection still happens
+(correlator + responder subscribe to the bus independently), but the
+counters degrade. Remediate the event-storm source or raise
+`[bus] inproc_capacity`. Runbook: `wiki/runbooks/metrics-ingest-lag.md`.
 
 Every alert carries `runbook_url` pointing at the matching
 remediation procedure. The four-watchdog + detection-watchdog alerts

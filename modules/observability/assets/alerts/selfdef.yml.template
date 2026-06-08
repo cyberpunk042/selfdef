@@ -258,3 +258,22 @@ groups:
           summary: "detection-watchdog alert finding on {{ $labels.instance }} ({{ $value }} in 10m)"
           description: "A selfdef host detection-watchdog emitted an alert-tier finding routed via the selfdef_watchdog_alert Sigma rule (SDD-062). The tag-prefix rule covers both watchdog axes: the exec/injection axis (a planted execute()/RUN/Exec under a writable root, an injection pattern, a writable/non-root config, or a module_lib_missing fail-loud) AND the integrity/baseline axis (a new setuid binary or file-capability grant, a + rhosts trust, a root-login TTY widen, a rogue NSS source, a weakened kernel sysctl, …). Identify the watchdog + axis from the selfdef-* journald SyslogIdentifier and compare against its baseline. See runbook."
           runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/selfdef-watchdog-alert-finding.md"
+
+  # ----- meta-observability: the /metrics path itself degrading -----
+  # selfdef_ingest_lag_events_total counts events the metrics-ingest
+  # subscriber MISSED because the in-process bus broadcast over-subscribed.
+  # When non-zero, every counter-based alert above is reading an
+  # under-counted series — so this warns that the observability itself is
+  # degraded (F-2026-084). Dashboarded at panel id=132 (SD-API health row).
+  - name: selfdef-meta-observability
+    interval: 30s
+    rules:
+      - alert: SelfdefMetricsIngestLag
+        expr: increase(selfdef_ingest_lag_events_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "selfdef metrics ingest lag on {{ $labels.instance }} ({{ $value }} events dropped in 10m)"
+          description: "The selfdef-api metrics-ingest subscriber missed {{ $value }} bus events in the last 10m (selfdef_ingest_lag_events_total rising) — the in-process bus broadcast is over-subscribed, so selfdef_events_* / selfdef_findings_* counters now UNDER-count reality and every counter-based alert here may not fire for events that landed in a dropped batch. Detection still happens (correlator + responder subscribe independently); it's the observability that's degraded. Remediate the event-storm source or raise [bus] inproc_capacity. See runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/metrics-ingest-lag.md"
