@@ -950,3 +950,11 @@ except UnicodeDecodeError as e:
     bn=$(basename "${F}")
     case "${bn}" in [a-z]*) ;; *) return 1 ;; esac
 }
+
+@test "INVARIANT (lib file basename ends with one of {.service,.timer,.sh,.yaml,.yml,.conf,.toml} — POSIX-file-extension-allowlist-canonical 129)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    case "${F}" in
+        *.service|*.timer|*.sh|*.yaml|*.yml|*.conf|*.toml) ;;
+        *) return 1 ;;
+    esac
+}

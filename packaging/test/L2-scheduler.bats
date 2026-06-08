@@ -887,3 +887,11 @@ except UnicodeDecodeError as e:
     bn=$(basename "${F}")
     case "${bn}" in [a-z]*) ;; *) return 1 ;; esac
 }
+
+@test "INVARIANT (scheduler.service file basename ends with one of {.service,.timer,.sh,.yaml,.yml,.conf,.toml} — POSIX-file-extension-allowlist-canonical 129)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    case "${F}" in
+        *.service|*.timer|*.sh|*.yaml|*.yml|*.conf|*.toml) ;;
+        *) return 1 ;;
+    esac
+}
