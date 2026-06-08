@@ -1291,3 +1291,9 @@ with open('${mtoml}') as fp:
     mtoml="${BATS_TEST_DIRNAME}/../../modules/file-capabilities-watchdog/module.toml"
     ! grep -qE $'\r' "${mtoml}"
 }
+
+@test "INVARIANT (file-capabilities-watchdog module.toml ends with newline — POSIX-line-ending-contract 105)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/file-capabilities-watchdog/module.toml"
+    last_char=$(tail -c 1 "${mtoml}" | od -An -c | tr -d ' ')
+    [ "${last_char}" = "\\n" ]
+}

@@ -1178,3 +1178,9 @@ with open('${mtoml}') as fp:
     mtoml="${BATS_TEST_DIRNAME}/../../modules/ctrlaltdel-disable/module.toml"
     ! grep -qE $'\r' "${mtoml}"
 }
+
+@test "INVARIANT (ctrlaltdel-disable module.toml ends with newline — POSIX-line-ending-contract 105)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ctrlaltdel-disable/module.toml"
+    last_char=$(tail -c 1 "${mtoml}" | od -An -c | tr -d ' ')
+    [ "${last_char}" = "\\n" ]
+}
