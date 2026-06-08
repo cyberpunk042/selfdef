@@ -599,6 +599,79 @@
           "options": {}
         }
       ]
+    },
+    {
+      "id": 130,
+      "type": "row",
+      "title": "Daemon health & retention liveness (SD-API /metrics)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 78 }
+    },
+    {
+      "id": 131,
+      "type": "stat",
+      "title": "daemon uptime — restart detector",
+      "description": "selfdef-daemon uptime in seconds. A sudden drop to ~0 means the daemon restarted; pair with an Alertmanager rule if unexpected restarts matter operationally.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 79 },
+      "targets": [
+        { "expr": "selfdef_uptime_seconds", "legendFormat": "uptime" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 132,
+      "type": "stat",
+      "title": "metrics ingest lag — events dropped",
+      "description": "selfdef_ingest_lag_events_total — events the metrics ingest subscriber missed because the bus was over-subscribed. Non-zero means /metrics counters under-count reality; green at 0, red as soon as any event is dropped.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 79 },
+      "targets": [
+        { "expr": "selfdef_ingest_lag_events_total", "legendFormat": "dropped" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 133,
+      "type": "stat",
+      "title": "retention enabled (1 = sweeping)",
+      "description": "selfdef_store_retention_enabled — 1 when the SDD-081 hot-store retention sweep loop is active, 0 when disabled. If 0 unexpectedly, the hot store grows unbounded.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 79 },
+      "targets": [
+        { "expr": "selfdef_store_retention_enabled", "legendFormat": "enabled" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 134,
+      "type": "timeseries",
+      "title": "retention sweeps / hour — liveness (SDD-081)",
+      "description": "rate(selfdef_store_retention_sweeps_total[1h]) — sweep cadence. A flat-zero line while retention_enabled=1 means the sweep loop wedged (the pruned-events panel can read 0 legitimately when nothing is old enough, so sweeps is the true liveness signal).",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 79 },
+      "targets": [
+        { "expr": "rate(selfdef_store_retention_sweeps_total[1h])", "legendFormat": "sweeps/s" }
+      ]
     }
   ]
 }

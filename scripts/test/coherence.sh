@@ -71,6 +71,9 @@ run_layer "L1: dashboard sections (four-watchdog set UX surface)" \
 run_layer "L1: Grafana template (MS027 four-watchdog series)" \
     bash scripts/test/L1-grafana-template.sh
 
+run_layer "L1: API metric observability coverage (every /metrics family has a home)" \
+    bash scripts/test/L1-api-metric-observability-coverage.sh
+
 run_layer "L1: Prometheus alert rules (MS027 four-watchdog alerts)" \
     bash scripts/test/L1-prometheus-alerts.sh
 
