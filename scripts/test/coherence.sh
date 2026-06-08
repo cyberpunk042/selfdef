@@ -143,6 +143,9 @@ run_layer "L1: systemd drop-in integrity (selfdefd.service.d/ebpf.conf: 3 requir
 run_layer "L1: module operator-config-key discoverability (toml_get keys documented in profiles)" \
     bash scripts/test/L1-module-config-key-discoverability.sh
 
+run_layer "L1: cross-repo mirror artifact filename binding (cockpit consumers)" \
+    bash scripts/test/L1-mirror-artifact-filename-binding.sh
+
 run_layer "L1: CLI test-helper dedup (module_*.rs consume common/mod.rs; F-2026-060)" \
     bash scripts/test/L1-test-helper-dedup-coherence.sh
 
