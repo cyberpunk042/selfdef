@@ -133,10 +133,10 @@ jobs:
         with:
           toolchain: 1.88.0
       - uses: Swatinem/rust-cache@v2
-      - name: Install bats-core + yamllint + shellcheck
+      - name: Install bats-core + yamllint + shellcheck + pytest
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends bats yamllint shellcheck python3-yaml
+          sudo apt-get install -y --no-install-recommends bats yamllint shellcheck python3-yaml python3-pytest
       - name: Install ruff (feeds the L1-ruff-python coherence layer)
         # Without ruff installed, scripts/test/L1-ruff-python.sh self-skips —
         # so install it here to actually run the python real-bug lint in CI.

@@ -168,6 +168,22 @@ run_layer "L2: python suites (guardian / adversary / replay / ux-harness)" \
         tests.replay.test_audit_chain_continuity \
         tests.ux-harness.test_ux_harness_l1
 
+# --- L2 observability pytest suite ------------------------------------
+# tests/observability/ is pytest-style (parametrize + bare asserts), which
+# `python3 -m unittest` CANNOT collect — so without this layer the whole
+# ~190-test alert/dashboard/SHIPPED contract suite runs NOWHERE in CI (it
+# was orphaned: present, green-by-assumption, never executed — and real
+# drift accumulated unseen). Run it via pytest; self-skip (not fail) when
+# pytest isn't installed so the harness still works on a bats-only box.
+if python3 -c 'import pytest' 2>/dev/null; then
+    run_layer "L2: observability pytest suite (alerts/dashboard/SHIPPED contracts)" \
+        python3 -m pytest tests/observability/ -q
+else
+    LAYER_NAMES+=("L2: observability pytest")
+    LAYER_STATUS+=("SKIP")
+    echo "[L2: observability pytest] SKIPPED — pytest not installed"
+fi
+
 # --- L2 gates (bats) --------------------------------------------------
 
 if command -v bats >/dev/null 2>&1; then

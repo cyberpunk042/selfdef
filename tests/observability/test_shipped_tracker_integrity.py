@@ -42,9 +42,28 @@ def test_rollup_table_present():
     assert "11,520" in text, "roll-up must reference the catalogue total"
 
 
+def _is_shallow_clone() -> bool:
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--is-shallow-repository"],
+            stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+        return out == "true"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
 def test_referenced_local_commits_exist():
     """At least one commit hash referenced in SHIPPED.md must resolve
-    in `git log` — proving the file is anchored to real history."""
+    in `git log` — proving the file is anchored to real history.
+
+    Skipped on a shallow clone: SHIPPED.md references commits from across
+    the project's history, most of which are absent from a depth-limited
+    checkout, so the resolve-check is meaningless there (it would fail for
+    a pure environment reason, not a real SHIPPED.md drift)."""
+    if _is_shallow_clone():
+        import pytest
+        pytest.skip("shallow clone — full history unavailable to resolve SHAs")
     text = _shipped_text()
     sha_pattern = re.compile(r"`([0-9a-f]{7})`")
     shas = {m.group(1) for m in sha_pattern.finditer(text)}

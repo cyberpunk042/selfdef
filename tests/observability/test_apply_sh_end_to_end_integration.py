@@ -168,9 +168,19 @@ def test_deployed_alerts_yaml_is_valid_and_complete(deployed):
     doc = yaml.safe_load(alerts.read_text())
     assert "groups" in doc
     n_rules = sum(len(g["rules"]) for g in doc["groups"])
-    assert n_rules == 15, (
-        f"deployed alerts file should ship 15 rules (4 groups: 4-watchdog + "
-        f"storage + M060 + detection-watchdog); got {n_rules}"
+    # The alerts ship verbatim (no template substitution), so the deployed
+    # file MUST carry exactly as many rules as the source template — derive
+    # the expected count rather than hardcode it (the alert set grows; a
+    # frozen literal drifts the moment a rule is added, e.g. the
+    # SelfdefMetricsIngestLag addition that took the count 15→16).
+    src = (REPO_ROOT / "modules" / "observability" / "assets" / "alerts"
+           / "selfdef.yml.template")
+    src_doc = yaml.safe_load(src.read_text())
+    n_src = sum(len(g["rules"]) for g in src_doc["groups"])
+    assert n_rules == n_src, (
+        f"deployed alerts file shipped {n_rules} rules but the source "
+        f"template has {n_src} — apply.sh dropped/duplicated a rule during "
+        f"the copy step (the alerts must ship verbatim)."
     )
 
 

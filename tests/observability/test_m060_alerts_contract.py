@@ -98,10 +98,16 @@ def test_every_m060_alert_carries_runbook_url():
         assert url.startswith("https://"), (
             f"alert {rule['alert']!r} missing runbook_url: {ann}"
         )
-        assert "deployment-guide" in url or "troubleshooting" in url, (
-            f"alert {rule['alert']!r} runbook_url does not point at "
-            f"the operator deployment guide / troubleshooting section: "
-            f"{url}"
+        # The runbook_url must land on an operator-remediation surface:
+        # either the deployment-guide troubleshooting matrix OR a dedicated
+        # wiki runbook (the M060 publish-anomalies alerts now point at the
+        # focused wiki/runbooks/m060-mirror-export-publish-anomalies.md,
+        # which is a more direct 3-AM target than the generic guide).
+        assert ("deployment-guide" in url or "troubleshooting" in url
+                or "/wiki/runbooks/" in url), (
+            f"alert {rule['alert']!r} runbook_url does not point at an "
+            f"operator-remediation surface (deployment-guide / troubleshooting"
+            f" / a wiki runbook): {url}"
         )
 
 

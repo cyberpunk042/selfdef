@@ -21,6 +21,7 @@ This test asserts:
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -73,17 +74,21 @@ def test_every_readme_alert_exists_in_yaml():
     )
 
 
-def test_apply_sh_comment_reflects_total_count():
-    """The apply.sh deploy-comment block tells operators how many
-    alerts are about to land. Drift = silent misinformation when
-    operators run `apply.sh --dry-run` and check the comment."""
+def test_apply_sh_comment_carries_no_stale_alert_count():
+    """The apply.sh deploy-comment must not MISINFORM operators about how
+    many alerts land. Per the count-free doctrine the comment shouldn't
+    hardcode a total at all (the rule set grows; the count lives in the
+    template) — but IF it states `<N> rules`, N must equal the real total.
+    A stale literal (e.g. '15 rules' after the set grew to 16) is silent
+    misinformation at `apply.sh --dry-run` time."""
     apply_sh = _apply_sh()
     total = len(_yaml_alerts())
-    # The comment block should mention the actual total. Accept either
-    # the exact number or a range that includes it.
-    assert str(total) in apply_sh, (
-        f"apply.sh comment block doesn't mention the current total of "
-        f"{total} alerts — update the deploy comment to match the YAML"
+    stated = [int(n) for n in re.findall(r"(\d+)\s+rules\b", apply_sh)]
+    bad = [n for n in stated if n != total]
+    assert not bad, (
+        f"apply.sh comment states a stale alert-rule count {bad} but the "
+        f"template ships {total} — either drop the hardcoded count "
+        f"(count-free, preferred) or update it to {total}."
     )
 
 

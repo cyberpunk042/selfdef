@@ -194,13 +194,18 @@ def test_dashboard_panel_id_ranges_dont_collide():
             # the title containing 'M060', or the title being one of
             # the locked panel titles).
             title = p.get("title", "")
+            # The M060 cockpit section covers the mirror-publish telemetry
+            # AND the liveness of the daemon that performs the publishing
+            # (a dead daemon = no publishes), so the daemon-health /
+            # retention-liveness panel belongs to this section too.
             m060_marker = ("M060" in title) or any(
-                kw in title
-                for kw in ("publish", "stalest", "per-artifact health")
+                kw in title.lower()
+                for kw in ("publish", "stalest", "per-artifact health",
+                           "daemon health", "retention", "liveness")
             )
             assert m060_marker, (
                 f"panel id {pid} ({title!r}) in M060 range but is not "
-                f"an M060 panel"
+                f"an M060 / M060-daemon panel"
             )
 
 
