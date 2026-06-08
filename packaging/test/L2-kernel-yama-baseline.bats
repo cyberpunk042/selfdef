@@ -1277,3 +1277,14 @@ r = data.get('requires')
 assert isinstance(r, list), f'requires must be list, got {type(r).__name__}'
 "
 }
+
+@test "INVARIANT (kernel-yama-baseline module.toml top-level provides field is a TOML list — TOML-provides-list-canonical 116)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/kernel-yama-baseline/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('provides')
+assert isinstance(r, list), f'provides must be list, got {type(r).__name__}'
+"
+}
