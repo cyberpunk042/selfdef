@@ -941,3 +941,8 @@ assert b'\x00' not in data, 'NUL byte present'
     mode=$(stat -c %a "${F}")
     [ $((8#$mode & 8#002)) -eq 0 ]
 }
+
+@test "INVARIANT (YAML file extension is .yaml — POSIX-file-extension-canonical 113)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    case "${F}" in *.yaml) ;; *) return 1 ;; esac
+}

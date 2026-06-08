@@ -1082,3 +1082,14 @@ ap = (data.get('install') or {}).get('apply')
 assert ap is None or isinstance(ap, str), f'install.apply must be string or absent, got type {type(ap).__name__}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml version field matches semver X.Y.Z pattern — TOML-version-semver-canonical 113)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    python3 -c "
+import tomllib, re
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('version', '')
+assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', v), f'version must be semver X.Y.Z, got {v!r}'
+"
+}

@@ -872,3 +872,8 @@ assert b'\x00' not in data, 'NUL byte present'
     mode=$(stat -c %a "${F}")
     [ $((8#$mode & 8#002)) -eq 0 ]
 }
+
+@test "INVARIANT (script file extension is .sh — POSIX-file-extension-canonical 113)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    case "${F}" in *.sh) ;; *) return 1 ;; esac
+}
