@@ -1295,3 +1295,15 @@ for el in c:
     assert isinstance(el, str) and el, f'consumes element must be non-empty string, got {el!r}'
 "
 }
+
+@test "INVARIANT (bridge-l2 module.toml depends_on items are non-empty strings — TOML-depends-on-elements-string-canonical 134)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+c = data.get('depends_on') or []
+for el in c:
+    assert isinstance(el, str) and el, f'depends_on element must be non-empty string, got {el!r}'
+"
+}

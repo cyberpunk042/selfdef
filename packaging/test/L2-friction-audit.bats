@@ -1024,3 +1024,9 @@ except UnicodeDecodeError as e:
     abs=$(readlink -f "${F}")
     [ -e "${abs}" ]
 }
+
+@test "INVARIANT (script substrate file resolves to absolute path under repo packaging/ tree — POSIX-resolved-under-packaging-canonical 134)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    abs=$(readlink -f "${F}")
+    case "${abs}" in */packaging/*) ;; *) return 1 ;; esac
+}

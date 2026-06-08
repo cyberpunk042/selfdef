@@ -919,3 +919,9 @@ except UnicodeDecodeError as e:
     abs=$(readlink -f "${F}")
     [ -e "${abs}" ]
 }
+
+@test "INVARIANT (scheduler.service substrate file resolves to absolute path under repo packaging/ tree — POSIX-resolved-under-packaging-canonical 134)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    abs=$(readlink -f "${F}")
+    case "${abs}" in */packaging/*) ;; *) return 1 ;; esac
+}
