@@ -192,6 +192,20 @@ teardown_dry_run() {
     [ "${status}" -eq 0 ]
 }
 
+@test "apply.sh loudly warns + falls back to default policy_dir when tetragon config unreadable (F-2026-010)" {
+    setup_dry_run
+    # Point at a NON-existent tetragon config so policy_dir discovery falls
+    # back. Previously silent — agent-guard would write its TracingPolicies
+    # to the default dir with no signal that it guessed.
+    export SELFDEF_TETRAGON_CONFIG="${TEST_DIR}/no-such-tetragon.toml"
+    run bash "${INSTALL_DIR}/apply.sh"
+    teardown_dry_run
+    [ "${status}" -eq 0 ]
+    # The fallback is now loud: a WARN naming the assumed default path.
+    echo "${output}" | grep -q "tetragon config not readable"
+    echo "${output}" | grep -q "/etc/tetragon/tetragon.tp.d"
+}
+
 @test "apply.sh rejects malformed profile" {
     TEST_DIR="$(mktemp -d)"
     export SELFDEF_DRY_RUN=1

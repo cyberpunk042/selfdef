@@ -51,6 +51,15 @@ TG_CFG="${SELFDEF_TETRAGON_CONFIG:-/etc/selfdef/modules/tetragon.toml}"
 POLICY_DIR="/etc/tetragon/tetragon.tp.d"
 if [[ -r "$TG_CFG" ]]; then
     POLICY_DIR=$(toml_get policy_dir "$TG_CFG" || echo "$POLICY_DIR")
+else
+    # F-2026-010: tetragon's config isn't readable here, so we cannot learn
+    # its actual tracing-policy-dir and fall back to the FHS-canonical
+    # default. If the operator configured tetragon with a NON-default
+    # policy_dir, the agent-guard TracingPolicies below would land where
+    # Tetragon never loads them — a SILENT enforcement gap. Surface the
+    # fallback loudly so the operator can apply tetragon first or set
+    # SELFDEF_TETRAGON_CONFIG.
+    log "WARN: tetragon config not readable at ${TG_CFG}; assuming policy_dir=${POLICY_DIR}. If tetragon uses a non-default tracing-policy-dir, set SELFDEF_TETRAGON_CONFIG or apply the tetragon module first so agent-guard policies land where Tetragon loads them (F-2026-010)."
 fi
 if [[ ! -d "$POLICY_DIR" ]]; then
     run "create $POLICY_DIR" -- mkdir -p "$POLICY_DIR"
