@@ -1402,3 +1402,16 @@ for el in r:
     assert k in allowed, f'requires.kind must be in {allowed}, got {k!r}'
 "
 }
+
+@test "INVARIANT (kernel-sysrq-restrict module.toml requires items have value as non-empty string — TOML-requires-value-nonempty-canonical 130)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/kernel-sysrq-restrict/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('requires') or []
+for el in r:
+    v = el.get('value', '')
+    assert isinstance(v, str) and v, f'requires.value must be non-empty string, got {v!r}'
+"
+}
