@@ -1295,3 +1295,14 @@ s = data.get('summary', '')
 assert isinstance(s, str) and len(s) >= 30, f'summary must be string with len >= 30, got len={len(s)} value={s!r}'
 "
 }
+
+@test "INVARIANT (integrity-sentinel module.toml top-level requires field is a TOML list — TOML-requires-list-canonical 115)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/integrity-sentinel/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('requires')
+assert isinstance(r, list), f'requires must be list, got {type(r).__name__}'
+"
+}
