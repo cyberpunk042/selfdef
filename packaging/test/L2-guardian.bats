@@ -497,3 +497,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst signals daemon-reload after install — systemd-cache-refresh 89)" {
     grep -qE 'systemctl daemon-reload|daemon-reload' "${POSTINST}"
 }
+@test "INVARIANT (guardian.service uses ProtectKernel directive — kernel-protect 90)" {
+    grep -qE '^ProtectKernel' "${UNIT}"
+}

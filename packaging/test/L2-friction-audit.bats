@@ -781,3 +781,6 @@ EOF
 @test "INVARIANT (script writes to OCSF_PATH via canonical >>append redirect — JSONL-append 89)" {
     grep -qE '>>.*OCSF_PATH|>>.*ocsf' "${SCRIPT}"
 }
+@test "INVARIANT (script declares activity_id field in OCSF emission — OCSF-schema-axis 90)" {
+    grep -qE 'activity_id' "${SCRIPT}"
+}

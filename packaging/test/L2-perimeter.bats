@@ -801,3 +801,10 @@ k = data['spec']['kprobes']
 assert isinstance(k, list) and len(k) >= 1
 "
 }
+@test "INVARIANT (YAML metadata.name is string typed 90)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert isinstance(data['metadata']['name'], str)
+"
+}

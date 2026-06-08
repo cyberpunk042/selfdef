@@ -828,3 +828,13 @@ assert isinstance(data, dict)
 @test "INVARIANT (detect-host module.toml has [install] section header 89)" {
     grep -qE '^\[install\]' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
 }
+@test "INVARIANT (detect-host module.toml has at least 1 install_paths.paths entry 90)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert len(ps) >= 1
+"
+}

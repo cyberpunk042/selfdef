@@ -662,3 +662,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service unit declares Group=root explicitly — Ring-0-group 89)" {
     grep -qE '^Group=root' "${SERVICE}"
 }
+@test "INVARIANT (.service unit specifies User AND Group root — paired-Ring-0 90)" {
+    grep -qE '^User=root' "${SERVICE}"
+    grep -qE '^Group=root' "${SERVICE}"
+}

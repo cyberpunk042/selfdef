@@ -739,3 +739,6 @@ setup() {
 @test "INVARIANT (lib's toml_get is bash function 89)" {
     type -t toml_get | grep -q '^function$'
 }
+@test "INVARIANT (lib's run is bash function 90)" {
+    type -t run | grep -q '^function$'
+}

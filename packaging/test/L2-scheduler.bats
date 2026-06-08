@@ -676,3 +676,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler unit declares Group=root explicitly — Ring-0-group 89)" {
     grep -qE '^Group=root' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service uses ProtectKernel directive — kernel-protect 90)" {
+    grep -qE '^ProtectKernel' "${UNIT}"
+}
