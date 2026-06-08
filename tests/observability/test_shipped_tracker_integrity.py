@@ -181,23 +181,31 @@ def test_referenced_sdd_docs_exist():
     )
 
 
+# Threshold: the full 48-milestone selfdef catalogue (MS001..MS048).
+# Every catalogued milestone must carry a `### MSxxx` audit row in
+# SHIPPED.md. Locks the operator's "you cannot mark something done
+# if it hasn't reached Prod" constraint at push-time across the full
+# 11,520 R-row catalogue surface (48 milestones × 240 R-rows). A
+# regression below this floor — silent removal of an audit row —
+# fails CI immediately. Was 47 (1-row drift margin); now full lock
+# because SHIPPED.md was audited end-to-end across MS001..MS048 in
+# the session that produced this commit.
+MILESTONE_AUDIT_FLOOR = 48
+
+
 def test_milestone_audit_coverage_above_threshold():
-    """Lock the SHIPPED.md audit coverage at or above the current
-    threshold (selfdef has 48 milestones, audit-rows shipped across
-    a substantial fraction this session). Drift below threshold
-    means SHIPPED.md regressed — a row got removed silently."""
+    """Lock the SHIPPED.md audit coverage at full 48-milestone
+    catalogue floor. Each `### MSxxx` heading is one audit row;
+    silent removal of any row makes this assertion fire."""
     text = _shipped_text()
     heading_re = re.compile(r"^### (MS\d{3})\b", re.MULTILINE)
     audited = {m.group(1) for m in heading_re.finditer(text)}
-    # Threshold: ≥47 milestones audited (of 48 selfdef milestones).
-    # The audit now covers the FULL 48-milestone catalogue MS001..MS048
-    # after MS008 + MS012 + MS019 + MS036 audit rows landed this session
-    # (commits `00b447c` + this commit). Setting threshold at 47 gives
-    # 1-row drift margin while catching accidental regressions on the
-    # remaining 47 rows.
-    assert len(audited) >= 47, (
-        f"SHIPPED.md milestone-audit coverage regressed: {len(audited)} "
-        f"audited (threshold 40). Audited: {sorted(audited)}"
+    assert len(audited) >= MILESTONE_AUDIT_FLOOR, (
+        f"SHIPPED.md milestone-audit coverage regressed: "
+        f"{len(audited)} audited (threshold {MILESTONE_AUDIT_FLOOR}). "
+        f"Audited milestones: {sorted(audited)}. "
+        f"Catalogue total: 48 milestones (MS001..MS048). "
+        f"A row was silently removed or renamed."
     )
 
 
