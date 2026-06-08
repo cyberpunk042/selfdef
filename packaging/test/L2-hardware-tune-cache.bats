@@ -1096,3 +1096,8 @@ ph = data.get('phase')
 assert ph is None or ph in ('main','pre','post'), f'phase if present must be main|pre|post, got {ph!r}'
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml has [install] section header at start-of-line — TOML-install-section-header-canonical 111)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    grep -qE '^\[install\]$' "${mtoml}"
+}

@@ -742,3 +742,9 @@ data = open('${F}', 'rb').read()
 assert b'\x00' not in data, 'NUL byte present'
 "
 }
+
+@test "INVARIANT (.service file size is below 102400 bytes (100 KiB) — POSIX-text-content-ceiling-canonical 111)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
+    sz=$(wc -c < "${F}")
+    [ "${sz}" -lt 102400 ]
+}
