@@ -1365,3 +1365,14 @@ assert isinstance(v, str) and v and v.endswith('.sh'), f'install.uninstall must 
     mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-tune/module.toml"
     grep -qE '^\[profiles\]$' "${mtoml}"
 }
+
+@test "INVARIANT (auditd-tune module.toml [profiles] default field is non-empty string — TOML-profiles-default-canonical 123)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-tune/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+d = (data.get('profiles') or {}).get('default', '')
+assert isinstance(d, str) and d, f'profiles.default must be non-empty string, got {d!r}'
+"
+}
