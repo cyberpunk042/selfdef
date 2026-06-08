@@ -423,7 +423,11 @@ impl Config {
 pub struct DaemonConfig {
     pub host_tag: Option<String>,
     pub log_level: String,
-    /// `"text"` or `"json"`.
+    /// `"text"` (default) or `"json"`. Consumed by the daemon's tracing
+    /// init (`selfdef-daemon` main `init_tracing`) for the stderr fallback
+    /// logger — `"json"` emits structured lines for log ingest. (Under
+    /// journald the daemon logs structured fields natively, so this applies
+    /// to the no-journald path.)
     pub log_format: String,
 }
 

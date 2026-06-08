@@ -59,7 +59,14 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    init_tracing(args.log_level.as_deref())?;
+    // Honor [daemon].log_format for the stderr fallback logger. Best-effort
+    // peek: the authoritative config load + error handling happens below;
+    // default to "text" if the file is missing/invalid so logging still
+    // initialises (and the real load reports the error properly).
+    let log_format = Config::load(Some(&args.config))
+        .map(|c| c.daemon.log_format)
+        .unwrap_or_else(|_| "text".to_string());
+    init_tracing(args.log_level.as_deref(), &log_format)?;
 
     // SDD-002 follow-up: `--validate` is a pure pre-flight. Load the config
     // (which runs the TOML parse + every semantic fail-fast rule) and exit
@@ -2044,7 +2051,7 @@ fn parse_severity_floor(s: &str) -> Option<selfdef_core::severity::SeverityId> {
     }
 }
 
-fn init_tracing(level_override: Option<&str>) -> Result<()> {
+fn init_tracing(level_override: Option<&str>, log_format: &str) -> Result<()> {
     use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
     let filter = level_override.map_or_else(EnvFilter::from_default_env, |lvl| {
@@ -2052,11 +2059,20 @@ fn init_tracing(level_override: Option<&str>) -> Result<()> {
     });
 
     if let Ok(journald) = tracing_journald::layer() {
+        // journald carries structured fields natively; [daemon].log_format
+        // applies to the stderr fallback below (no journald socket).
         tracing_subscriber::registry()
             .with(filter)
             .with(journald)
             .try_init()
             .context("initialize journald tracing")?;
+    } else if log_format == "json" {
+        // [daemon].log_format = "json": structured stderr for log ingest.
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(tracing_subscriber::fmt::layer().with_target(true).json())
+            .try_init()
+            .context("initialize stderr JSON tracing")?;
     } else {
         tracing_subscriber::registry()
             .with(filter)
