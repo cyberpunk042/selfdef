@@ -27,7 +27,14 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# Scan both the operator docs AND the module assets: alert templates
+# under modules/<m>/assets/alerts/ carry runbook_url deep-links into the
+# info-hub wiki/runbooks/ (e.g. the four-watchdog set), which were
+# previously unscanned (docs/-only) — a renamed/removed info-hub runbook
+# would silently dead-link an operator paging from a real alert.
 DOCS_ROOT="${REPO_ROOT}/docs"
+MODULES_ROOT="${REPO_ROOT}/modules"
+declare -a SCAN_ROOTS=("${DOCS_ROOT}" "${MODULES_ROOT}")
 INFO_HUB_DEFAULT="${REPO_ROOT}/../devops-solutions-information-hub"
 INFO_HUB="${SELFDEF_INFO_HUB_REPO:-${INFO_HUB_DEFAULT}}"
 
@@ -45,10 +52,10 @@ while IFS= read -r url; do
     # blob/<branch>/" prefix; strip trailing #anchor and ).
     path=$(echo "${url}" | sed -E 's|^cyberpunk042/devops-solutions-information-hub/blob/[a-z0-9_-]+/||; s|#.*$||; s|\).*$||')
     refs+=("${path}")
-done < <(grep -rohE 'cyberpunk042/devops-solutions-information-hub/blob/[a-z][a-z0-9_-]*/[^[:space:])\#"]+' "${DOCS_ROOT}" 2>/dev/null | sort -u)
+done < <(grep -rohE 'cyberpunk042/devops-solutions-information-hub/blob/[a-z][a-z0-9_-]*/[^[:space:])\#"]+' "${SCAN_ROOTS[@]}" 2>/dev/null | sort -u)
 
 if [[ "${#refs[@]}" -eq 0 ]]; then
-    echo "L1-info-hub-doc-references PASS: no info-hub cross-repo refs found under ${DOCS_ROOT}"
+    echo "L1-info-hub-doc-references PASS: no info-hub cross-repo refs found under docs/ + modules/"
     exit 0
 fi
 
