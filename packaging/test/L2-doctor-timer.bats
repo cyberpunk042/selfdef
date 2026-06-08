@@ -759,3 +759,9 @@ assert b'\x00' not in data, 'NUL byte present'
     F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
     case "${F}" in *.service) ;; *) return 1 ;; esac
 }
+
+@test "INVARIANT (.service file line count is between 5 and 1000 — POSIX-text-line-bounded-canonical 114)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
+    n=$(wc -l < "${F}")
+    [ "${n}" -ge 5 ] && [ "${n}" -le 1000 ]
+}
