@@ -1311,3 +1311,14 @@ v = data.get('version', '')
 assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', v), f'version must be semver X.Y.Z, got {v!r}'
 "
 }
+
+@test "INVARIANT (apport-disable module.toml summary field is non-empty string with length >= 30 chars — TOML-summary-substance-floor 114)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/apport-disable/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+s = data.get('summary', '')
+assert isinstance(s, str) and len(s) >= 30, f'summary must be string with len >= 30, got len={len(s)} value={s!r}'
+"
+}
