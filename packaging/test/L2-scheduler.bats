@@ -933,3 +933,10 @@ except UnicodeDecodeError as e:
         *) return 1 ;;
     esac
 }
+
+@test "INVARIANT (scheduler.service substrate file path matches the expected packaging/systemd/selfdef-scheduler.service suffix — POSIX-substrate-path-canonical-strict 136)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    abs=$(readlink -f "${F}")
+    expected_suffix="packaging/systemd/selfdef-scheduler.service"
+    case "${abs}" in *"${expected_suffix}") ;; *) return 1 ;; esac
+}

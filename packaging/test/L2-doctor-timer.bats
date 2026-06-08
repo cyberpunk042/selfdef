@@ -920,3 +920,10 @@ except UnicodeDecodeError as e:
         *) return 1 ;;
     esac
 }
+
+@test "INVARIANT (.service substrate file path matches the expected packaging/systemd/selfdef-doctor.service suffix — POSIX-substrate-path-canonical-strict 136)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
+    abs=$(readlink -f "${F}")
+    expected_suffix="packaging/systemd/selfdef-doctor.service"
+    case "${abs}" in *"${expected_suffix}") ;; *) return 1 ;; esac
+}

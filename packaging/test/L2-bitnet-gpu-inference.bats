@@ -1361,3 +1361,15 @@ for el in paths:
     assert isinstance(el, str) and el and el.startswith('/'), f'install_paths.paths element must be absolute path, got {el!r}'
 "
 }
+
+@test "INVARIANT (bitnet-gpu-inference module.toml install_paths.paths elements are unique — TOML-install-paths-paths-unique-canonical 136)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths') or {}
+paths = ip.get('paths') or []
+assert len(paths) == len(set(paths)), f'install_paths.paths must be unique, got {paths!r}'
+"
+}

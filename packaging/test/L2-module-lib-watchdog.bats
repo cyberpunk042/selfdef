@@ -996,3 +996,10 @@ except UnicodeDecodeError as e:
         *) return 1 ;;
     esac
 }
+
+@test "INVARIANT (lib substrate file path matches the expected packaging/lib/module-lib.sh suffix — POSIX-substrate-path-canonical-strict 136)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    abs=$(readlink -f "${F}")
+    expected_suffix="packaging/lib/module-lib.sh"
+    case "${abs}" in *"${expected_suffix}") ;; *) return 1 ;; esac
+}
