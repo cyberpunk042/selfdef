@@ -1635,3 +1635,16 @@ for el in paths:
     assert not el.endswith('/'), f'install_paths.paths element must not end with /, got {el!r}'
 "
 }
+
+@test "INVARIANT (sudoers-defaults-watchdog module.toml install_paths.paths elements do not contain double slashes (// not allowed) — TOML-install-paths-no-double-slash-canonical 141)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/sudoers-defaults-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths') or {}
+paths = ip.get('paths') or []
+for el in paths:
+    assert '//' not in el, f'install_paths.paths element must not contain //, got {el!r}'
+"
+}
