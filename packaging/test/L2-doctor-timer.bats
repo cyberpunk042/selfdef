@@ -772,3 +772,13 @@ assert b'\x00' not in data, 'NUL byte present'
     abs=$(readlink -f "${F}")
     case "${abs}" in *..*) return 1 ;; esac
 }
+
+@test "INVARIANT (.service file contains no bare CR (no classic-Mac \r line endings) — POSIX-no-bare-CR-canonical 116)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
+    python3 -c "
+data = open('${F}', 'rb').read()
+# bare \r without following \n
+import re
+assert not re.search(b'\r(?!\n)', data), 'bare CR present'
+"
+}
