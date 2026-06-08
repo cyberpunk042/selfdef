@@ -984,3 +984,8 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
     [ -r "${F}" ]
 }
+
+@test "INVARIANT (YAML file path lies under packaging/ — POSIX-substrate-location-canonical 120)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    case "${F}" in */packaging/*) ;; *) return 1 ;; esac
+}

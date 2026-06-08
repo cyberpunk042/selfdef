@@ -915,3 +915,8 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
     [ -r "${F}" ]
 }
+
+@test "INVARIANT (script file path lies under packaging/ — POSIX-substrate-location-canonical 120)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    case "${F}" in */packaging/*) ;; *) return 1 ;; esac
+}

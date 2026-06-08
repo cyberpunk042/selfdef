@@ -873,3 +873,8 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
     [ -r "${F}" ]
 }
+
+@test "INVARIANT (lib file path lies under packaging/ — POSIX-substrate-location-canonical 120)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    case "${F}" in */packaging/*) ;; *) return 1 ;; esac
+}

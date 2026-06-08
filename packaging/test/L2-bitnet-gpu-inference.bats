@@ -1173,3 +1173,14 @@ r = data.get('consumes')
 assert isinstance(r, list), f'consumes must be list, got {type(r).__name__}'
 "
 }
+
+@test "INVARIANT (bitnet-gpu-inference module.toml first parsed top-level key is name — TOML-first-key-name-canonical 120)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+keys = [k for k, v in data.items() if not isinstance(v, dict)]
+assert keys and keys[0] == 'name', f'first top-level key must be name, got {keys[:3]!r}'
+"
+}

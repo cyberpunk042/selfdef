@@ -810,3 +810,8 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
     [ -r "${F}" ]
 }
+
+@test "INVARIANT (scheduler.service file path lies under packaging/ — POSIX-substrate-location-canonical 120)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    case "${F}" in */packaging/*) ;; *) return 1 ;; esac
+}
