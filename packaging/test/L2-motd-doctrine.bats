@@ -960,3 +960,14 @@ for p in ps:
     assert any(p.startswith(pf) for pf in prefixes), f'{p!r} not canonical-root'
 "
 }
+
+@test "INVARIANT (motd-doctrine module.toml has at least 3 entries in install_paths.paths — substantial-manifest 90)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/motd-doctrine/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert len(ps) >= 3, f'expected >=3 paths, got {len(ps)}'
+"
+}

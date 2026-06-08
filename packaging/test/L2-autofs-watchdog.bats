@@ -1101,3 +1101,14 @@ p = data.get('provides')
 assert isinstance(p, list) and len(p) >= 1
 "
 }
+
+@test "INVARIANT (autofs-watchdog module.toml has at least 3 entries in install_paths.paths — substantial-manifest 90)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/autofs-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert len(ps) >= 3, f'expected >=3 paths, got {len(ps)}'
+"
+}
