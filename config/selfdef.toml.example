@@ -121,6 +121,10 @@ third_party_policy_stance = "warn"
 
 [collectors]
 # Each collector has its own table; all default to disabled.
+# `read_from` (where present) accepts "start" (replay from the beginning of
+# the source) or "end" (tail new events only). The daemon rejects any other
+# value at startup — an unrecognized read_from used to silently default to
+# "end", dropping the historical replay you asked for.
 
 [collectors.auditd]
 enabled = false
