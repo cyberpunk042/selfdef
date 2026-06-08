@@ -1160,3 +1160,9 @@ with open('${mtoml}') as fp:
     first3=$(head -c 3 "${mtoml}" | od -An -tx1 | tr -d ' ')
     [ "${first3}" != "efbbbf" ]
 }
+
+@test "INVARIANT (shell-timeout-baseline module.toml file size exceeds 200 bytes — TOML-content-floor-canonical 108)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/shell-timeout-baseline/module.toml"
+    sz=$(wc -c < "${mtoml}")
+    [ "${sz}" -gt 200 ]
+}
