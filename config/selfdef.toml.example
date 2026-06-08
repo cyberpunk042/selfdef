@@ -509,6 +509,43 @@ allowed_actions = ["notify"]
 # Where snapshot_proc writes per-event directories.
 snapshot_dir = "/var/lib/selfdef/snapshots"
 
+# Operator-owned scripts. Install with mode 0750 root:root. Example
+# implementations live in packaging/scripts/ in the source tree.
+lockdown_script = "/usr/local/sbin/selfdef-lockdown.sh"
+revoke_session_script = "/usr/local/sbin/selfdef-revoke-session.sh"
+
+# Where forensics_bundle writes per-event evidence directories. Each bundle
+# is `forensics_dir/<event-uuid>/` and contains event.json, system metadata,
+# /proc state for the actor pid (if any), dmesg, journalctl, and a manifest.
+# Use `selfdefctl forensics list` to inspect, `selfdefctl forensics collect
+# <event-id>` to (re)create a bundle for any event already in the hot store.
+forensics_dir = "/var/lib/selfdef/forensics"
+
+# Velociraptor escalation. The action invokes
+#   velociraptor_binary velociraptor_args...
+# with `{event_id}` and `{host_tag}` substituted in any arg. Leave args
+# empty to disable the action even if `velociraptor_escalate` is in
+# allowed_actions — the action runs successfully with no operational
+# effect. Operator owns the actual workflow (client-side artifact
+# collection, server-side hunt creation, …).
+velociraptor_binary = "/usr/local/bin/velociraptor"
+velociraptor_args = []
+# Example (client-side artifact collection on every Critical finding):
+# velociraptor_args = [
+#   "--config", "/etc/velociraptor/client.config.yaml",
+#   "client", "collect",
+#   "--artifact=Generic.Forensic.SQLiteHunter",
+#   "--label={host_tag}",
+#   "--tag={event_id}",
+# ]
+# Example (server-side hunt creation, useful from a tooling host):
+# velociraptor_args = [
+#   "--config", "/etc/velociraptor/server.config.yaml",
+#   "hunts", "add",
+#   "--artifact=Linux.Detection.SELinux.Audit",
+#   "--description=selfdef escalation host={host_tag} event={event_id}",
+# ]
+
 [api]
 # Read-only HTTP API for the dashboard and selfdefctl's future IPC
 # channel. Two transports, either or both:
@@ -562,43 +599,6 @@ control_token_file = ""                      # e.g. "/etc/selfdef/api-control.to
 cert_path = ""                               # e.g. "/etc/selfdef/api-cert.pem"
 key_path = ""                                # e.g. "/etc/selfdef/api-key.pem"
 client_ca = ""                               # e.g. "/etc/selfdef/clients-ca.pem"
-
-# Operator-owned scripts. Install with mode 0750 root:root. Example
-# implementations live in packaging/scripts/ in the source tree.
-lockdown_script = "/usr/local/sbin/selfdef-lockdown.sh"
-revoke_session_script = "/usr/local/sbin/selfdef-revoke-session.sh"
-
-# Where forensics_bundle writes per-event evidence directories. Each bundle
-# is `forensics_dir/<event-uuid>/` and contains event.json, system metadata,
-# /proc state for the actor pid (if any), dmesg, journalctl, and a manifest.
-# Use `selfdefctl forensics list` to inspect, `selfdefctl forensics collect
-# <event-id>` to (re)create a bundle for any event already in the hot store.
-forensics_dir = "/var/lib/selfdef/forensics"
-
-# Velociraptor escalation. The action invokes
-#   velociraptor_binary velociraptor_args...
-# with `{event_id}` and `{host_tag}` substituted in any arg. Leave args
-# empty to disable the action even if `velociraptor_escalate` is in
-# allowed_actions — the action runs successfully with no operational
-# effect. Operator owns the actual workflow (client-side artifact
-# collection, server-side hunt creation, …).
-velociraptor_binary = "/usr/local/bin/velociraptor"
-velociraptor_args = []
-# Example (client-side artifact collection on every Critical finding):
-# velociraptor_args = [
-#   "--config", "/etc/velociraptor/client.config.yaml",
-#   "client", "collect",
-#   "--artifact=Generic.Forensic.SQLiteHunter",
-#   "--label={host_tag}",
-#   "--tag={event_id}",
-# ]
-# Example (server-side hunt creation, useful from a tooling host):
-# velociraptor_args = [
-#   "--config", "/etc/velociraptor/server.config.yaml",
-#   "hunts", "add",
-#   "--artifact=Linux.Detection.SELinux.Audit",
-#   "--description=selfdef escalation host={host_tag} event={event_id}",
-# ]
 
 # ---------------------------------------------------------------- deployment
 # Deployment-target + cross-repo export knobs. All optional; defaults yield

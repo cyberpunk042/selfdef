@@ -78,3 +78,74 @@ fn every_top_level_config_section_is_documented_in_example() {
          commented [section] block with the default values."
     );
 }
+
+/// Structural placement: operator-critical fields must live under the
+/// CORRECT `[section]` in the example. serde-default + values that happen
+/// to equal the code defaults make a misplaced key invisible to both the
+/// loader test (it parses) and the value spot-check (default == documented
+/// value) — exactly how the responder action-script fields (lockdown_script
+/// / revoke_session_script / forensics_dir / velociraptor_binary /
+/// velociraptor_args) silently sat under `[api.tls]` instead of
+/// `[responder]`, so an operator customizing them had their value parsed
+/// into the wrong table and ignored (the responder used the code default).
+/// Pin each operator-critical field to its owning section so a future edit
+/// (or a section header inserted above it) that displaces it fails loudly.
+#[test]
+fn operator_critical_fields_are_under_the_correct_section() {
+    let example_str =
+        std::fs::read_to_string(example_path()).expect("read example");
+    let example: toml::Value =
+        toml::from_str(&example_str).expect("example parses as TOML");
+    let tbl = example.as_table().expect("example is a table");
+
+    // (section path, field) pairs that MUST be present at that exact path.
+    let expectations: &[(&[&str], &str)] = &[
+        (&["responder"], "lockdown_script"),
+        (&["responder"], "revoke_session_script"),
+        (&["responder"], "forensics_dir"),
+        (&["responder"], "velociraptor_binary"),
+        (&["responder"], "velociraptor_args"),
+        (&["responder"], "snapshot_dir"),
+        (&["responder"], "allowed_actions"),
+    ];
+
+    let mut misplaced = Vec::new();
+    for (section_path, field) in expectations {
+        let mut node = example.clone();
+        let mut ok = true;
+        for seg in *section_path {
+            match node.as_table().and_then(|t| t.get(*seg)) {
+                Some(v) => node = v.clone(),
+                None => {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        let present = ok
+            && node.as_table().map(|t| t.contains_key(*field)).unwrap_or(false);
+        if !present {
+            // Find where it actually landed, for a useful message.
+            let found_in: Vec<&String> = tbl
+                .iter()
+                .filter(|(_, v)| {
+                    v.as_table().map(|t| t.contains_key(*field)).unwrap_or(false)
+                })
+                .map(|(k, _)| k)
+                .collect();
+            misplaced.push(format!(
+                "[{}].{field} missing (found instead under: {found_in:?})",
+                section_path.join(".")
+            ));
+        }
+    }
+
+    assert!(
+        misplaced.is_empty(),
+        "operator-critical config field(s) are under the WRONG section in \
+         config/selfdef.toml.example (an operator customizing them gets a \
+         silent no-op — the daemon reads the field from its real section and \
+         falls back to the code default):\n  {}",
+        misplaced.join("\n  ")
+    );
+}
