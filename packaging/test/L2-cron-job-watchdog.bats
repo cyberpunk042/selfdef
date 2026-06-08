@@ -1559,3 +1559,14 @@ a = (data.get('profiles') or {}).get('available')
 assert isinstance(a, list), f'profiles.available must be list, got {type(a).__name__}'
 "
 }
+
+@test "INVARIANT (cron-job-watchdog module.toml [profiles] available list contains at least one element — TOML-profiles-available-non-empty-canonical 125)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/cron-job-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+a = (data.get('profiles') or {}).get('available') or []
+assert isinstance(a, list) and len(a) >= 1, f'profiles.available must be non-empty list, got {a!r}'
+"
+}
