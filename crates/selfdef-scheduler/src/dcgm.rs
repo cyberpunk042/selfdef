@@ -495,6 +495,51 @@ impl NvidiaSmiDcgmSource {
     pub fn indices(&self) -> &DcgmGpuIndices {
         &self.indices
     }
+
+    /// Exec `nvidia-smi` with a bounded retry on `ETXTBSY`
+    /// (`ExecutableFileBusy`).
+    ///
+    /// `execve` returns `ETXTBSY` ("Text file busy") when the target
+    /// binary is open for writing by some process at exec time. This is
+    /// transient and clears on its own: on a busy host another process
+    /// may briefly hold the binary (e.g. a package manager rewriting it
+    /// during an upgrade), and under this crate's own parallel test run
+    /// a sibling thread's fork+exec can momentarily hold a write handle
+    /// to the just-written fixture script. A short bounded retry with a
+    /// small linear backoff clears it without masking a genuine failure:
+    /// every other error kind (including `NotFound`) returns immediately,
+    /// and the attempt budget is small enough that a truly stuck binary
+    /// still fails fast (~0.3s worst case) rather than hanging.
+    fn run_nvidia_smi(&self) -> Result<std::process::Output, DcgmError> {
+        const MAX_ATTEMPTS: u32 = 5;
+        let mut attempt: u32 = 0;
+        loop {
+            attempt += 1;
+            match Command::new(&self.command)
+                .arg(format!("--query-gpu={NVIDIA_SMI_QUERY}"))
+                .arg(format!("--format={NVIDIA_SMI_FORMAT}"))
+                .output()
+            {
+                Ok(output) => return Ok(output),
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::ExecutableFileBusy
+                        && attempt < MAX_ATTEMPTS =>
+                {
+                    // Linear backoff: 20ms, 40ms, 60ms, 80ms.
+                    std::thread::sleep(std::time::Duration::from_millis(20 * u64::from(attempt)));
+                }
+                Err(e) => {
+                    return Err(match e.kind() {
+                        std::io::ErrorKind::NotFound => DcgmError::Unavailable(format!(
+                            "{} not found on PATH",
+                            self.command.display()
+                        )),
+                        _ => DcgmError::CommandIo(e),
+                    });
+                }
+            }
+        }
+    }
 }
 
 impl Default for NvidiaSmiDcgmSource {
@@ -505,16 +550,7 @@ impl Default for NvidiaSmiDcgmSource {
 
 impl DcgmSource for NvidiaSmiDcgmSource {
     fn read(&self) -> Result<DcgmReading, DcgmError> {
-        let output = Command::new(&self.command)
-            .arg(format!("--query-gpu={NVIDIA_SMI_QUERY}"))
-            .arg(format!("--format={NVIDIA_SMI_FORMAT}"))
-            .output()
-            .map_err(|e| match e.kind() {
-                std::io::ErrorKind::NotFound => {
-                    DcgmError::Unavailable(format!("{} not found on PATH", self.command.display()))
-                }
-                _ => DcgmError::CommandIo(e),
-            })?;
+        let output = self.run_nvidia_smi()?;
         if !output.status.success() {
             let stderr_full = String::from_utf8_lossy(&output.stderr);
             let stderr = if stderr_full.len() > 1024 {
@@ -876,6 +912,50 @@ garbage row
         assert_eq!(reading.blackwell.index, 0);
         assert_eq!(reading.gpu3090.index, 1);
         assert!((reading.gpu3090_util() - 0.3).abs() < 1e-5);
+    }
+
+    /// Regression guard for the `ETXTBSY` bounded retry in
+    /// `run_nvidia_smi`. Holding the fixture script open for writing
+    /// makes `execve` return `ETXTBSY`; a background thread releases the
+    /// handle mid-retry so the bounded retry inside `read()` succeeds.
+    /// Note: if a given kernel/filesystem does not raise `ETXTBSY` here,
+    /// `read()` simply succeeds on the first attempt — the test still
+    /// passes (it is a best-effort exercise of the retry path, never a
+    /// flake in the other direction). This is the exact failure mode
+    /// that flaked `nvidia_smi_real_substrate_success` in CI.
+    #[cfg(unix)]
+    #[test]
+    fn nvidia_smi_retries_through_transient_etxtbsy() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let tmp = tempdir().unwrap();
+        let script = write_fixture_script(
+            tmp.path(),
+            "nvidia-smi-busy",
+            "#!/bin/sh\ncat <<'EOF'\n0, 45, 22000, 24576, 70, 250.0\n1, 30, 8000, 24576, 65, 180.0\nEOF\n",
+        );
+
+        // Open for writing → file is "busy" for execve while live.
+        let writer = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&script)
+            .unwrap();
+        let released = Arc::new(AtomicBool::new(false));
+        let released_bg = Arc::clone(&released);
+        let releaser = std::thread::spawn(move || {
+            // Release well within the retry budget (20+40+60+80ms).
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            drop(writer);
+            released_bg.store(true, Ordering::SeqCst);
+        });
+
+        let src = NvidiaSmiDcgmSource::new().with_command_path(&script);
+        let reading = src.read().unwrap();
+        releaser.join().unwrap();
+        assert!(released.load(Ordering::SeqCst));
+        assert_eq!(reading.blackwell.index, 0);
+        assert_eq!(reading.gpu3090.index, 1);
     }
 
     #[cfg(unix)]
