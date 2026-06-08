@@ -66,14 +66,24 @@ expectations.
 ## Validating config
 
 ```bash
-selfdefctl status      # exits non-zero if config can't load
-selfdefd --validate    # planned — see SDD-002 follow-up
+selfdefctl status                              # exits non-zero if config can't load
+selfdefd --validate                            # pre-flight THIS config, then exit
+selfdefd --config /etc/selfdef/selfdef.toml --validate
 ```
 
-For now, the most reliable check is `systemctl restart selfdefd`
-followed by `journalctl -u selfdefd --since='10 seconds ago'`.
-A bad config fails at startup — either a TOML parse error or one of
-the semantic checks below.
+`selfdefd --validate` (SDD-002) is a safe operator pre-flight: it loads
+the config — running the TOML parse **and** every semantic fail-fast rule
+below — then exits without starting the daemon or touching any host state.
+
+- valid config → prints `OK: <path> is valid`, exit `0`
+- invalid config → prints `INVALID: <path> — <reason>`, exit `1`
+- missing file → prints `INVALID: <path> — config file not found`, exit `1`
+  (a named file that doesn't exist is a failure here, even though the
+  daemon's normal boot falls back to defaults when no `--config` is given)
+
+Use it in CI or a pre-deploy gate. The runtime fallback check is still
+`systemctl restart selfdefd` followed by
+`journalctl -u selfdefd --since='10 seconds ago'`.
 
 ### Startup validation (fail-fast)
 

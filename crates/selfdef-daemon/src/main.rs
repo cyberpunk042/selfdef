@@ -48,12 +48,44 @@ struct Args {
     config: PathBuf,
     #[arg(long, env = "SELFDEF_LOG")]
     log_level: Option<String>,
+    /// Load + validate the config and exit (0 = valid, non-zero =
+    /// invalid). Runs every startup check `Config::load` performs (TOML
+    /// parse + the semantic fail-fast rules) without starting the daemon
+    /// or touching any host state — a safe pre-flight for operators.
+    #[arg(long)]
+    validate: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
     init_tracing(args.log_level.as_deref())?;
+
+    // SDD-002 follow-up: `--validate` is a pure pre-flight. Load the config
+    // (which runs the TOML parse + every semantic fail-fast rule) and exit
+    // WITHOUT starting the daemon or touching host state (no hardware probe,
+    // no state-fork check, no listeners). Print a clean one-line result —
+    // not an anyhow backtrace — so operators get an actionable message.
+    if args.validate {
+        // Config::load(Some(missing)) silently falls back to defaults — fine
+        // for the daemon's normal boot, but for a pre-flight of a NAMED file
+        // the operator is asking "is THIS file valid", so a missing file is
+        // a failure, not a silent defaults-pass.
+        if !args.config.exists() {
+            eprintln!("INVALID: {} — config file not found", args.config.display());
+            std::process::exit(1);
+        }
+        return match Config::load(Some(&args.config)) {
+            Ok(_) => {
+                println!("OK: {} is valid", args.config.display());
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("INVALID: {} — {e}", args.config.display());
+                std::process::exit(1);
+            }
+        };
+    }
 
     let cfg = Config::load(Some(&args.config)).context("loading configuration")?;
     let host_tag = cfg
