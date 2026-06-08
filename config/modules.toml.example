@@ -1,9 +1,12 @@
 # modules.toml — modules activated on this host.
 #
-# Written by `selfdefctl init modules`. Every shipped module is
-# commented out below; uncomment the ones you want activated.
-# Run `selfdefctl modules list` for the full per-module info,
-# and `selfdefctl modules info <slug>` for a module's manifest.
+# Written by `selfdefctl init modules`. A curated set of the most
+# common modules is commented out below as a starter; uncomment the
+# ones you want activated. This is NOT the full catalogue — run
+# `selfdefctl modules list` for every shipped module (the catalogue is
+# far larger than the starters here), and `selfdefctl modules info
+# <slug>` for a module's manifest. Any module from `modules list` can
+# be activated by adding its own `[modules."<slug>"]` block here.
 #
 # After editing, `selfdefctl modules apply --dry-run` shows
 # what would happen.

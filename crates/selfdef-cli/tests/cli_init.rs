@@ -90,7 +90,7 @@ fn init_modules_writes_starter_with_every_module_commented_out() {
         String::from_utf8_lossy(&out.stderr)
     );
     let body = std::fs::read_to_string(&target).unwrap();
-    // Every shipped module should be mentioned (commented).
+    // The curated starter modules should be mentioned (commented).
     for slug in [
         "tetragon",
         "agent-guard",
