@@ -696,3 +696,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service unit file has Description line 100)" {
     grep -qE '^Description=' "${SERVICE}"
 }
+@test "INVARIANT (.service Documentation references man:selfdefctl 101)" {
+    grep -qE 'Documentation=.*selfdefctl' "${SERVICE}"
+}

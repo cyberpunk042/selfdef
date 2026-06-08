@@ -814,3 +814,6 @@ EOF
 @test "INVARIANT (script uses date command for timestamp 100)" {
     grep -qE '\$\(date' "${SCRIPT}"
 }
+@test "INVARIANT (script runs as bash entry point — interpreter-canonical 101)" {
+    head -1 "${SCRIPT}" | grep -qE 'bash'
+}

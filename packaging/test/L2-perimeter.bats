@@ -879,3 +879,10 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert len(data['spec']['kprobes']) >= 1
 "
 }
+@test "INVARIANT (YAML kind field equals string TracingPolicy 101)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert data['kind'] == 'TracingPolicy'
+"
+}

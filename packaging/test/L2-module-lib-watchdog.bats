@@ -772,3 +772,6 @@ setup() {
 @test "INVARIANT (lib SELFDEF_MODULE_LIB_VERSION exported 100)" {
     [ -n "${SELFDEF_MODULE_LIB_VERSION}" ]
 }
+@test "INVARIANT (lib bash function table includes all 5 SDD-006 helpers 101)" {
+    declare -F log emit_status die run toml_get >/dev/null
+}
