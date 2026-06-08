@@ -1202,3 +1202,14 @@ with open('${mtoml}', 'rb') as fp:
 assert data.get('name') == 'slm-cpu-loop', f'name must equal slm-cpu-loop, got {data.get(\"name\")!r}'
 "
 }
+
+@test "INVARIANT (slm-cpu-loop module.toml version field value is a non-empty string — TOML-version-nonempty-canonical 124)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('version', '')
+assert isinstance(v, str) and v, f'version must be non-empty string, got {v!r}'
+"
+}

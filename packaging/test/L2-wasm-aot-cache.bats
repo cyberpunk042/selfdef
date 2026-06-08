@@ -1261,3 +1261,14 @@ with open('${mtoml}', 'rb') as fp:
 assert data.get('name') == 'wasm-aot-cache', f'name must equal wasm-aot-cache, got {data.get(\"name\")!r}'
 "
 }
+
+@test "INVARIANT (wasm-aot-cache module.toml version field value is a non-empty string — TOML-version-nonempty-canonical 124)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('version', '')
+assert isinstance(v, str) and v, f'version must be non-empty string, got {v!r}'
+"
+}

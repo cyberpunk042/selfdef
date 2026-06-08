@@ -823,3 +823,25 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     # mode is up to 3 digits; setuid/setgid would make it 4 digits (4xxx, 2xxx, 6xxx)
     [ ${#perms} -le 3 ]
 }
+
+@test "INVARIANT (.service file consecutive blank-line block count <= 4 — POSIX-text-blank-block-ceiling-canonical 124)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
+    python3 -c "
+data = open('${F}', 'r').read()
+import re
+m = max([len(b) for b in re.split(r'[^\n]+', data)] + [0])
+# count consecutive newlines minus 1 = blank lines between
+blank = max((data[i:].count('\n') - data[i:].lstrip('\n').count('\n') for i in range(len(data))), default=0) - 1
+# simpler: split into lines, count max run of empty/whitespace-only
+lines = data.split('\n')
+run = 0
+mx = 0
+for ln in lines:
+    if ln.strip() == '':
+        run += 1
+        if run > mx: mx = run
+    else:
+        run = 0
+assert mx <= 4, f'consecutive blank-line block of {mx} exceeds 4'
+"
+}
