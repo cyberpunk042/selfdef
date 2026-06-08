@@ -754,3 +754,6 @@ setup() {
 @test "INVARIANT (lib emit_status helper is bash function 94)" {
     type -t emit_status | grep -q '^function$'
 }
+@test "INVARIANT (lib version-required >= 1 by default 95)" {
+    [ "${SELFDEF_MODULE_LIB_VERSION:-0}" -ge 1 ]
+}

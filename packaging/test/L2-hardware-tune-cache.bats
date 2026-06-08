@@ -1001,3 +1001,8 @@ assert any(p.startswith('/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml [install] block declared at line beginning — TOML-section-header 95)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    grep -qE '^\[install\]' "${mtoml}"
+}

@@ -691,3 +691,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service uses RestrictRealtime — anti-realtime 94)" {
     grep -qE '^RestrictRealtime=true' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service uses RestrictSUIDSGID — anti-suid 95)" {
+    grep -qE '^RestrictSUIDSGID=true' "${UNIT}"
+}

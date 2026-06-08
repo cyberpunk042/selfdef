@@ -985,3 +985,8 @@ assert any(p.startswith('/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (bitnet-gpu-inference module.toml [install] block declared at line beginning — TOML-section-header 95)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
+    grep -qE '^\[install\]' "${mtoml}"
+}

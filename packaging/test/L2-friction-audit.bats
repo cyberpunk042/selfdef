@@ -796,3 +796,6 @@ EOF
 @test "INVARIANT (script declares severity_id in OCSF emission — OCSF-severity-axis 94)" {
     grep -qE 'severity_id' "${SCRIPT}"
 }
+@test "INVARIANT (script declares time field in OCSF emission — OCSF-time-axis 95)" {
+    grep -qE '"time"' "${SCRIPT}"
+}
