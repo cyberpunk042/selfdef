@@ -41,3 +41,40 @@ fn canonical_example_loads_through_real_loader() {
     );
     assert_eq!(cfg.hardware_probe.thermal_critical_celsius, 95);
 }
+
+/// Discoverability: every top-level `[section]` the Config struct produces
+/// MUST be documented in selfdef.toml.example. serde-default fields parse
+/// fine when ABSENT from the example, so a new section added to Config can
+/// silently ship undiscoverable (the `[deployment]` section — incl. the
+/// node_exporter `hardware_metrics_path` + cross-repo cockpit
+/// `selfdef_mirror_dir` knobs — was missing from the example for exactly
+/// this reason). Lock the reverse direction: serialize Config::default()
+/// and assert every top-level table appears in the example.
+#[test]
+fn every_top_level_config_section_is_documented_in_example() {
+    let default_toml = toml::to_string(&Config::default())
+        .expect("Config::default serializes to TOML");
+    let default: toml::Value =
+        toml::from_str(&default_toml).expect("serialized default re-parses");
+    let example_str =
+        std::fs::read_to_string(example_path()).expect("read example");
+    let example: toml::Value =
+        toml::from_str(&example_str).expect("example parses as TOML");
+
+    let default_tbl = default.as_table().expect("default is a table");
+    let example_tbl = example.as_table().expect("example is a table");
+
+    let undocumented: Vec<&String> = default_tbl
+        .iter()
+        .filter(|(k, v)| v.is_table() && !example_tbl.contains_key(*k))
+        .map(|(k, _)| k)
+        .collect();
+
+    assert!(
+        undocumented.is_empty(),
+        "Config has top-level section(s) {undocumented:?} that are NOT \
+         documented in config/selfdef.toml.example — operators can't \
+         discover them (serde-default makes them parse when absent). Add a \
+         commented [section] block with the default values."
+    );
+}

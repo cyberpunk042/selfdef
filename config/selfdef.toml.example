@@ -13,6 +13,30 @@ log_level = "info"
 # Log format: "text" for journald-friendly, "json" for structured ingest.
 log_format = "text"
 
+[deployment]
+# Deployment profile (SDD-013/SDD-017). "generic" runs on any Debian/Ubuntu
+# host with state under /var/lib/selfdef. "sain01" is the SAIN-01 AI
+# workstation (state under /mnt/vault/context on a tank/context ZFS dataset).
+# Unknown values fail-loud at parse time.
+target = "generic"
+# When target = "sain01", refuse to start unless the hardware probe returns
+# a full SAIN-01 match (SDD-017 § 5). Default false = warn-only on mismatch.
+sain01_strict = false
+# Layer B observability: when set, the daemon writes a node_exporter
+# textfile-collector .prom with per-dimension hardware-match results
+# (SDD-017 § 6). Empty = disabled. Example:
+# hardware_metrics_path = "/var/lib/node_exporter/textfile_collector/selfdef-hardware.prom"
+hardware_metrics_path = ""
+# When set, the daemon writes HardwareCapabilities JSON here at startup
+# (SDD-017 § 7), consumed by the sovereign-os Wasm-AOT pipeline. Atomic
+# tempfile+rename. Empty = disabled.
+hardware_capabilities_path = ""
+# Cross-repo cockpit mirror (M060 D-02): when set, the daemon publishes the
+# MS007 read-only mirror artifacts (active-profile.json, ...) into this dir
+# for sovereign-os cockpit dashboards. Atomic tempfile+rename. Empty =
+# disabled. Co-located sovereign-os hosts point at /run/sovereign-os/selfdef-mirror.
+selfdef_mirror_dir = ""
+
 [bus]
 # `backend` is vestigial — the daemon doesn't branch on it (the
 # in-proc broadcast is always the local source of truth; the
