@@ -28,6 +28,40 @@ fn module_dir() -> PathBuf {
     common::module_dir("tetragon")
 }
 
+/// F-2026-011: the apply-time `daemon_requires` pre-flight check (SDD-002;
+/// the mechanism itself is exercised generically in
+/// `cli_modules_daemon_requires.rs`) only protects tetragon's
+/// `event_log_path` if the tetragon module actually DECLARES the alignment.
+/// Lock that declaration so the apply path refuses to land tetragon against
+/// a daemon whose tetragon collector input points elsewhere (unless
+/// `--ignore-daemon-requires`). collectors.tetragon — not eventstream — is
+/// the correct sink for Tetragon's native JSON, which is why the finding's
+/// "eventstream" framing was a misread; the real, enforced alignment is
+/// asserted here.
+#[test]
+fn tetragon_declares_event_log_path_daemon_requires_alignment() {
+    let toml = std::fs::read_to_string(module_dir().join("module.toml")).unwrap();
+    assert!(
+        toml.contains("[daemon_requires]"),
+        "tetragon module.toml must declare a [daemon_requires] block"
+    );
+    let line = toml
+        .lines()
+        .find(|l| l.contains("collectors.tetragon.input_path"))
+        .unwrap_or_else(|| {
+            panic!(
+                "module.toml [daemon_requires] must key on \
+                 collectors.tetragon.input_path (F-2026-011):\n{toml}"
+            )
+        });
+    assert!(
+        line.contains("${event_log_path}"),
+        "the daemon_requires alignment must bind collectors.tetragon.input_path \
+         to ${{event_log_path}} so apply-time pre-flight catches a misaligned \
+         daemon collector wiring (F-2026-011), got: {line}"
+    );
+}
+
 /// Stub bin dir with `tetragon` (no-op) and `systemctl` (accepts
 /// every verb). Suitable for dry-run apply where we never actually
 /// expect the binary to be invoked.
