@@ -1200,3 +1200,8 @@ with open('${mtoml}') as fp:
     mtoml="${BATS_TEST_DIRNAME}/../../modules/display-manager-hooks-watchdog/module.toml"
     file "${mtoml}" | grep -qE 'UTF-8|ASCII text'
 }
+
+@test "INVARIANT (display-manager-hooks-watchdog module.toml does not contain CRLF line endings — LF-only-contract 104)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/display-manager-hooks-watchdog/module.toml"
+    ! grep -qE $'\r' "${mtoml}"
+}

@@ -1169,3 +1169,8 @@ with open('${mtoml}') as fp:
     mtoml="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/module.toml"
     file "${mtoml}" | grep -qE 'UTF-8|ASCII text'
 }
+
+@test "INVARIANT (services-disable-printing module.toml does not contain CRLF line endings — LF-only-contract 104)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/module.toml"
+    ! grep -qE $'\r' "${mtoml}"
+}
