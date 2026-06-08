@@ -1198,3 +1198,8 @@ with open('${mtoml}') as fp:
         break
 "
 }
+
+@test "INVARIANT (autofs-watchdog module.toml file is UTF-8 encoded — TOML-encoding-contract 103)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/autofs-watchdog/module.toml"
+    file "${mtoml}" | grep -qE 'UTF-8|ASCII text'
+}
