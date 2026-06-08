@@ -24,11 +24,19 @@ TESTS = REPO_ROOT / "tests"
 COHERENCE = REPO_ROOT / "scripts" / "test" / "coherence.sh"
 
 
+# A real unittest test = a class that INHERITS TestCase (not a mere string
+# mention of "unittest.TestCase", which this very file contains).
+_TESTCASE_CLASS = re.compile(r"(?m)^\s*class\s+\w+\s*\([^)]*\bTestCase\b")
+
+
+def _defines_testcase(text: str) -> bool:
+    return _TESTCASE_CLASS.search(text) is not None
+
+
 def _is_pytest_style(p: Path) -> bool:
     text = p.read_text(encoding="utf-8", errors="ignore")
     has_bare = re.search(r"(?m)^def test_\w+", text) is not None
-    has_testcase = "unittest.TestCase" in text or "(TestCase)" in text
-    return has_bare and not has_testcase
+    return has_bare and not _defines_testcase(text)
 
 
 def _covered_paths() -> tuple[set[str], list[str]]:
@@ -78,4 +86,36 @@ def test_every_pytest_style_test_is_wired_into_a_runner():
         "pytest layer) — they execute never:\n"
         + "\n".join(f"  - {o}" for o in sorted(orphans))
         + "\nWire each into the coherence.sh L2 pytest layer path set."
+    )
+
+
+def _is_unittest_style(p: Path) -> bool:
+    return _defines_testcase(p.read_text(encoding="utf-8", errors="ignore"))
+
+
+def test_every_unittest_style_test_is_in_the_unittest_list():
+    """The coherence unittest layer runs an EXPLICIT hardcoded module list.
+    A new `unittest.TestCase` test file dropped under tests/ but not added
+    to that list runs nowhere — the unittest sibling of the pytest-orphan
+    class. Freeze it: every TestCase test file MUST be in the list."""
+    unittest_files, _ = _covered_paths()
+    orphans = []
+    for p in TESTS.rglob("test_*.py"):
+        if "__pycache__" in p.parts:
+            continue
+        if not _is_unittest_style(p):
+            continue
+        rel = str(p.relative_to(REPO_ROOT))
+        # A file that mixes styles but has bare pytest funcs is run by the
+        # pytest layer; only flag pure-TestCase files absent from the list.
+        if _is_pytest_style(p):
+            continue
+        if rel not in unittest_files:
+            orphans.append(rel)
+    assert not orphans, (
+        "unittest.TestCase test file(s) NOT in the coherence `python3 -m "
+        "unittest` module list — they execute never:\n"
+        + "\n".join(f"  - {o}" for o in sorted(orphans))
+        + "\nAdd each (dotted module path) to the L2 unittest layer in "
+        "scripts/test/coherence.sh."
     )
