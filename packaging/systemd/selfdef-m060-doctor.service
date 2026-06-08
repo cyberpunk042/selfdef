@@ -2,9 +2,12 @@
 Description=Selfdef — write M060 chain doctor textfile for node_exporter scrape
 Documentation=https://example.org/you/selfdef/blob/main/docs/operator/m060-cockpit-mirror-producers.md
 # Runs every 60s via the companion timer. Writes a node_exporter-
-# compatible textfile covering all 6 chain-wide M060 mirror domains
-# (D-02 / D-13 / D-14 / D-15 / D-17 / D-18). Pairs with the
-# cli-mirror-doctor sibling that covers the D-CLI link specifically.
+# compatible textfile covering all 8 chain-wide M060 mirror domains
+# (D-02 / D-12 / D-13 / D-14 / D-15 / D-16 / D-17 / D-18). Pairs with
+# the cli-mirror-doctor sibling that covers the D-CLI link
+# specifically. D-12 rules + D-16 audit were silently skipped prior
+# to the doctor's domain-set audit; the verb now sees the full
+# wire-contract surface.
 #
 # Read-only — never mutates anything. The doctor walks filesystem
 # state (resident store + published mirror file) for each domain
