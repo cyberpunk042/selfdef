@@ -1496,3 +1496,15 @@ paths = ip.get('paths') or []
 assert len(paths) == len(set(paths)), f'install_paths.paths must be unique, duplicates: {[p for p in paths if paths.count(p) > 1]!r}'
 "
 }
+
+@test "INVARIANT (openssl-conf-watchdog module.toml name field matches kebab-case pattern [a-z][a-z0-9-]+ — TOML-name-kebab-case-canonical 137)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/openssl-conf-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+import re
+n = data.get('name', '')
+assert re.fullmatch(r'[a-z][a-z0-9-]+', n), f'name must match kebab-case [a-z][a-z0-9-]+, got {n!r}'
+"
+}
