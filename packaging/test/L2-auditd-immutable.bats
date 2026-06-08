@@ -1662,3 +1662,14 @@ s = data.get('summary', '')
 assert isinstance(s, str) and s == s.strip(), f'summary must not have edge-whitespace, got {s[:20]!r}...'
 "
 }
+
+@test "INVARIANT (auditd-immutable module.toml summary field value contains no tab characters — TOML-summary-no-tab-canonical 147)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-immutable/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+s = data.get('summary', '')
+assert isinstance(s, str) and '\t' not in s, f'summary must not contain tab char'
+"
+}
