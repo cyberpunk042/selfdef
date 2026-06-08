@@ -26,6 +26,10 @@ use thiserror::Error;
 pub enum ConfigError {
     #[error("failed to load configuration: {0}")]
     Figment(#[from] figment::Error),
+    /// A semantic validation failure surfaced by [`Config::validate`] —
+    /// the TOML parsed fine but the values don't make sense together.
+    #[error("invalid configuration: {0}")]
+    Invalid(String),
 }
 
 // ---------------------------------------------------------------- top level
@@ -303,7 +307,27 @@ impl Config {
         }
 
         let cfg: Self = fig.merge(Env::prefixed("SELFDEF_").split("__")).extract()?;
+        cfg.validate()?;
         Ok(cfg)
+    }
+
+    /// Semantic validation run after a successful parse, so a
+    /// misconfiguration fails fast at config-load (daemon startup)
+    /// rather than late at first use. Additive: only flags combinations
+    /// that are unambiguously wrong, so existing valid configs keep
+    /// loading. Returns the FIRST problem found.
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        // Rule signing: verifying signatures is impossible without the
+        // public key, so requiring signed rules but omitting the key is a
+        // guaranteed rule-load failure — catch it at startup instead.
+        if self.security.require_signed_rules && self.security.signing_public_key_file.is_none() {
+            return Err(ConfigError::Invalid(
+                "[security] require_signed_rules = true but signing_public_key_file is unset — \
+                 the correlator cannot verify rule signatures without a public key"
+                    .into(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -1516,6 +1540,25 @@ impl Default for ApiConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validate_rejects_signed_rules_without_key() {
+        let mut cfg = Config::default();
+        cfg.security.require_signed_rules = true;
+        cfg.security.signing_public_key_file = None;
+        let err = cfg.validate().unwrap_err();
+        assert!(matches!(err, ConfigError::Invalid(_)), "got {err:?}");
+        assert!(err.to_string().contains("signing_public_key_file"));
+        // Providing the key makes it valid.
+        cfg.security.signing_public_key_file = Some(PathBuf::from("/etc/selfdef/keys/policy.pub"));
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn defaults_validate_and_load() {
+        // The default config (require_signed_rules=false) must pass validate.
+        Config::default().validate().unwrap();
+    }
 
     #[test]
     fn defaults_load_when_no_file() {
