@@ -865,3 +865,10 @@ assert data['metadata']['name']
 @test "INVARIANT (YAML root contains apiVersion field 98)" {
     grep -qE '^apiVersion:' "${YAML}"
 }
+@test "INVARIANT (YAML kind value is non-empty string 99)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert isinstance(data['kind'], str) and data['kind']
+"
+}

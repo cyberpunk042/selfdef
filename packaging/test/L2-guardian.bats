@@ -524,3 +524,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service uses SystemCallArchitectures=native 98)" {
     grep -qE '^SystemCallArchitectures=native' "${UNIT}"
 }
+@test "INVARIANT (guardian.service uses ProtectKernelLogs=true 99)" {
+    grep -qE '^ProtectKernelLogs=true' "${UNIT}"
+}

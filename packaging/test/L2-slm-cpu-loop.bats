@@ -995,3 +995,6 @@ assert any(p.startswith('/etc/') for p in ps)
 @test "INVARIANT (slm-cpu-loop module.toml version field double-quoted 98)" {
     grep -qE '^version[[:space:]]*=[[:space:]]*"' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
 }
+@test "INVARIANT (slm-cpu-loop module.toml category field double-quoted 99)" {
+    grep -qE '^category[[:space:]]*=[[:space:]]*"' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+}

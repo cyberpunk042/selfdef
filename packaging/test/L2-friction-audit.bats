@@ -808,3 +808,6 @@ EOF
 @test "INVARIANT (script outputs to stdout for human-readable + jsonl for machine 98)" {
     grep -qE 'echo|printf' "${SCRIPT}"
 }
+@test "INVARIANT (script writes to ring buffer dir — file-write-path 99)" {
+    grep -qE 'RING_DIR' "${SCRIPT}"
+}

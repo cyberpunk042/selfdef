@@ -766,3 +766,6 @@ setup() {
 @test "INVARIANT (lib defines run helper bash function 98)" {
     declare -F run >/dev/null
 }
+@test "INVARIANT (lib defines die helper bash function 99)" {
+    declare -F die >/dev/null
+}

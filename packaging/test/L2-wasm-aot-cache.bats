@@ -1042,3 +1042,8 @@ assert any(p.startswith('/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
     grep -qE '^version[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (wasm-aot-cache module.toml category field uses double-quoted string syntax — TOML-string-quote 99)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
+    grep -qE '^category[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

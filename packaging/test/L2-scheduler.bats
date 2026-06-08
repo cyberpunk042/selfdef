@@ -703,3 +703,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service uses SystemCallArchitectures=native 98)" {
     grep -qE '^SystemCallArchitectures=native' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service uses ProtectKernelLogs=true 99)" {
+    grep -qE '^ProtectKernelLogs=true' "${UNIT}"
+}

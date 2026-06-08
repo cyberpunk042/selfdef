@@ -1057,3 +1057,8 @@ assert any(p.startswith('/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/module.toml"
     grep -qE '^version[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (tensor-parallel-inference module.toml category field uses double-quoted string syntax — TOML-string-quote 99)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/module.toml"
+    grep -qE '^category[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}
