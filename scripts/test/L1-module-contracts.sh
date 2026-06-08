@@ -2,9 +2,9 @@
 # L1-module-contracts.sh — module-system contract integrity gate
 #
 # Locks the cross-module contract integrity at every commit. With
-# 14 modules under modules/ + the module-author contract in
-# docs/dev/modules.md, drift between manifest declarations and
-# shipped artifacts becomes likely. This gate catches it.
+# the module set under modules/ (188+ and growing) + the module-author
+# contract in docs/dev/modules.md, drift between manifest declarations
+# and shipped artifacts becomes likely. This gate catches it.
 #
 # Gates:
 #   1. Every modules/<name>/ has a module.toml that parses
