@@ -895,3 +895,7 @@ assert data['kind'] == 'TracingPolicy'
 @test "INVARIANT (YAML file LF-only line endings 104)" {
     ! grep -qE $'\r' "${YAML}"
 }
+@test "INVARIANT (YAML file ends with newline 105)" {
+    last_char=$(tail -c 1 "${YAML}" | od -An -c | tr -d ' ')
+    [ "${last_char}" = "\\n" ]
+}

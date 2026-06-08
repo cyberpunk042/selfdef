@@ -903,3 +903,8 @@ with open('${mtoml}') as fp:
 @test "INVARIANT (detect-host module.toml LF-only line endings 104)" {
     ! grep -qE $'\r' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
 }
+@test "INVARIANT (detect-host module.toml ends with newline 105)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    last_char=$(tail -c 1 "${mtoml}" | od -An -c | tr -d ' ')
+    [ "${last_char}" = "\\n" ]
+}

@@ -708,3 +708,7 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service file LF-only line endings 104)" {
     ! grep -qE $'\r' "${SERVICE}"
 }
+@test "INVARIANT (.service file ends with newline 105)" {
+    last_char=$(tail -c 1 "${SERVICE}" | od -An -c | tr -d ' ')
+    [ "${last_char}" = "\\n" ]
+}

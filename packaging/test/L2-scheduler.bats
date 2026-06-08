@@ -721,3 +721,7 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service file LF-only line endings 104)" {
     ! grep -qE $'\r' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service file ends with newline 105)" {
+    last_char=$(tail -c 1 "${UNIT}" | od -An -c | tr -d ' ')
+    [ "${last_char}" = "\\n" ]
+}

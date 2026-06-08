@@ -1022,3 +1022,8 @@ with open('${mtoml}') as fp:
 @test "INVARIANT (slm-cpu-loop module.toml LF-only line endings 104)" {
     ! grep -qE $'\r' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
 }
+@test "INVARIANT (slm-cpu-loop module.toml ends with newline 105)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    last_char=$(tail -c 1 "${mtoml}" | od -An -c | tr -d ' ')
+    [ "${last_char}" = "\\n" ]
+}
