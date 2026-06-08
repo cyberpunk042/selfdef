@@ -996,3 +996,8 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any(p.startswith('/') for p in ps)
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml [install_paths] block declared at line beginning — TOML-section-header 94)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    grep -qE '^\[install_paths\]' "${mtoml}"
+}

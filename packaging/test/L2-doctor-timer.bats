@@ -675,3 +675,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service file has at least one comment line — documented-config 93)" {
     grep -qE '^#' "${SERVICE}"
 }
+@test "INVARIANT (.service [Install] section has WantedBy=multi-user.target 94)" {
+    grep -qE '^WantedBy=multi-user.target' "${SERVICE}"
+}

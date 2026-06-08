@@ -793,3 +793,6 @@ EOF
 @test "INVARIANT (script declares class_uid in OCSF emission — OCSF-event-class 93)" {
     grep -qE 'class_uid' "${SCRIPT}"
 }
+@test "INVARIANT (script declares severity_id in OCSF emission — OCSF-severity-axis 94)" {
+    grep -qE 'severity_id' "${SCRIPT}"
+}

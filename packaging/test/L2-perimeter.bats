@@ -831,3 +831,11 @@ s = data['spec']['kprobes'][0].get('selectors', [])
 assert isinstance(s, list) and len(s) >= 1
 "
 }
+@test "INVARIANT (YAML spec.kprobes[0].args non-empty — has-args 94)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+args = data['spec']['kprobes'][0].get('args', [])
+assert isinstance(args, list) and len(args) >= 1
+"
+}

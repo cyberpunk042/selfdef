@@ -688,3 +688,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service uses RestrictNamespaces — namespace-bound 93)" {
     grep -qE '^RestrictNamespaces=true' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service uses RestrictRealtime — anti-realtime 94)" {
+    grep -qE '^RestrictRealtime=true' "${UNIT}"
+}

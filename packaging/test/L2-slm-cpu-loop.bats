@@ -980,3 +980,6 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any(p.startswith('/etc/') for p in ps)
 "
 }
+@test "INVARIANT (slm-cpu-loop module.toml [install_paths] declared at line beginning 94)" {
+    grep -qE '^\[install_paths\]' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+}
