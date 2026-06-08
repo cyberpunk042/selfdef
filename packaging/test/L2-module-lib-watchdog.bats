@@ -964,3 +964,9 @@ except UnicodeDecodeError as e:
     bn=$(basename "${F}")
     case "${bn}" in *' '*) return 1 ;; *) ;; esac
 }
+
+@test "INVARIANT (lib file basename does not start with a dot (no hidden-file convention) — POSIX-no-hidden-canonical 131)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    bn=$(basename "${F}")
+    case "${bn}" in .*) return 1 ;; *) ;; esac
+}

@@ -1352,3 +1352,15 @@ for el in r:
     assert isinstance(v, str) and v, f'requires.value must be non-empty string, got {v!r}'
 "
 }
+
+@test "INVARIANT (tensor-parallel-inference module.toml provides items are non-empty strings — TOML-provides-elements-string-canonical 131)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+p = data.get('provides') or []
+for el in p:
+    assert isinstance(el, str) and el, f'provides element must be non-empty string, got {el!r}'
+"
+}

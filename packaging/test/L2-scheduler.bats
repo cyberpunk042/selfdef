@@ -901,3 +901,9 @@ except UnicodeDecodeError as e:
     bn=$(basename "${F}")
     case "${bn}" in *' '*) return 1 ;; *) ;; esac
 }
+
+@test "INVARIANT (scheduler.service file basename does not start with a dot (no hidden-file convention) — POSIX-no-hidden-canonical 131)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    bn=$(basename "${F}")
+    case "${bn}" in .*) return 1 ;; *) ;; esac
+}

@@ -1006,3 +1006,9 @@ except UnicodeDecodeError as e:
     bn=$(basename "${F}")
     case "${bn}" in *' '*) return 1 ;; *) ;; esac
 }
+
+@test "INVARIANT (script file basename does not start with a dot (no hidden-file convention) — POSIX-no-hidden-canonical 131)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    bn=$(basename "${F}")
+    case "${bn}" in .*) return 1 ;; *) ;; esac
+}
