@@ -2,10 +2,11 @@
 # selfdef bridge-l2 ruleset — managed by `selfdefctl modules apply`.
 # Do not hand-edit; changes are clobbered on the next apply.
 #
-# Substituted at render time:
+# Substituted at render time (must match apply.sh's sed expression):
 #   @@BRIDGE_NAME@@        — Linux bridge interface (e.g. br0)
-#   @@MGMT_IFACE@@         — management interface or "" if unused
 #   @@FORWARD_POLICY@@     — accept | drop
+#   @@MGMT_INPUT_RULE@@    — input-chain drop rule for the management
+#                            interface, or a no-op comment when unset
 
 flush ruleset
 

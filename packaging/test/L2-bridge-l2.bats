@@ -131,6 +131,63 @@ INSTALL_DIR="${MODULE_DIR}/install"
 }
 
 # ============================================================================
+# Render-contract (F-2026-062 follow-up): exercise apply.sh's actual sed
+# substitution (lines 86-90) so a stale/leftover @@TOKEN@@ — which the
+# static-shape tests above can't see — can't ship into the loaded ruleset.
+# A surviving placeholder in a RULE line fails `nft -f`; a surviving one in
+# a COMMENT line (the bug that motivated this test — the doc-comment block
+# named @@MGMT_IFACE@@, which apply.sh never substitutes) silently misleads
+# any operator reading /etc/nftables.d/selfdef-bridge.conf. Mirrors the
+# three-token sed expression verbatim so the two can't drift.
+# ============================================================================
+
+render_bridge_ruleset() {
+    # $1 bridge_name, $2 forward_policy, $3 mgmt_input_rule
+    sed \
+        -e "s|@@BRIDGE_NAME@@|${1}|g" \
+        -e "s|@@FORWARD_POLICY@@|${2}|g" \
+        -e "s|@@MGMT_INPUT_RULE@@|${3}|g" \
+        "${MODULE_DIR}/templates/nftables.conf.tmpl"
+}
+
+@test "RENDER (no @@...@@ placeholder survives the three-token substitution — incl. comment block)" {
+    out="$(render_bridge_ruleset br0 accept '# (no management_iface configured)')"
+    ! echo "${out}" | grep -qE '@@[A-Z_]+@@'
+}
+
+@test "RENDER (bridge_name + forward_policy land in the FORWARD chain)" {
+    out="$(render_bridge_ruleset br9 drop '# (no management_iface configured)')"
+    echo "${out}" | grep -qE 'policy[[:space:]]+drop;'
+    echo "${out}" | grep -qE 'iifname[[:space:]]+"br9"[[:space:]]+jump[[:space:]]+forward_hook'
+    echo "${out}" | grep -qE 'oifname[[:space:]]+"br9"[[:space:]]+jump[[:space:]]+forward_hook'
+}
+
+@test "RENDER (management-iface drop rule lands in the input chain when configured)" {
+    out="$(render_bridge_ruleset br0 accept 'iifname "eth9" ct state new drop')"
+    echo "${out}" | grep -qE 'iifname[[:space:]]+"eth9"[[:space:]]+ct[[:space:]]+state[[:space:]]+new[[:space:]]+drop'
+}
+
+@test "RENDER (substitution is byte-stable across two renders — idempotency)" {
+    a="$(render_bridge_ruleset br0 accept '# (no management_iface configured)')"
+    b="$(render_bridge_ruleset br0 accept '# (no management_iface configured)')"
+    [ "${a}" = "${b}" ]
+}
+
+@test "RENDER (doc-comment names only really-substituted tokens — no drift)" {
+    # Every @@TOKEN@@ named in the template's comment block must be one
+    # apply.sh actually substitutes; otherwise the comment lies and the
+    # token survives render. The real set is BRIDGE_NAME, FORWARD_POLICY,
+    # MGMT_INPUT_RULE.
+    documented="$(grep -oE '@@[A-Z_]+@@' "${MODULE_DIR}/templates/nftables.conf.tmpl" | sort -u)"
+    for tok in '@@BRIDGE_NAME@@' '@@FORWARD_POLICY@@' '@@MGMT_INPUT_RULE@@'; do
+        echo "${documented}" | grep -qx "${tok}"
+    done
+    # And NO other @@...@@ token appears anywhere in the template.
+    extra="$(echo "${documented}" | grep -vxE '@@BRIDGE_NAME@@|@@FORWARD_POLICY@@|@@MGMT_INPUT_RULE@@' || true)"
+    [ -z "${extra}" ]
+}
+
+# ============================================================================
 # E0248 forward_policy allowlist + idempotent-skip contract.
 # `apply.sh` validates forward_policy ∈ {accept, drop}; a silent allowlist
 # widening (e.g. accidentally accepting "reject") could render an nft
