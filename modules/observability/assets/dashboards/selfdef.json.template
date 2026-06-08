@@ -100,6 +100,19 @@
       ]
     },
     {
+      "id": 11,
+      "type": "timeseries",
+      "title": "selfdef retention — events pruned / sec (SDD-081)",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 24 },
+      "targets": [
+        {
+          "expr": "rate(selfdef_store_retention_pruned_total[1h])",
+          "legendFormat": "pruned/s"
+        }
+      ]
+    },
+    {
       "id": 8,
       "type": "timeseries",
       "title": "selfdef findings / second by rule (incl. detection-watchdog alert tier, SDD-062)",
