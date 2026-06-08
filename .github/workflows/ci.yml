@@ -118,6 +118,17 @@ jobs:
           # Read-only checkout — no token needed; the repo is public-ish
           # from CI's perspective. If repo becomes private, switch to a
           # PAT secret here.
+      - name: Checkout sister repo (sovereign-os) for cross-repo alert-runbook binding
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          repository: cyberpunk042/sovereign-os
+          path: _sovereign-os
+          # Activates L1-cross-repo-alert-runbook-binding.sh, which otherwise
+          # SKIPs (the MS048 runbook ↔ sovereign-os scheduler-alert symmetry
+          # would go unchecked). Same read-only/no-token pattern as info-hub
+          # above; tolerant — if the checkout fails, the gate skips exactly
+          # as it did before (no regression).
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.88.0
@@ -137,6 +148,9 @@ jobs:
           # Enables Gate 3b in L1-prometheus-alerts.sh — verifies every
           # alert runbook_url target file actually exists in info-hub.
           INFOHUB_RUNBOOKS: ${{ github.workspace }}/_infohub/wiki/runbooks
+          # Activates L1-cross-repo-alert-runbook-binding.sh against the real
+          # sovereign-os tree (skips cleanly if the checkout above failed).
+          SOVEREIGN_OS_REPO: ${{ github.workspace }}/_sovereign-os
         run: bash scripts/test/coherence.sh
 
   coherence-root:
