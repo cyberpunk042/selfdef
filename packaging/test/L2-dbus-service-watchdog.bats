@@ -1326,3 +1326,14 @@ ck = (data.get('install') or {}).get('check', '')
 assert isinstance(ck, str) and ck and ck.endswith('.sh'), f'install.check must be non-empty .sh path, got {ck!r}'
 "
 }
+
+@test "INVARIANT (dbus-service-watchdog module.toml version field matches semver X.Y.Z pattern — TOML-version-semver-canonical 113)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/dbus-service-watchdog/module.toml"
+    python3 -c "
+import tomllib, re
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = data.get('version', '')
+assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', v), f'version must be semver X.Y.Z, got {v!r}'
+"
+}
