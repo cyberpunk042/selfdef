@@ -1177,3 +1177,8 @@ assert any('/var/lib/' in p or '/var/log/' in p or '/var/cache/' in p for p in p
     mtoml="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/module.toml"
     grep -qE '^version[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (coredumpd-redirect module.toml category field uses double-quoted string syntax — TOML-string-quote 99)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/module.toml"
+    grep -qE '^category[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

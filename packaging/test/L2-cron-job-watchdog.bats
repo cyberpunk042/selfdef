@@ -1334,3 +1334,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/cron-job-watchdog/module.toml"
     grep -qE '^version[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (cron-job-watchdog module.toml category field double-quoted — TOML-string-quote 99)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/cron-job-watchdog/module.toml"
+    grep -qE '^category[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

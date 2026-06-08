@@ -1144,3 +1144,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/kernel-yama-baseline/module.toml"
     grep -qE '^version[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (kernel-yama-baseline module.toml category field uses double-quoted string syntax — TOML-string-quote 99)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/kernel-yama-baseline/module.toml"
+    grep -qE '^category[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}
