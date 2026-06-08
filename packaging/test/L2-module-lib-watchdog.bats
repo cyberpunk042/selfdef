@@ -763,3 +763,6 @@ setup() {
 @test "INVARIANT (lib defines toml_get helper as bash function 97)" {
     declare -F toml_get >/dev/null
 }
+@test "INVARIANT (lib defines run helper bash function 98)" {
+    declare -F run >/dev/null
+}

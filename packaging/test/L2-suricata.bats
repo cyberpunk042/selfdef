@@ -932,3 +932,8 @@ assert any(p.startswith('/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/suricata/module.toml"
     grep -qE '^name[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (suricata module.toml version field uses double-quoted string syntax — TOML-string-quote 98)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/suricata/module.toml"
+    grep -qE '^version[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

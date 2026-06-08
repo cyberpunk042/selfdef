@@ -862,3 +862,6 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert data['metadata']['name']
 "
 }
+@test "INVARIANT (YAML root contains apiVersion field 98)" {
+    grep -qE '^apiVersion:' "${YAML}"
+}

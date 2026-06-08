@@ -687,3 +687,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service [Install] WantedBy line present 97)" {
     grep -qE '^WantedBy=' "${SERVICE}"
 }
+@test "INVARIANT (.service file After= ordering present 98)" {
+    grep -qE '^After=' "${SERVICE}"
+}

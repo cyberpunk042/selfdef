@@ -962,3 +962,8 @@ assert any(p.startswith('/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/module.toml"
     grep -qE '^name[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (bridge-l2 module.toml version field uses double-quoted string syntax — TOML-string-quote 98)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bridge-l2/module.toml"
+    grep -qE '^version[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

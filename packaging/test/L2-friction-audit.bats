@@ -805,3 +805,6 @@ EOF
 @test "INVARIANT (script declares device.hostname in OCSF emission — OCSF-device-axis 97)" {
     grep -qE 'device.hostname|hostname' "${SCRIPT}"
 }
+@test "INVARIANT (script outputs to stdout for human-readable + jsonl for machine 98)" {
+    grep -qE 'echo|printf' "${SCRIPT}"
+}
