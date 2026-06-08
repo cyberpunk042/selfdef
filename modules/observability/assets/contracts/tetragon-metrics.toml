@@ -1,0 +1,61 @@
+# Tetragon metric-name contract (SDD-079) — observability module.
+#
+# This file PINS the four upstream-Tetragon Prometheus series that the
+# shipped Grafana dashboard (assets/dashboards/selfdef.json.template)
+# renders. It exists to close finding F-2026-052: the dashboard
+# hard-codes Tetragon series names, and a Tetragon release that renames
+# any of them silently renders the corresponding panel flat — no error,
+# no log, just an empty graph the operator may not notice for weeks.
+#
+# Three lines of defense reference this file (see SDD-079):
+#   1. CI contract test (tests/observability/test_tetragon_metric_name_
+#      contract.py) locks dashboard <-> contract <-> SDD-079 in lockstep.
+#      Drift on either side fails the build.
+#   2. check.sh operability probe (opt-in, warn-only) queries the live
+#      Tetragon /metrics endpoint and warns per-series-absent, turning a
+#      silent flat panel into a loud, actionable check warning.
+#   3. The verified_tetragon_version range below documents the upstream
+#      version window these names were validated against, so an operator
+#      bumping Tetragon has an explicit compatibility gate to re-check.
+#
+# Canonical upstream source for the names: see canonical_source below.
+# When upstream renames a series, update BOTH the dashboard panel expr
+# AND the matching [[series]].promql here in the same commit — the
+# contract test enforces they stay equal.
+
+schema_version            = "1"
+
+# Upstream Tetragon version window these series names are verified
+# against. Semver range string (operator-readable; not auto-enforced
+# by the daemon today — that is the remaining Phase-3 follow-up noted
+# in SDD-079, gated on the tetragon module gaining a binary-version
+# probe). E0275 verified the names against Tetragon v1.x.
+verified_tetragon_version = ">=1.0.0, <2.0.0"
+
+# The page upstream publishes the canonical exporter series names on.
+canonical_source          = "https://tetragon.io/docs/reference/metrics/"
+
+# The four pinned series. `name` is the bare Prometheus series the
+# panel depends on; `panel` is the dashboard panel title that renders
+# it; `promql` is the EXACT expression the dashboard panel ships (the
+# contract test asserts dashboard-expr == promql, character for char).
+
+[[series]]
+name   = "tetragon_events_total"
+panel  = "Tetragon events / second"
+promql = "sum(rate(tetragon_events_total[5m]))"
+
+[[series]]
+name   = "tetragon_msg_sigkill_total"
+panel  = "Tetragon kills by policy"
+promql = "sum by (policy) (rate(tetragon_msg_sigkill_total[5m]))"
+
+[[series]]
+name   = "tetragon_process_cache_size"
+panel  = "Process cache utilization"
+promql = "tetragon_process_cache_size"
+
+[[series]]
+name   = "tetragon_map_errors_total"
+panel  = "Map operation errors"
+promql = "sum by (map, op) (rate(tetragon_map_errors_total[5m]))"

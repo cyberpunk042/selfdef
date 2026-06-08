@@ -75,9 +75,18 @@ reference page is the canonical source). If you run a Tetragon
 version that renames any of these series (`tetragon_events_total`,
 `tetragon_msg_sigkill_total`, `tetragon_process_cache_size`,
 `tetragon_map_errors_total`), the corresponding panel renders
-flat. The `tetragon` module's `requires` block doesn't pin a
-Tetragon version range today (F-2026-052 in the audit ledger);
-Phase-2 follow-up tracked.
+flat. These four names are now PINNED in a machine-checkable
+contract — [`assets/contracts/tetragon-metrics.toml`](assets/contracts/tetragon-metrics.toml)
+(SDD-079, closing F-2026-052) — which the CI contract test
+(`tests/observability/test_tetragon_metric_name_contract.py`)
+locks against the dashboard in lockstep, and which `check.sh`
+probes against the live endpoint (opt-in
+`SELFDEF_OBSERVABILITY_PROBE_TETRAGON=1`) so a rename surfaces
+as a loud warn instead of a silent flat panel. The contract's
+`verified_tetragon_version` field (`>=1.0.0, <2.0.0`) records the
+window these names are validated against; fail-closed enforcement
+from the `tetragon` module's `requires` block (a binary-version
+probe) remains a Phase-3 follow-up (SDD-079 D-1).
 
 ### Daemon-side panels gating
 
