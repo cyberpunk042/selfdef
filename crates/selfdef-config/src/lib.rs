@@ -337,6 +337,29 @@ impl Config {
                 self.perimeter.third_party_policy_stance
             )));
         }
+
+        // Collector read_from is a closed vocabulary {start, end}. Every
+        // collector's `ReadFrom::parse` silently falls back to End on any
+        // unrecognized value, so a typo like "begining" would make a
+        // collector tail-only and silently drop the historical replay the
+        // operator asked for. Fail fast instead of mis-reading at startup.
+        // An empty string is the derive-Default sentinel ("unset" → end) and
+        // is accepted so an untouched config keeps loading.
+        const VALID_READ_FROM: [&str; 2] = ["start", "end"];
+        for (section, value) in [
+            ("auditd", &self.collectors.auditd.read_from),
+            ("journald", &self.collectors.journald.read_from),
+            ("tetragon", &self.collectors.tetragon.read_from),
+            ("suricata", &self.collectors.suricata.read_from),
+            ("eventstream", &self.collectors.eventstream.read_from),
+        ] {
+            if !value.is_empty() && !VALID_READ_FROM.contains(&value.as_str()) {
+                return Err(ConfigError::Invalid(format!(
+                    "[collectors.{section}] read_from must be one of {VALID_READ_FROM:?} (or unset), got {value:?} \
+                     (an unrecognized value silently defaults to \"end\", dropping historical replay)"
+                )));
+            }
+        }
         Ok(())
     }
 }
@@ -1568,6 +1591,28 @@ mod tests {
     fn defaults_validate_and_load() {
         // The default config (require_signed_rules=false) must pass validate.
         Config::default().validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_unknown_collector_read_from() {
+        let mut cfg = Config::default();
+        // A plausible typo for "start".
+        cfg.collectors.journald.read_from = "begining".to_owned();
+        let err = cfg.validate().unwrap_err();
+        assert!(matches!(err, ConfigError::Invalid(_)), "got {err:?}");
+        assert!(err.to_string().contains("read_from"));
+        assert!(err.to_string().contains("journald"));
+        // Both documented values validate, for every collector.
+        for from in ["start", "end"] {
+            let mut c = Config::default();
+            c.collectors.auditd.read_from = from.to_owned();
+            c.collectors.journald.read_from = from.to_owned();
+            c.collectors.tetragon.read_from = from.to_owned();
+            c.collectors.suricata.read_from = from.to_owned();
+            c.collectors.eventstream.read_from = from.to_owned();
+            c.validate()
+                .unwrap_or_else(|e| panic!("read_from {from:?} must be valid, got {e:?}"));
+        }
     }
 
     #[test]
