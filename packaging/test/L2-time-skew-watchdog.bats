@@ -218,9 +218,20 @@ CCEOF
 }
 
 @test "INVARIANT (chronyc not present on PATH → high / chronyc_failed; exit 0)" {
-    # If chronyc binary is missing entirely (rare but possible on
-    # NTP-only host), watchdog must log + exit 0 (not crash).
-    rm -f "${BIN}/chronyc"
+    # If chronyc is missing entirely (rare but possible on an NTP-only
+    # host), the watchdog must log + exit 0 (not crash). Simulate it
+    # ROBUSTLY: shadow chronyc with a 127-exit stub — the exact rc bash
+    # returns for "command not found". Just `rm -f`-ing the shadow is
+    # fragile: run_wd keeps the host PATH, and CI runners (and `sudo`'s
+    # secure_path) ship a real chronyc that would then rescue the call and
+    # mask the failure. The watchdog's `chronyc -n tracking; rc=$?` path is
+    # identical whether chronyc is truly absent or the invocation 127s.
+    cat > "${BIN}/chronyc" <<'STUB'
+#!/usr/bin/env bash
+echo "bash: chronyc: command not found" >&2
+exit 127
+STUB
+    chmod +x "${BIN}/chronyc"
     run_wd
     cap | grep -q '"severity":"high"'
     cap | grep -q '"event":"chronyc_failed"'
