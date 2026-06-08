@@ -7,13 +7,16 @@
 #
 #     command -v <bin> ... || die "<bin> missing"
 #
-# The dependency pre-flight (daemon_requires / `selfdefctl modules apply`'s
-# requirement check) reads the module.toml `requires` block to decide,
-# BEFORE running apply.sh, whether the host has what the module needs. If a
-# binary that apply.sh hard-requires (`|| die`) is NOT declared as a
-# `{ kind = "binary", value = "<bin>" }` require, the pre-flight passes and
-# the module then dies mid-apply — exactly the half-applied state the
-# pre-flight exists to prevent.
+# The module.toml `requires` block is the operator-facing declaration of
+# what a module needs: `selfdefctl modules show` prints it so an operator
+# can provision a host before applying. (Note: today this binary `requires`
+# list is informational — only `requires_hardware` is host-evaluated; a
+# real `command -v` pre-flight over `requires` is a known follow-up.) If a
+# binary that apply.sh hard-requires (`|| die`) is NOT in `requires`, the
+# operator-facing declaration is INCOMPLETE: an operator who provisions
+# exactly what `requires` lists still hits a mid-apply `die`, the
+# half-applied state the declaration exists to prevent — and the future
+# requires-preflight would be wrong by construction.
 #
 # This gate locks the declaration ⇄ reality alignment: every binary an
 # install script hard-requires with `|| die` must be declared as a binary
@@ -71,8 +74,9 @@ for mdir in sorted(p for p in root.iterdir() if p.is_dir()):
 for name, missing, declared in violations:
     print(f"  FAIL {name}: install scripts `|| die` on {missing} but "
           f"module.toml declares binary requires {declared} — add "
-          f"`{{ kind = \"binary\", value = \"<bin>\" }}` so the dependency "
-          f"pre-flight catches a missing binary before apply, not mid-apply")
+          f"`{{ kind = \"binary\", value = \"<bin>\" }}` so the operator-facing "
+          f"`requires` declaration is complete and an operator who provisions "
+          f"it doesn't hit a mid-apply die on an undeclared binary")
 
 print(f"  checked {checked} modules")
 if violations:
