@@ -1087,3 +1087,9 @@ except UnicodeDecodeError as e:
     pdir=$(dirname "${F}" | xargs basename)
     case "${pdir}" in systemd|scripts|lib|tetragon-policies) ;; *) return 1 ;; esac
 }
+
+@test "INVARIANT (YAML file path resolves to an existing entry — POSIX-file-exists-resolved-canonical 133)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    abs=$(readlink -f "${F}")
+    [ -e "${abs}" ]
+}
