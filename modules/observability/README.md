@@ -51,7 +51,7 @@ dashboard_title = "selfdef — Host Self-Defense"
 
 ## Dashboard
 
-The shipped dashboard renders seven panels — four from
+The dashboard opens with seven **core** panels — four from
 Tetragon's built-in metrics, three from the selfdef daemon's
 own `/metrics` endpoint:
 
@@ -64,6 +64,16 @@ own `/metrics` endpoint:
 | selfdef events / sec by class | selfdef-daemon | `sum by (class_uid) (rate(selfdef_events_by_class_total[5m]))` |
 | selfdef findings / sec by severity | selfdef-daemon | `sum by (severity_id) (rate(selfdef_findings_by_severity_total[5m]))` |
 | selfdef hot-store size | selfdef-daemon | `selfdef_store_events` |
+
+Below the core panels the dashboard adds the rows that grew with the
+IPS spine (panel-count floor locked at ≥30 by
+`scripts/test/L1-grafana-template.sh`): the **four-watchdog set**
+(MS027 friction-audit / perimeter / guardian / scheduler), the
+**module catalog** (MS006 shipped/active), the **M060 cross-repo
+mirror export** row (6 panels), and the **Daemon health & retention
+liveness** row (SD-API uptime · metrics ingest-lag · retention
+enabled/sweep-liveness). Each row is described in its own section
+below; the full panel set lives in `assets/dashboards/selfdef.json.template`.
 
 ### Tetragon metric-name pin
 
