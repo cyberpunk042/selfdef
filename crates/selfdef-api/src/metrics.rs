@@ -603,6 +603,36 @@ mod tests {
     }
 
     #[test]
+    fn retention_metrics_render_sweeps_pruned_and_enabled() {
+        // SDD-081 retention metrics back the cockpit + selfdef-local
+        // "retention liveness" panels; a render regression that dropped any
+        // of the three would silently flat-line those panels. Lock all
+        // three TYPE lines + their values here so the exposition can't drift.
+        let m = Metrics::new("h");
+        m.set_retention_enabled(true);
+        m.record_retention_sweep(3); // sweep #1 pruned 3
+        m.record_retention_sweep(0); // sweep #2 pruned 0 (nothing aged out)
+        let body = m.render(0);
+        for required in [
+            "# TYPE selfdef_store_retention_sweeps_total counter",
+            "# TYPE selfdef_store_retention_pruned_total counter",
+            "# TYPE selfdef_store_retention_enabled gauge",
+        ] {
+            assert!(body.contains(required), "missing `{required}`:\n{body}");
+        }
+        // Two sweeps ran; cumulative pruned is 3; retention is enabled.
+        assert!(
+            body.contains("selfdef_store_retention_sweeps_total 2"),
+            "{body}"
+        );
+        assert!(
+            body.contains("selfdef_store_retention_pruned_total 3"),
+            "{body}"
+        );
+        assert!(body.contains("selfdef_store_retention_enabled 1"), "{body}");
+    }
+
+    #[test]
     fn m060_publish_ok_increments_counter_and_stamps_timestamp() {
         let m = Metrics::new("h");
         m.record_m060_publish("grants.json", true);
