@@ -93,7 +93,7 @@ for f in "${files[@]}"; do
     base="$(basename "$f")"
     if [[ "$mode" =~ [2367]$ ]]; then
         suspicious+=("${base}:world-writable($mode)")
-    elif [[ "$owner" != "root" && "$owner" != "?" ]]; then
+    elif [[ "$owner" != "${SELFDEF_WATCHDOG_EXPECTED_OWNER:-root}" && "$owner" != "?" ]]; then
         suspicious+=("${base}:owned-by-$owner")
     fi
     while IFS= read -r line; do
@@ -118,7 +118,7 @@ for f in "${files[@]}"; do
                 mowner=$(stat -L -c '%U' "$map" 2>/dev/null || echo '?')
                 if [[ "$mmode" =~ [2367]$ ]]; then
                     suspicious+=("${base}:exec-map-world-writable($map:$mmode)")
-                elif [[ "$mowner" != "root" && "$mowner" != "?" ]]; then
+                elif [[ "$mowner" != "${SELFDEF_WATCHDOG_EXPECTED_OWNER:-root}" && "$mowner" != "?" ]]; then
                     suspicious+=("${base}:exec-map-non-root($map:$mowner)")
                 fi
             fi

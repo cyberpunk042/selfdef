@@ -81,7 +81,7 @@ mode=$(stat -c '%a' "$ANACRONTAB" 2>/dev/null || echo '?')
 printf 'own\t%s\t%s\n' "$ANACRONTAB" "${owner}:${mode}" >> "$current"
 if [[ "$mode" =~ [2367]$ ]]; then
     suspicious+=("anacrontab:world-writable($mode)")
-elif [[ "$owner" != "root" && "$owner" != "?" ]]; then
+elif [[ "$owner" != "${SELFDEF_WATCHDOG_EXPECTED_OWNER:-root}" && "$owner" != "?" ]]; then
     suspicious+=("anacrontab:owned-by-$owner")
 fi
 

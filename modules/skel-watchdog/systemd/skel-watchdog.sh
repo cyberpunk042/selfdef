@@ -82,7 +82,7 @@ for f in "${files[@]}"; do
     printf 'own\t%s\t%s\n' "$f" "${owner}:${mode}" >> "$current"
     if [[ "$mode" =~ [2367]$ ]]; then
         suspicious+=("${f#/etc/skel/}:world-writable($mode)")
-    elif [[ "$owner" != "root" && "$owner" != "?" ]]; then
+    elif [[ "$owner" != "${SELFDEF_WATCHDOG_EXPECTED_OWNER:-root}" && "$owner" != "?" ]]; then
         suspicious+=("${f#/etc/skel/}:owned-by-$owner")
     fi
     scan=$(grep -vE '^[[:space:]]*#' "$f" 2>/dev/null || true)

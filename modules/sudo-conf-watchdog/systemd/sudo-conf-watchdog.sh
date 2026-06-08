@@ -80,7 +80,7 @@ for f in "${files[@]}"; do
     base="$(basename "$f")"
     if [[ "$mode" =~ [2367]$ ]]; then
         suspicious+=("${base}:world-writable($mode)")
-    elif [[ "$owner" != "root" && "$owner" != "?" ]]; then
+    elif [[ "$owner" != "${SELFDEF_WATCHDOG_EXPECTED_OWNER:-root}" && "$owner" != "?" ]]; then
         suspicious+=("${base}:owned-by-$owner")
     fi
     while IFS= read -r line; do

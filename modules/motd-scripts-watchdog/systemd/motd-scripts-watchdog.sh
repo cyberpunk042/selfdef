@@ -71,7 +71,7 @@ for d in $DIRS; do
         printf 'own\t%s\t%s\n' "$f" "${owner}:${mode}" >> "$current"
         if [[ "$mode" =~ [2367]$ ]]; then
             suspicious+=("$(basename "$f"):world-writable($mode)")
-        elif [[ "$owner" != "root" && "$owner" != "?" ]]; then
+        elif [[ "$owner" != "${SELFDEF_WATCHDOG_EXPECTED_OWNER:-root}" && "$owner" != "?" ]]; then
             suspicious+=("$(basename "$f"):owned-by-$owner")
         fi
         scan=$(grep -vE '^[[:space:]]*#' "$f" 2>/dev/null || true)

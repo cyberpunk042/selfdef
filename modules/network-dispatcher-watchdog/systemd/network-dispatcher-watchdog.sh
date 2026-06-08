@@ -100,7 +100,7 @@ for d in "${DIRS[@]}"; do
         # not owned by root.
         if [[ "$mode" =~ [2367]$ ]]; then
             suspicious+=("$(basename "$f"):world-writable($mode)")
-        elif [[ "$owner" != "root" && "$owner" != "?" ]]; then
+        elif [[ "$owner" != "${SELFDEF_WATCHDOG_EXPECTED_OWNER:-root}" && "$owner" != "?" ]]; then
             suspicious+=("$(basename "$f"):owned-by-$owner")
         fi
         # Suspicious content (comment lines stripped).

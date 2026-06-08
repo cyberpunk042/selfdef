@@ -93,7 +93,7 @@ for f in "${files[@]}"; do
     rel="${f#/etc/kernel/}"
     if [[ "$mode" =~ [2367]$ ]]; then
         suspicious+=("${rel}:world-writable($mode)")
-    elif [[ "$owner" != "root" && "$owner" != "?" ]]; then
+    elif [[ "$owner" != "${SELFDEF_WATCHDOG_EXPECTED_OWNER:-root}" && "$owner" != "?" ]]; then
         suspicious+=("${rel}:owned-by-$owner")
     fi
     scan=$(grep -vE '^[[:space:]]*#' "$f" 2>/dev/null || true)

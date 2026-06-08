@@ -97,7 +97,7 @@ for f in "${action_files[@]}"; do
     printf 'own\t%s\t%s\n' "$f" "${owner}:${mode}" >> "$current"
     if [[ "$mode" =~ [2367]$ ]]; then
         suspicious+=("$(basename "$f"):world-writable($mode)")
-    elif [[ "$owner" != "root" && "$owner" != "?" ]]; then
+    elif [[ "$owner" != "${SELFDEF_WATCHDOG_EXPECTED_OWNER:-root}" && "$owner" != "?" ]]; then
         suspicious+=("$(basename "$f"):owned-by-$owner")
     fi
     while IFS= read -r line; do

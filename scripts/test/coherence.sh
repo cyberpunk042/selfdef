@@ -17,6 +17,17 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "${REPO_ROOT}" || { echo "cd ${REPO_ROOT} failed" >&2; exit 2; }
 
+# SDD-080: the L2 watchdog suites create benign config fixtures in a
+# temp dir owned by whoever runs the harness. The watchdogs flag any
+# config NOT owned by the expected owner (default root) as a tamper
+# signal — correct in production where /etc configs are root-owned, but
+# a false positive under a non-root CI runner (e.g. GitHub's `runner`),
+# where every fixture is owned by that user. Declare the harness runner
+# as the expected owner so the benign-path assertions are hermetic under
+# any runner. Production behaviour is unchanged: the watchdogs still
+# default to `root` when this env var is unset.
+export SELFDEF_WATCHDOG_EXPECTED_OWNER="${SELFDEF_WATCHDOG_EXPECTED_OWNER:-$(id -un)}"
+
 # --- Layer ledger -----------------------------------------------------
 declare -a LAYER_NAMES=()
 declare -a LAYER_STATUS=()

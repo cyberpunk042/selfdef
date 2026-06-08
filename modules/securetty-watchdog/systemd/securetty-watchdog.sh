@@ -69,7 +69,7 @@ mode=$(stat -c '%a' "$SECURETTY" 2>/dev/null || echo '?')
 printf 'own\t%s\t%s\n' "$SECURETTY" "${owner}:${mode}" >> "$current"
 if [[ "$mode" =~ [2367]$ ]]; then
     suspicious+=("securetty:world-writable($mode)")
-elif [[ "$owner" != "root" && "$owner" != "?" ]]; then
+elif [[ "$owner" != "${SELFDEF_WATCHDOG_EXPECTED_OWNER:-root}" && "$owner" != "?" ]]; then
     suspicious+=("securetty:owned-by-$owner")
 fi
 
