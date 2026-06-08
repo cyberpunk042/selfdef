@@ -820,3 +820,6 @@ EOF
 @test "INVARIANT (script file path coherent with friction-audit naming — file-name-canonical 102)" {
     case "${SCRIPT}" in *friction-audit.sh) ;; *) false ;; esac
 }
+@test "INVARIANT (script file UTF-8 / ASCII text encoded 103)" {
+    file "${SCRIPT}" | grep -qE 'shell script|bash|ASCII|UTF-8'
+}

@@ -1016,3 +1016,6 @@ with open('${mtoml}') as fp:
         break
 "
 }
+@test "INVARIANT (slm-cpu-loop module.toml file UTF-8 encoded 103)" {
+    file "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml" | grep -qE 'UTF-8|ASCII text'
+}

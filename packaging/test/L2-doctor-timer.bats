@@ -702,3 +702,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer file path coherent with naming convention — file-name-canonical 102)" {
     case "${TIMER}" in *selfdef-doctor.timer) ;; *) false ;; esac
 }
+@test "INVARIANT (.service file UTF-8 / ASCII text encoded 103)" {
+    file "${SERVICE}" | grep -qE 'UTF-8|ASCII text'
+}

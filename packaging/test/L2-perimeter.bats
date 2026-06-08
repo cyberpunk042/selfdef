@@ -889,3 +889,6 @@ assert data['kind'] == 'TracingPolicy'
 @test "INVARIANT (YAML file path coherent with sovereign-perimeter naming 102)" {
     case "${YAML}" in *sovereign-perimeter.yaml) ;; *) false ;; esac
 }
+@test "INVARIANT (YAML file UTF-8 / ASCII text encoded 103)" {
+    file "${YAML}" | grep -qE 'YAML|UTF-8|ASCII text'
+}

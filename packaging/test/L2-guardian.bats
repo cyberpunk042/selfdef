@@ -536,3 +536,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service file path coherent with selfdef-guardian naming 102)" {
     case "${UNIT}" in *selfdef-guardian.service) ;; *) false ;; esac
 }
+@test "INVARIANT (guardian.service file UTF-8 / ASCII text encoded 103)" {
+    file "${UNIT}" | grep -qE 'UTF-8|ASCII text'
+}

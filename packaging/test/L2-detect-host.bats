@@ -897,3 +897,6 @@ with open('${mtoml}') as fp:
         break
 "
 }
+@test "INVARIANT (detect-host module.toml file UTF-8 encoded 103)" {
+    file "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml" | grep -qE 'UTF-8|ASCII text'
+}
