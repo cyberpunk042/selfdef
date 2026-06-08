@@ -1,1 +1,15 @@
+# Profile: paranoid (yama ptrace_scope = 3).
+#
+# IRREVERSIBLE until reboot: once ptrace_scope is raised to 3 the
+# kernel refuses to lower it for the rest of the boot (EINVAL). No
+# process can ptrace-attach to any other — debuggers, crash
+# handlers, and some sandbox/inspection tooling stop working.
+#
+# Refuse-to-brick gate: apply.sh REQUIRES the explicit acknowledgment
+# below before it will set ptrace_scope=3. Without it, apply aborts
+# with the same instruction (so the gate can never be hit by accident).
 profile = "paranoid"
+
+# Set true to confirm you understand the irreversibility above.
+# Leave false (or omit) and the paranoid profile refuses to apply.
+acknowledge_paranoid = false

@@ -13,6 +13,9 @@ profile = "bundled"
 # Prometheus
 prometheus_conf_dir = "/etc/prometheus/conf.d"
 prometheus_service  = "prometheus.service"
+# Where the bundled alerting rules (selfdef.yml) are dropped. Must be a
+# dir Prometheus loads via `rule_files:` (commonly /etc/prometheus/rules.d).
+prometheus_rules_dir = "/etc/prometheus/rules.d"
 
 # Grafana
 grafana_dashboards_dir = "/var/lib/grafana/dashboards/selfdef"
