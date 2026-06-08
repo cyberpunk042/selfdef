@@ -1263,3 +1263,14 @@ paths = ip.get('paths') or []
 assert len(paths) == len(set(paths)), f'install_paths.paths must be unique, got {paths!r}'
 "
 }
+
+@test "INVARIANT (polarproxy module.toml name field matches kebab-case [a-z][a-z0-9-]+ — TOML-name-kebab-case-canonical 137)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
+    python3 -c "
+import tomllib, re
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+n = data.get('name', '')
+assert re.fullmatch(r'[a-z][a-z0-9-]+', n), f'name must match kebab-case, got {n!r}'
+"
+}

@@ -940,3 +940,12 @@ except UnicodeDecodeError as e:
     expected_suffix="packaging/systemd/selfdef-scheduler.service"
     case "${abs}" in *"${expected_suffix}") ;; *) return 1 ;; esac
 }
+
+@test "INVARIANT (scheduler.service substrate file basename contains only safe POSIX chars [a-zA-Z0-9._-] — POSIX-shell-safe-basename-canonical 137)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    python3 -c "
+import os, re
+bn = os.path.basename('${F}')
+assert re.fullmatch(r'[A-Za-z0-9._-]+', bn), f'basename has unsafe chars: {bn!r}'
+"
+}
