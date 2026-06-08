@@ -1231,3 +1231,8 @@ assert 'install' in data, 'install missing'
     n=$(ls "${script_dir}"/*.sh 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (account-watchdog module.toml has install_paths section — SDD-026 mutation-manifest 86)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/account-watchdog/module.toml"
+    grep -qE '^\[install_paths\]' "${mtoml}"
+}

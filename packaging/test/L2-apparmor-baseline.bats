@@ -1160,3 +1160,8 @@ assert isinstance(data, dict), 'TOML root must be table'
     chk="${BATS_TEST_DIRNAME}/../../modules/apparmor-baseline/install/check.sh"
     head -30 "${chk}" | grep -qE 'set -euo'
 }
+
+@test "INVARIANT (apparmor-baseline install/uninstall.sh first 30 lines have set -euo prologue — strict-mode-prologue 86)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/apparmor-baseline/install/uninstall.sh"
+    head -30 "${uni}" | grep -qE 'set -euo'
+}

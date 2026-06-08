@@ -1067,3 +1067,8 @@ assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {
     n=$(ls "${script_dir}"/*.sh 2>/dev/null | wc -l)
     [ "${n}" -ge 1 ]
 }
+
+@test "INVARIANT (time-skew-watchdog module.toml has install_paths section — SDD-026 mutation-manifest 86)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/time-skew-watchdog/module.toml"
+    grep -qE '^\[install_paths\]' "${mtoml}"
+}
