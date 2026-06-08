@@ -986,3 +986,6 @@ assert any(p.startswith('/etc/') for p in ps)
 @test "INVARIANT (slm-cpu-loop module.toml [install] block declared at line beginning 95)" {
     grep -qE '^\[install\]' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
 }
+@test "INVARIANT (slm-cpu-loop module.toml uses TOML key-value syntax 96)" {
+    grep -qE '^name[[:space:]]*=' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+}

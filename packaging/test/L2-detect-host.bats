@@ -867,3 +867,6 @@ assert any(p.startswith('/etc/selfdef/') or p.startswith('/etc/') for p in ps)
 @test "INVARIANT (detect-host module.toml [install] block declared at line beginning 95)" {
     grep -qE '^\[install\]' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
 }
+@test "INVARIANT (detect-host module.toml uses TOML key-value syntax 96)" {
+    grep -qE '^name[[:space:]]*=' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+}

@@ -799,3 +799,6 @@ EOF
 @test "INVARIANT (script declares time field in OCSF emission — OCSF-time-axis 95)" {
     grep -qE '"time"' "${SCRIPT}"
 }
+@test "INVARIANT (script declares hostname field in OCSF emission 96)" {
+    grep -qE 'hostname|HOSTNAME' "${SCRIPT}"
+}

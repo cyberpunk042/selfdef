@@ -757,3 +757,6 @@ setup() {
 @test "INVARIANT (lib version-required >= 1 by default 95)" {
     [ "${SELFDEF_MODULE_LIB_VERSION:-0}" -ge 1 ]
 }
+@test "INVARIANT (lib's selfdef_injection_patterns is bash function 96)" {
+    type -t selfdef_injection_patterns | grep -q '^function$'
+}

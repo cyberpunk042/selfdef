@@ -515,3 +515,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service uses RestrictSUIDSGID — anti-suid 95)" {
     grep -qE '^RestrictSUIDSGID=true' "${UNIT}"
 }
+@test "INVARIANT (guardian.service uses SystemCallArchitectures=native — 32bit-syscall-bypass anti 96)" {
+    grep -qE '^SystemCallArchitectures=native' "${UNIT}"
+}

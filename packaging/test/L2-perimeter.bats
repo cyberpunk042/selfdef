@@ -847,3 +847,11 @@ ma = data['spec']['kprobes'][0]['selectors'][0].get('matchArgs', [])
 assert isinstance(ma, list) and len(ma) >= 1
 "
 }
+@test "INVARIANT (YAML spec.kprobes[0].selectors[0].matchActions non-empty 96)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+ma = data['spec']['kprobes'][0]['selectors'][0].get('matchActions', [])
+assert isinstance(ma, list) and len(ma) >= 1
+"
+}
