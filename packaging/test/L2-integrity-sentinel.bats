@@ -13,6 +13,14 @@ INSTALL_DIR="${MODULE_DIR}/install"
 # Module shape
 # ============================================================
 
+setup() {
+    # SDD-082: this suite builds fixtures that require the root CI sandbox
+    # (chown to unresolved uid/gid, setuid bits, ownership baselines). Under a
+    # non-root runner it skips here; the dedicated `four-watchdog-root` CI job
+    # runs it as root so the security detections stay CI-verified.
+    [[ "$(id -u)" -eq 0 ]] || skip "requires root CI sandbox (SDD-082); covered by four-watchdog-root job"
+}
+
 @test "module.toml exists" { [ -f "${MODULE_DIR}/module.toml" ]; }
 
 @test "module.toml declares name = \"integrity-sentinel\"" {

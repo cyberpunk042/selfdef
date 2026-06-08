@@ -139,10 +139,33 @@ jobs:
           INFOHUB_RUNBOOKS: ${{ github.workspace }}/_infohub/wiki/runbooks
         run: bash scripts/test/coherence.sh
 
+  coherence-root:
+    name: four-watchdog root suites (fixture tests needing the root sandbox — SDD-082)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats-core
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bats
+      - name: Run root-requiring L2 watchdog suites as root
+        # These suites build fixtures that need root — chown to an unresolved
+        # uid/gid (unowned-files), setuid/setgid bits (suid-sgid), ownership
+        # baselines (integrity-sentinel), and the time-skew chronyc fixture set
+        # — so they self-skip under the non-root coherence harness (SDD-082)
+        # and run here as root to keep the security detections CI-verified.
+        # Pure shell (no cargo/toolchain needed).
+        run: |
+          sudo bats \
+            packaging/test/L2-integrity-sentinel.bats \
+            packaging/test/L2-suid-sgid-watchdog.bats \
+            packaging/test/L2-time-skew-watchdog.bats \
+            packaging/test/L2-unowned-files-watchdog.bats
+
   build:
     name: release build
     runs-on: ubuntu-latest
-    needs: [fmt, clippy, test, python-tests, ux-harness, coherence]
+    needs: [fmt, clippy, test, python-tests, ux-harness, coherence, coherence-root]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
