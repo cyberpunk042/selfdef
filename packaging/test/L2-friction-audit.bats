@@ -910,3 +910,8 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
     [ -s "${F}" ]
 }
+
+@test "INVARIANT (script file is readable by current process — POSIX-file-readable-canonical 119)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    [ -r "${F}" ]
+}

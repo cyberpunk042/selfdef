@@ -868,3 +868,8 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
     [ -s "${F}" ]
 }
+
+@test "INVARIANT (lib file is readable by current process — POSIX-file-readable-canonical 119)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    [ -r "${F}" ]
+}
