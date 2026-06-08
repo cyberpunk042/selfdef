@@ -38,7 +38,7 @@ Per-milestone shipped surfaces are enumerated below in commit-order so the traje
 
 | R-row family | Surface | Commits | Tests |
 |---|---|---|---|
-| R10281 (chain-wide observability) | `selfdefctl m060-doctor --textfile PATH` covers all 6 mirror domains (D-02/D-13/D-14/D-15/D-17/D-18) with 6 gauge series each; `selfdef-m060-doctor.{service,timer}` runs every 60s at 70s boot-offset | `ce58154` | 8 m060_doctor unit + 10 chain-doctor unit-contract + 2 added postrm contract tests |
+| R10281 (chain-wide observability) | `selfdefctl m060-doctor --textfile PATH` covers all 8 mirror domains (D-02/D-12/D-13/D-14/D-15/D-16/D-17/D-18) with 6 gauge series each; `selfdef-m060-doctor.{service,timer}` runs every 60s at 70s boot-offset. D-12 rules + D-16 audit-chain were silently skipped in the initial commit `ce58154`; follow-up commit `82014d6` pinned full 8-domain wire-contract via `domains_cover_full_m060_wire_contract` regression guard. | `ce58154` + `82014d6` (D-12/D-16 close) | 8 m060_doctor unit + 10 chain-doctor unit-contract + 2 added postrm contract tests + 2 added domain-coverage regression guards (`domains_cover_full_m060_wire_contract` + `domains_resident_defaults_match_daemon_canonical_paths`) |
 
 ## MS007 — Cross-repo typed-mirror crates
 
