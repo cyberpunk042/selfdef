@@ -1547,3 +1547,16 @@ for el in paths:
     assert any(el.startswith(pf) for pf in prefixes), f'install_paths.paths element must use FHS-canonical prefix {prefixes}, got {el!r}'
 "
 }
+
+@test "INVARIANT (services-disable-printing module.toml install_paths.paths elements do not end with trailing slash — TOML-install-paths-no-trailing-slash-canonical 140)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/services-disable-printing/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths') or {}
+paths = ip.get('paths') or []
+for el in paths:
+    assert not el.endswith('/'), f'install_paths.paths element must not end with /, got {el!r}'
+"
+}
