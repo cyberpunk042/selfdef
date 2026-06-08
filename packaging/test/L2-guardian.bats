@@ -702,3 +702,9 @@ except UnicodeDecodeError as e:
     sys.exit(f'invalid UTF-8 at {e.start}: {e.reason}')
 "
 }
+
+@test "INVARIANT (guardian.service file basename starts with a lowercase letter — POSIX-portable-filename-leading-canonical 128)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
+    bn=$(basename "${F}")
+    case "${bn}" in [a-z]*) ;; *) return 1 ;; esac
+}

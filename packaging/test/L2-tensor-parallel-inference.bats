@@ -1312,3 +1312,16 @@ r = data.get('depends_on')
 assert isinstance(r, list), f'depends_on must be list, got {type(r).__name__}'
 "
 }
+
+@test "INVARIANT (tensor-parallel-inference module.toml requires list elements are inline-tables with kind+value keys (or empty) — TOML-requires-elements-shape-canonical 128)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('requires') or []
+for el in r:
+    assert isinstance(el, dict), f'requires element must be inline-table, got {type(el).__name__}'
+    assert 'kind' in el and 'value' in el, f'requires element must have kind+value keys, got {sorted(el.keys())!r}'
+"
+}
