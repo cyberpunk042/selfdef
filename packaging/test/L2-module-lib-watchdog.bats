@@ -742,3 +742,6 @@ setup() {
 @test "INVARIANT (lib's run is bash function 90)" {
     type -t run | grep -q '^function$'
 }
+@test "INVARIANT (lib defines die helper available in setup 91)" {
+    declare -F die >/dev/null
+}

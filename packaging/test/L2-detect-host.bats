@@ -838,3 +838,6 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert len(ps) >= 1
 "
 }
+@test "INVARIANT (detect-host module.toml install_paths includes /etc/selfdef path 91)" {
+    grep -qE '/etc/selfdef' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+}

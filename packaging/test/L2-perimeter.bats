@@ -808,3 +808,11 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert isinstance(data['metadata']['name'], str)
 "
 }
+@test "INVARIANT (YAML spec.kprobes call list non-empty 91)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+for k in data['spec']['kprobes']:
+    assert k.get('call')
+"
+}

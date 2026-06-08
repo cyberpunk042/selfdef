@@ -666,3 +666,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     grep -qE '^User=root' "${SERVICE}"
     grep -qE '^Group=root' "${SERVICE}"
 }
+@test "INVARIANT (.service file declares Type= directive — canonical-systemd-type 91)" {
+    grep -qE '^Type=' "${SERVICE}"
+}

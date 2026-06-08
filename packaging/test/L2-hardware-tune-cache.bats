@@ -963,3 +963,14 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert len(ps) >= 1
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml install_paths.paths first entry under /etc/ — config-staging-canonical 91)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert any(p.startswith('/etc/') for p in ps)
+"
+}

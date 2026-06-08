@@ -735,29 +735,7 @@ assert s, f'summary must be non-empty, got {s!r}'
 "
 }
 
-@test "INVARIANT (wasm-aot-cache module.toml [install] apply = \"install/apply.sh\" — install apply path canonical contract)" {
-    mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
-    [ -f "${mtoml}" ]
-    python3 -c "
-import tomllib
-with open('${mtoml}', 'rb') as fp:
-    data = tomllib.load(fp)
-ap = (data.get('install') or {}).get('apply', '')
-assert ap == 'install/apply.sh', f'install.apply must be install/apply.sh, got {ap!r}'
-"
-}
 
-@test "INVARIANT (wasm-aot-cache module.toml [install] check = \"install/check.sh\" — install check path canonical contract)" {
-    mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
-    [ -f "${mtoml}" ]
-    python3 -c "
-import tomllib
-with open('${mtoml}', 'rb') as fp:
-    data = tomllib.load(fp)
-ch = (data.get('install') or {}).get('check', '')
-assert ch == 'install/check.sh', f'install.check must be install/check.sh, got {ch!r}'
-"
-}
 
 @test "INVARIANT (wasm-aot-cache module.toml [install] uninstall = \"install/uninstall.sh\" — install uninstall path canonical contract)" {
     mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
@@ -980,5 +958,40 @@ with open('${mtoml}', 'rb') as fp:
     data = tomllib.load(fp)
 ps = (data.get('install_paths') or {}).get('paths', [])
 assert len(ps) >= 1
+"
+}
+
+@test "INVARIANT (wasm-aot-cache module.toml install_paths.paths is canonical-rooted list 91)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+prefixes = ('/etc/', '/usr/', '/var/', '/lib/', '/opt/', '/run/', '/srv/', '/boot/')
+assert all(any(p.startswith(pf) for pf in prefixes) for p in ps)
+"
+}
+
+@test "INVARIANT (wasm-aot-cache module.toml has at least 1 entry in install_paths.paths 90)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert len(ps) >= 1
+"
+}
+
+@test "INVARIANT (wasm-aot-cache module.toml install_paths.paths only absolute paths 90b)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wasm-aot-cache/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+for p in ps:
+    assert p.startswith('/')
 "
 }

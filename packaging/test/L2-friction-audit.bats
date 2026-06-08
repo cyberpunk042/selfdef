@@ -784,3 +784,6 @@ EOF
 @test "INVARIANT (script declares activity_id field in OCSF emission — OCSF-schema-axis 90)" {
     grep -qE 'activity_id' "${SCRIPT}"
 }
+@test "INVARIANT (script invokes hostname binary OR uses HOSTNAME — host-identification 91)" {
+    grep -qE 'hostname|HOSTNAME' "${SCRIPT}"
+}

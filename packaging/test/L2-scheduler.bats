@@ -679,3 +679,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service uses ProtectKernel directive — kernel-protect 90)" {
     grep -qE '^ProtectKernel' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service uses RestrictAddressFamilies — network-surface-bound 91)" {
+    grep -qE '^RestrictAddressFamilies' "${UNIT}"
+}

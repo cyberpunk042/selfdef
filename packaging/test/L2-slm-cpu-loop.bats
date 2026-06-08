@@ -950,3 +950,13 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert len(ps) >= 1
 "
 }
+@test "INVARIANT (slm-cpu-loop module.toml install_paths includes /etc/ path 91)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert any(p.startswith('/etc/') for p in ps)
+"
+}
