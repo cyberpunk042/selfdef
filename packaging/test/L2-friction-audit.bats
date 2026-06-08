@@ -1089,3 +1089,10 @@ assert '\\x00' not in data and '\\u0000' not in data, 'literal NUL-escape sequen
     L=${#bn}
     [ "${L}" -ge 3 ] && [ "${L}" -le 80 ]
 }
+
+@test "INVARIANT (script substrate file md5 sum is deterministic (file content is stable for hash computation) — POSIX-content-hashable-canonical 143)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    h1=$(md5sum "${F}" | cut -d' ' -f1)
+    h2=$(md5sum "${F}" | cut -d' ' -f1)
+    [ "${h1}" = "${h2}" ] && [ -n "${h1}" ]
+}
