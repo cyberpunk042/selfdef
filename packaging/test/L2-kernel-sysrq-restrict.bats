@@ -1439,3 +1439,15 @@ for el in c:
     assert isinstance(el, str) and el, f'conflicts element must be non-empty string, got {el!r}'
 "
 }
+
+@test "INVARIANT (kernel-sysrq-restrict module.toml consumes list elements are all non-empty strings (or empty) — TOML-consumes-elements-string-canonical 133)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/kernel-sysrq-restrict/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+c = data.get('consumes') or []
+for el in c:
+    assert isinstance(el, str) and el, f'consumes element must be non-empty string, got {el!r}'
+"
+}
