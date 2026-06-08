@@ -718,3 +718,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service file UTF-8 / ASCII text encoded 103)" {
     file "${UNIT}" | grep -qE 'UTF-8|ASCII text'
 }
+@test "INVARIANT (scheduler.service file LF-only line endings 104)" {
+    ! grep -qE $'\r' "${UNIT}"
+}

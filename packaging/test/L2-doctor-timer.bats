@@ -705,3 +705,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service file UTF-8 / ASCII text encoded 103)" {
     file "${SERVICE}" | grep -qE 'UTF-8|ASCII text'
 }
+@test "INVARIANT (.service file LF-only line endings 104)" {
+    ! grep -qE $'\r' "${SERVICE}"
+}

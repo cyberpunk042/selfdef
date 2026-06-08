@@ -781,3 +781,6 @@ setup() {
 @test "INVARIANT (lib file UTF-8 / ASCII text encoded 103)" {
     file "${LIB}" | grep -qE 'shell script|bash|ASCII|UTF-8'
 }
+@test "INVARIANT (lib file LF-only line endings 104)" {
+    ! grep -qE $'\r' "${LIB}"
+}

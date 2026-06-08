@@ -823,3 +823,6 @@ EOF
 @test "INVARIANT (script file UTF-8 / ASCII text encoded 103)" {
     file "${SCRIPT}" | grep -qE 'shell script|bash|ASCII|UTF-8'
 }
+@test "INVARIANT (script file LF-only line endings 104)" {
+    ! grep -qE $'\r' "${SCRIPT}"
+}

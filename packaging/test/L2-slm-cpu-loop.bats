@@ -1019,3 +1019,6 @@ with open('${mtoml}') as fp:
 @test "INVARIANT (slm-cpu-loop module.toml file UTF-8 encoded 103)" {
     file "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml" | grep -qE 'UTF-8|ASCII text'
 }
+@test "INVARIANT (slm-cpu-loop module.toml LF-only line endings 104)" {
+    ! grep -qE $'\r' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+}

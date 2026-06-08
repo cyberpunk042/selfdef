@@ -892,3 +892,6 @@ assert data['kind'] == 'TracingPolicy'
 @test "INVARIANT (YAML file UTF-8 / ASCII text encoded 103)" {
     file "${YAML}" | grep -qE 'YAML|UTF-8|ASCII text'
 }
+@test "INVARIANT (YAML file LF-only line endings 104)" {
+    ! grep -qE $'\r' "${YAML}"
+}
