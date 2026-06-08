@@ -138,6 +138,80 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -q '@@CA_PFX_PASSWORD_OPT@@' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
 }
 
+# ============================================================================
+# Render-contract (F-2026-062 follow-up): exercise apply.sh's actual sed
+# substitution for BOTH render paths (the systemd unit, 6 tokens, lines
+# 62-69; the nat-redirect ruleset, 1 token, line 96). A leftover @@TOKEN@@
+# in the unit yields a systemd parse error at daemon-reload; one in the nft
+# ruleset fails `nft -f`. The static token-presence tests above can't catch
+# a token the template gains but apply.sh never substitutes. Mirrors both
+# sed expressions verbatim so they can't drift.
+# ============================================================================
+
+render_pp_unit() {
+    # $1 listen_port $2 pcap_port $3 cert_http_flag $4 log_dir
+    # $5 ca_pfx_path $6 ca_pfx_password_opt
+    sed \
+        -e "s|@@LISTEN_PORT@@|${1}|g" \
+        -e "s|@@PCAP_OVER_IP_PORT@@|${2}|g" \
+        -e "s|@@CERT_HTTP_FLAG@@|${3}|g" \
+        -e "s|@@LOG_DIR@@|${4}|g" \
+        -e "s|@@CA_PFX_PATH@@|${5}|g" \
+        -e "s|@@CA_PFX_PASSWORD_OPT@@|${6}|g" \
+        "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
+
+render_pp_nat() {
+    sed -e "s|@@LISTEN_PORT@@|${1}|g" \
+        "${MODULE_DIR}/templates/nat-redirect.rule.tmpl"
+}
+
+@test "RENDER (systemd unit: no @@...@@ placeholder survives the six-token substitution)" {
+    out="$(render_pp_unit 10443 4430 '--certhttp 10080' /var/log/polarproxy /etc/polarproxy/ca.pfx '')"
+    ! echo "${out}" | grep -qE '@@[A-Z_]+@@'
+}
+
+@test "RENDER (systemd unit: ports land in the ExecStart proxy invocation)" {
+    out="$(render_pp_unit 11443 4431 '' /var/log/polarproxy /etc/polarproxy/ca.pfx '')"
+    echo "${out}" | grep -q '11443'
+    echo "${out}" | grep -q '4431'
+}
+
+@test "RENDER (systemd unit: empty cert-http + password flags collapse cleanly — no dangling token)" {
+    # When cert_http_flag and pw_opt are empty (apply.sh's default when the
+    # ports/password are unset), the substitution must leave no @@...@@ and
+    # no literal token text behind.
+    out="$(render_pp_unit 10443 4430 '' /var/log/polarproxy /etc/polarproxy/ca.pfx '')"
+    ! echo "${out}" | grep -qE '@@[A-Z_]+@@'
+    ! echo "${out}" | grep -q 'CERT_HTTP_FLAG'
+    ! echo "${out}" | grep -q 'CA_PFX_PASSWORD_OPT'
+}
+
+@test "RENDER (nat-redirect: listen_port substitutes + no placeholder survives)" {
+    out="$(render_pp_nat 10443)"
+    echo "${out}" | grep -q '10443'
+    ! echo "${out}" | grep -qE '@@[A-Z_]+@@'
+}
+
+@test "RENDER (both paths are byte-stable across two renders — idempotency)" {
+    a="$(render_pp_unit 10443 4430 '--certhttp 10080' /var/log/polarproxy /etc/polarproxy/ca.pfx '')"
+    b="$(render_pp_unit 10443 4430 '--certhttp 10080' /var/log/polarproxy /etc/polarproxy/ca.pfx '')"
+    [ "${a}" = "${b}" ]
+    c="$(render_pp_nat 10443)"
+    d="$(render_pp_nat 10443)"
+    [ "${c}" = "${d}" ]
+}
+
+@test "RENDER (doc/substitution token sets match exactly — no drift in either template)" {
+    # Unit template's tokens must be exactly the six apply.sh substitutes.
+    unit_tokens="$(grep -oE '@@[A-Z_]+@@' "${MODULE_DIR}/templates/polarproxy.service.tmpl" | sort -u)"
+    expected_unit="$(printf '%s\n' '@@CA_PFX_PASSWORD_OPT@@' '@@CA_PFX_PATH@@' '@@CERT_HTTP_FLAG@@' '@@LISTEN_PORT@@' '@@LOG_DIR@@' '@@PCAP_OVER_IP_PORT@@')"
+    [ "${unit_tokens}" = "${expected_unit}" ]
+    # NAT template's only token is LISTEN_PORT.
+    nat_tokens="$(grep -oE '@@[A-Z_]+@@' "${MODULE_DIR}/templates/nat-redirect.rule.tmpl" | sort -u)"
+    [ "${nat_tokens}" = '@@LISTEN_PORT@@' ]
+}
+
 @test "polarproxy.service template auto-restarts on failure (operator-visible service contract)" {
     grep -qE '^Restart=on-failure' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
 }

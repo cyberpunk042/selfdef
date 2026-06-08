@@ -162,6 +162,52 @@ with open('${MODULE_DIR}/profiles/${p}.toml', 'rb') as f:
         "${MODULE_DIR}/templates/forward.rule.tmpl"
 }
 
+# ============================================================================
+# Render-contract (F-2026-062 follow-up): exercise the actual sed
+# substitution the relay-via-server profile performs (profiles/
+# relay-via-server.sh lines 110-113) against forward.rule.tmpl. A leftover
+# @@TOKEN@@ in this ruleset fails `nft -f` at apply time. The static
+# token-presence tests above can't see a token the template gains that the
+# profile never substitutes. Mirrors the three-token sed verbatim.
+# ============================================================================
+
+render_vb_forward() {
+    # $1 wg_iface $2 lan_iface $3 nft_table
+    sed \
+        -e "s|@@WG_IFACE@@|${1}|g" \
+        -e "s|@@LAN_IFACE@@|${2}|g" \
+        -e "s|@@NFT_TABLE@@|${3}|g" \
+        "${MODULE_DIR}/templates/forward.rule.tmpl"
+}
+
+@test "RENDER (no @@...@@ placeholder survives the three-token substitution — incl. comment block)" {
+    out="$(render_vb_forward wg0 br0 selfdef_vpn_bridge)"
+    ! echo "${out}" | grep -qE '@@[A-Z_]+@@'
+}
+
+@test "RENDER (per-instance NFT_TABLE lands in the table declaration — SDD-003 multi-instance)" {
+    out="$(render_vb_forward wg0 br0 selfdef_vpn_bridge_publish)"
+    echo "${out}" | grep -qE '^table[[:space:]]+inet[[:space:]]+selfdef_vpn_bridge_publish[[:space:]]*\{'
+}
+
+@test "RENDER (wg + lan ifaces land in both forward directions)" {
+    out="$(render_vb_forward wg7 eno1 selfdef_vpn_bridge)"
+    echo "${out}" | grep -qE 'iifname[[:space:]]+"wg7"[[:space:]]+oifname[[:space:]]+"eno1"[[:space:]]+accept'
+    echo "${out}" | grep -qE 'iifname[[:space:]]+"eno1"[[:space:]]+oifname[[:space:]]+"wg7"[[:space:]]+ct[[:space:]]+state[[:space:]]+established,related[[:space:]]+accept'
+}
+
+@test "RENDER (substitution is byte-stable across two renders — idempotency)" {
+    a="$(render_vb_forward wg0 br0 selfdef_vpn_bridge)"
+    b="$(render_vb_forward wg0 br0 selfdef_vpn_bridge)"
+    [ "${a}" = "${b}" ]
+}
+
+@test "RENDER (doc/substitution token sets match exactly — no drift)" {
+    tokens="$(grep -oE '@@[A-Z_]+@@' "${MODULE_DIR}/templates/forward.rule.tmpl" | sort -u)"
+    expected="$(printf '%s\n' '@@LAN_IFACE@@' '@@NFT_TABLE@@' '@@WG_IFACE@@')"
+    [ "${tokens}" = "${expected}" ]
+}
+
 @test "INVARIANT (module.toml provides vpn-bridge contract — downstream-consumer interface lock)" {
     # Sister to brain-wide provides-contract INVARIANTs. vpn-
     # bridge is the substrate downstream VPN-using modules
