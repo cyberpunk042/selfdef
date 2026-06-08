@@ -805,3 +805,8 @@ setup() {
     sz=$(wc -c < "${F}")
     [ "${sz}" -gt 100 ]
 }
+
+@test "INVARIANT (lib file is a regular file (not symlink, not device) — POSIX-file-type-canonical 109)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    [ -f "${F}" ] && [ ! -L "${F}" ]
+}

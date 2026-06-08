@@ -563,3 +563,8 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     sz=$(wc -c < "${F}")
     [ "${sz}" -gt 100 ]
 }
+
+@test "INVARIANT (guardian.service file is a regular file (not symlink, not device) — POSIX-file-type-canonical 109)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
+    [ -f "${F}" ] && [ ! -L "${F}" ]
+}

@@ -916,3 +916,8 @@ assert data['kind'] == 'TracingPolicy'
     sz=$(wc -c < "${F}")
     [ "${sz}" -gt 100 ]
 }
+
+@test "INVARIANT (YAML file is a regular file (not symlink, not device) — POSIX-file-type-canonical 109)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    [ -f "${F}" ] && [ ! -L "${F}" ]
+}

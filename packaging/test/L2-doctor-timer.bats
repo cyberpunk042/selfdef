@@ -729,3 +729,8 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     sz=$(wc -c < "${F}")
     [ "${sz}" -gt 100 ]
 }
+
+@test "INVARIANT (.service file is a regular file (not symlink, not device) — POSIX-file-type-canonical 109)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
+    [ -f "${F}" ] && [ ! -L "${F}" ]
+}

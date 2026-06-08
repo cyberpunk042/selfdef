@@ -847,3 +847,8 @@ EOF
     sz=$(wc -c < "${F}")
     [ "${sz}" -gt 100 ]
 }
+
+@test "INVARIANT (script file is a regular file (not symlink, not device) — POSIX-file-type-canonical 109)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    [ -f "${F}" ] && [ ! -L "${F}" ]
+}
