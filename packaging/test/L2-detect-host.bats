@@ -1051,3 +1051,14 @@ keys = [k for k, v in data.items() if not isinstance(v, dict)]
 assert keys and keys[0] == 'name', f'first top-level key must be name, got {keys[:3]!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml [install] check value (when present) is string — TOML-install-check-type-canonical 121)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ck = (data.get('install') or {}).get('check')
+assert ck is None or isinstance(ck, str), f'install.check must be string or absent, got type {type(ck).__name__}'
+"
+}

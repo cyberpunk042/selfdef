@@ -802,3 +802,10 @@ assert not re.search(b'\r(?!\n)', data), 'bare CR present'
     F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
     case "${F}" in */packaging/*) ;; *) return 1 ;; esac
 }
+
+@test "INVARIANT (.service file readable size matches stat-reported size — POSIX-file-stat-consistency-canonical 121)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
+    s1=$(wc -c < "${F}")
+    s2=$(stat -c %s "${F}")
+    [ "${s1}" = "${s2}" ]
+}

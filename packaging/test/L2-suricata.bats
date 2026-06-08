@@ -1124,3 +1124,14 @@ keys = [k for k, v in data.items() if not isinstance(v, dict)]
 assert keys and keys[0] == 'name', f'first top-level key must be name, got {keys[:3]!r}'
 "
 }
+
+@test "INVARIANT (suricata module.toml [install] uninstall value is non-empty string ending with .sh — TOML-install-uninstall-shape-canonical 121)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/suricata/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+v = (data.get('install') or {}).get('uninstall', '')
+assert isinstance(v, str) and v and v.endswith('.sh'), f'install.uninstall must be non-empty .sh path, got {v!r}'
+"
+}
