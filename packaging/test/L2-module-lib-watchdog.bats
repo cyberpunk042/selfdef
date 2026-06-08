@@ -788,3 +788,8 @@ setup() {
     last_char=$(tail -c 1 "${LIB}" | od -An -c | tr -d ' ')
     [ "${last_char}" = "\\n" ]
 }
+
+@test "INVARIANT (lib file does not contain trailing whitespace — POSIX-text-canonical 106)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    ! grep -qP '[ \t]+$' "${F}"
+}

@@ -899,3 +899,8 @@ assert data['kind'] == 'TracingPolicy'
     last_char=$(tail -c 1 "${YAML}" | od -An -c | tr -d ' ')
     [ "${last_char}" = "\\n" ]
 }
+
+@test "INVARIANT (YAML file does not contain trailing whitespace — POSIX-text-canonical 106)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    ! grep -qP '[ \t]+$' "${F}"
+}

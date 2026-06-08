@@ -712,3 +712,8 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
     last_char=$(tail -c 1 "${SERVICE}" | od -An -c | tr -d ' ')
     [ "${last_char}" = "\\n" ]
 }
+
+@test "INVARIANT (.service file does not contain trailing whitespace — POSIX-text-canonical 106)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
+    ! grep -qP '[ \t]+$' "${F}"
+}

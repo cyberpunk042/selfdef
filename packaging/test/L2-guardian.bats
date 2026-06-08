@@ -546,3 +546,8 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     last_char=$(tail -c 1 "${UNIT}" | od -An -c | tr -d ' ')
     [ "${last_char}" = "\\n" ]
 }
+
+@test "INVARIANT (guardian.service file does not contain trailing whitespace — POSIX-text-canonical 106)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
+    ! grep -qP '[ \t]+$' "${F}"
+}

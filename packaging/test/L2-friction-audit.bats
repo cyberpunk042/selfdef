@@ -830,3 +830,8 @@ EOF
     last_char=$(tail -c 1 "${SCRIPT}" | od -An -c | tr -d ' ')
     [ "${last_char}" = "\\n" ]
 }
+
+@test "INVARIANT (script file does not contain trailing whitespace — POSIX-text-canonical 106)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    ! grep -qP '[ \t]+$' "${F}"
+}
