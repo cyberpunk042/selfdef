@@ -1545,3 +1545,17 @@ for el in r:
     assert set(el.keys()) == {'kind', 'value'}, f'requires element must have exactly kind+value keys, got {sorted(el.keys())!r}'
 "
 }
+
+@test "INVARIANT (pam-history module.toml install_paths.paths elements use FHS-canonical prefixes {/etc, /var, /usr, /run, /opt} — TOML-install-paths-fhs-prefix-canonical 139)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-history/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths') or {}
+paths = ip.get('paths') or []
+prefixes = ('/etc/', '/var/', '/usr/', '/run/', '/opt/')
+for el in paths:
+    assert any(el.startswith(pf) for pf in prefixes), f'install_paths.paths element must use FHS-canonical prefix {prefixes}, got {el!r}'
+"
+}
