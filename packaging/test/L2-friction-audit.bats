@@ -973,3 +973,16 @@ assert mx <= 4, f'consecutive blank-line block of {mx} exceeds 4'
     F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
     basename "${F}" | grep -qE '^[a-zA-Z0-9._-]+$'
 }
+
+@test "INVARIANT (script file all characters are 7-bit ASCII or UTF-8 valid — POSIX-text-utf8-strict-canonical 127)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/scripts/friction-audit.sh"
+    python3 -c "
+import sys
+with open('${F}', 'rb') as fp:
+    data = fp.read()
+try:
+    data.decode('utf-8', errors='strict')
+except UnicodeDecodeError as e:
+    sys.exit(f'invalid UTF-8 at {e.start}: {e.reason}')
+"
+}

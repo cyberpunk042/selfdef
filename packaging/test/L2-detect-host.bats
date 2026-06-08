@@ -1113,3 +1113,14 @@ a = p.get('available') or []
 assert d in a, f'profiles.default {d!r} must appear in available {a!r}'
 "
 }
+
+@test "INVARIANT (detect-host module.toml [profiles] available list elements are all strings — TOML-profiles-available-elements-string-canonical 127)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+a = (data.get('profiles') or {}).get('available') or []
+assert all(isinstance(x, str) for x in a), f'profiles.available items must all be strings, got {[type(x).__name__ for x in a]!r}'
+"
+}

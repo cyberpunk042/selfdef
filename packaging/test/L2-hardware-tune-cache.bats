@@ -1265,3 +1265,14 @@ c = data.get('category', '')
 assert isinstance(c, str) and c, f'category must be non-empty string, got {c!r}'
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml depends_on field is a TOML list — TOML-depends-on-list-canonical 127)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('depends_on')
+assert isinstance(r, list), f'depends_on must be list, got {type(r).__name__}'
+"
+}
