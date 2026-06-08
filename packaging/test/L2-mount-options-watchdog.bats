@@ -1255,3 +1255,8 @@ assert len(ps) >= 1
     mtoml="${BATS_TEST_DIRNAME}/../../modules/mount-options-watchdog/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (mount-options-watchdog module.toml name field matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/mount-options-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"mount-options-watchdog"' "${mtoml}"
+}

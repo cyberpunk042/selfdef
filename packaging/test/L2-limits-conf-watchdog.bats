@@ -1229,3 +1229,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/limits-conf-watchdog/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (limits-conf-watchdog module.toml name field matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/limits-conf-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"limits-conf-watchdog"' "${mtoml}"
+}

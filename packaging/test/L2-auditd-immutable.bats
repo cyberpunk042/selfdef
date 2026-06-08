@@ -1176,3 +1176,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-immutable/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (auditd-immutable module.toml name field value matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/auditd-immutable/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"auditd-immutable"' "${mtoml}"
+}

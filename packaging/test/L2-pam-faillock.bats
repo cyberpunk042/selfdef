@@ -1128,3 +1128,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-faillock/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (pam-faillock module.toml name field value matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-faillock/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"pam-faillock"' "${mtoml}"
+}

@@ -1269,3 +1269,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/service-account-lock/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (service-account-lock module.toml name field value matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/service-account-lock/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"service-account-lock"' "${mtoml}"
+}

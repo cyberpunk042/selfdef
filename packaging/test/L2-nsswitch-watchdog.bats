@@ -1186,3 +1186,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/nsswitch-watchdog/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (nsswitch-watchdog module.toml name field matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/nsswitch-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"nsswitch-watchdog"' "${mtoml}"
+}

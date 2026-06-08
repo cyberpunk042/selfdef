@@ -1173,3 +1173,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (fail2ban-bridge module.toml name field value matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/fail2ban-bridge/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"fail2ban-bridge"' "${mtoml}"
+}

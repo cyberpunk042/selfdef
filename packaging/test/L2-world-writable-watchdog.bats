@@ -1133,3 +1133,8 @@ assert len(ps) >= 1
     mtoml="${BATS_TEST_DIRNAME}/../../modules/world-writable-watchdog/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (world-writable-watchdog module.toml name field matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/world-writable-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"world-writable-watchdog"' "${mtoml}"
+}

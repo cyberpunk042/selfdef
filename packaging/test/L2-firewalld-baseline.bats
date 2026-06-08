@@ -1216,3 +1216,8 @@ assert any('/var/lib/' in p or '/var/log/' in p or '/var/cache/' in p for p in p
     mtoml="${BATS_TEST_DIRNAME}/../../modules/firewalld-baseline/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (firewalld-baseline module.toml name field value matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/firewalld-baseline/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"firewalld-baseline"' "${mtoml}"
+}

@@ -1145,3 +1145,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (mta-loopback-detect module.toml name field value matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/mta-loopback-detect/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"mta-loopback-detect"' "${mtoml}"
+}

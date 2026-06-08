@@ -1198,3 +1198,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/dhcpcd-hooks-watchdog/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (dhcpcd-hooks-watchdog module.toml name field matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/dhcpcd-hooks-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"dhcpcd-hooks-watchdog"' "${mtoml}"
+}

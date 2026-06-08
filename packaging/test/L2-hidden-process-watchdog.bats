@@ -1149,3 +1149,8 @@ assert len(ps) >= 1
     mtoml="${BATS_TEST_DIRNAME}/../../modules/hidden-process-watchdog/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (hidden-process-watchdog module.toml name field matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hidden-process-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"hidden-process-watchdog"' "${mtoml}"
+}

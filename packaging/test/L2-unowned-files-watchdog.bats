@@ -1156,3 +1156,8 @@ assert len(ps) >= 1
     mtoml="${BATS_TEST_DIRNAME}/../../modules/unowned-files-watchdog/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (unowned-files-watchdog module.toml name field matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/unowned-files-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"unowned-files-watchdog"' "${mtoml}"
+}

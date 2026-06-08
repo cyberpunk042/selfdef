@@ -1221,3 +1221,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/sudoers-defaults-watchdog/module.toml"
     grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (sudoers-defaults-watchdog module.toml name field matches module dir basename — TOML-name-dir-coherence 101)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/sudoers-defaults-watchdog/module.toml"
+    grep -qE '^name[[:space:]]*=[[:space:]]*"sudoers-defaults-watchdog"' "${mtoml}"
+}
