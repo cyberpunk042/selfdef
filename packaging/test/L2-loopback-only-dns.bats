@@ -1189,3 +1189,14 @@ cat = data.get('category')
 assert isinstance(cat, str) and cat, f'category must be non-empty string, got {cat!r}'
 "
 }
+
+@test "INVARIANT (loopback-only-dns module.toml has top-level phase field with value in bounded-vocab {main,pre,post} — TOML-phase-vocab-canonical 110)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/loopback-only-dns/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ph = data.get('phase')
+assert ph is None or ph in ('main','pre','post'), f'phase if present must be main|pre|post, got {ph!r}'
+"
+}
