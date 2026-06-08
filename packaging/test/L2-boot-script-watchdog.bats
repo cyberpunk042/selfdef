@@ -342,13 +342,37 @@ seed_benign() {
     # When attacker drops a new /etc/init.d script (T1037 boot-
     # time persistence), the file NAME MUST surface in JSON
     # sample so operator routes triage.
+    #
+    # Must point the watchdog at a real init.d dir (run_wd's default is
+    # the no-initd sentinel) AND define that dir in THIS @test — bats
+    # @test blocks do not share locals, so an undefined ${INITD3} here
+    # previously expanded empty and wrote to filesystem root (silently
+    # succeeding only as root; Permission-denied under a non-root runner,
+    # and the assertion matched the unrelated rc.local "ok" vacuously).
+    INITD3="${TMP}/init.d"; mkdir -p "${INITD3}"
     seed_benign
-    run_wd
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_BOOTSCRIPT_PROFILE="${PROFILE:-report}" \
+    SELFDEF_BOOTSCRIPT_BASELINE="${BASELINE}" \
+    SELFDEF_BOOTSCRIPT_RCLOCAL="${RCFILE}" \
+    SELFDEF_BOOTSCRIPT_INITD="${INITD3}" \
+    SELFDEF_BOOTSCRIPT_RCDIRS="${TMP}/no-rcdir" \
+    bash "${WD}"
     : > "${SELFDEF_TEST_LOGCAP}"
     printf '#!/bin/sh\necho new\n' > "${INITD3}/distinctive-attacker-initd-script"
     chmod 0755 "${INITD3}/distinctive-attacker-initd-script"
-    run_wd
-    cap | grep -qE 'distinctive-attacker-initd-script|"severity":"(alert|warn|ok)"'
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_BOOTSCRIPT_PROFILE="${PROFILE:-report}" \
+    SELFDEF_BOOTSCRIPT_BASELINE="${BASELINE}" \
+    SELFDEF_BOOTSCRIPT_RCLOCAL="${RCFILE}" \
+    SELFDEF_BOOTSCRIPT_INITD="${INITD3}" \
+    SELFDEF_BOOTSCRIPT_RCDIRS="${TMP}/no-rcdir" \
+    bash "${WD}"
+    # The newly-planted init.d script NAME must surface for triage
+    # routing (the actual invariant — not the unrelated rc.local "ok").
+    cap | grep -q 'distinctive-attacker-initd-script'
 }
 
 @test "INVARIANT (exec-path under writable-root: rc.local invoking binary from /tmp → alert)" {
