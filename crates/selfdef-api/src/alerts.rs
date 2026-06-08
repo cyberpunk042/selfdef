@@ -1,5 +1,5 @@
-//! `GET /v1/alerts` — typed JSON view of the 9 four-watchdog alert
-//! classifications shipped in `modules/observability/assets/alerts/
+//! `GET /v1/alerts` — typed JSON view of the 15 alert classifications
+//! shipped in `modules/observability/assets/alerts/
 //! selfdef.yml.template`.
 //!
 //! Reads the daemon's own watchdog metrics (via
@@ -10,7 +10,7 @@
 //! the client side.
 //!
 //! Source: MS027 alert rules + dashboard `app.js::refreshAlerts` +
-//! `selfdef-cli/src/alerts.rs` (same 9 series, same predicates,
+//! `selfdef-cli/src/alerts.rs` (same 15 series, same predicates,
 //! moved server-side).
 
 use axum::Json;
@@ -43,6 +43,12 @@ enum Threshold {
     CriticalEqualsZero,
     WarnEqualsZero,
     CriticalEqualsMinusOne,
+    /// Warning when value > the carried threshold. Used for
+    /// ratio-based gauges (e.g., storage 70% used).
+    WarnGreaterThan(f64),
+    /// Critical when value > the carried threshold. Same shape as
+    /// `WarnGreaterThan` but escalated severity (e.g., storage 90%).
+    CriticalGreaterThan(f64),
 }
 
 impl Threshold {
@@ -78,6 +84,20 @@ impl Threshold {
             }
             Threshold::CriticalEqualsMinusOne => {
                 if v == -1.0 {
+                    "critical"
+                } else {
+                    "ok"
+                }
+            }
+            Threshold::WarnGreaterThan(t) => {
+                if v > *t {
+                    "warn"
+                } else {
+                    "ok"
+                }
+            }
+            Threshold::CriticalGreaterThan(t) => {
+                if v > *t {
                     "critical"
                 } else {
                     "ok"
@@ -150,6 +170,49 @@ const ALERTS: &[(&str, &str, &str, &str, Threshold)] = &[
         "selfdef_scheduler_audit_chain_events",
         "== -1",
         Threshold::CriticalEqualsMinusOne,
+    ),
+    // ---- 6 newly-covered alerts (matches YAML rules selfdef.yml.template) ----
+    (
+        "StorageMountYellow",
+        "MS011",
+        "selfdef_storage_mount_used_ratio",
+        "> 0.7 sustained 5m",
+        Threshold::WarnGreaterThan(0.7),
+    ),
+    (
+        "StorageMountRed",
+        "MS011",
+        "selfdef_storage_mount_used_ratio",
+        "> 0.9 sustained 1m",
+        Threshold::CriticalGreaterThan(0.9),
+    ),
+    (
+        "M060PublishFailing",
+        "M060",
+        "selfdef_m060_mirror_publish_failed_recent",
+        "> 0 / 5m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "M060PublishStale",
+        "M060",
+        "selfdef_m060_mirror_publish_stale_count",
+        "> 0 (last publish > 10m ago)",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "M060PublishWedged",
+        "M060",
+        "selfdef_m060_mirror_publish_wedged_count",
+        "> 0 (>= 5 failures in 30m)",
+        Threshold::CriticalGreaterThanZero,
+    ),
+    (
+        "WatchdogAlertFinding",
+        "MS019",
+        "selfdef_watchdog_alert_finding_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
     ),
 ];
 
@@ -249,10 +312,10 @@ mod tests {
     }
 
     #[test]
-    fn classify_returns_nine_rows_in_canonical_order() {
+    fn classify_returns_fifteen_rows_in_canonical_order() {
         let series = HashMap::new();
         let rows = classify(&series);
-        assert_eq!(rows.len(), 9);
+        assert_eq!(rows.len(), 15);
         let names: Vec<&str> = rows.iter().map(|r| r.name).collect();
         assert_eq!(
             names,
@@ -266,6 +329,12 @@ mod tests {
                 "GuardianChainBroken",
                 "SchedulerSustainedBackpressure",
                 "SchedulerChainBroken",
+                "StorageMountYellow",
+                "StorageMountRed",
+                "M060PublishFailing",
+                "M060PublishStale",
+                "M060PublishWedged",
+                "WatchdogAlertFinding",
             ]
         );
     }
@@ -289,6 +358,59 @@ mod tests {
         series.insert("selfdef_perimeter_sigkills_total".to_string(), 42.0); // warn
         series.insert("selfdef_scheduler_audit_chain_events".to_string(), -1.0); // critical
         let rows = classify(&series);
+        assert_eq!(worst_state(&rows), "critical");
+    }
+
+    #[test]
+    fn classify_warn_on_storage_yellow_threshold() {
+        // 75% storage used → yellow threshold (> 0.7) but not red (> 0.9).
+        let mut series = HashMap::new();
+        series.insert("selfdef_storage_mount_used_ratio".to_string(), 0.75);
+        let rows = classify(&series);
+        let yellow = rows
+            .iter()
+            .find(|r| r.name == "StorageMountYellow")
+            .expect("StorageMountYellow row");
+        assert_eq!(yellow.state, "warn");
+        let red = rows
+            .iter()
+            .find(|r| r.name == "StorageMountRed")
+            .expect("StorageMountRed row");
+        assert_eq!(red.state, "ok");
+    }
+
+    #[test]
+    fn classify_critical_on_storage_red_threshold() {
+        // 95% storage used → both yellow (warn) AND red (critical).
+        let mut series = HashMap::new();
+        series.insert("selfdef_storage_mount_used_ratio".to_string(), 0.95);
+        let rows = classify(&series);
+        let red = rows
+            .iter()
+            .find(|r| r.name == "StorageMountRed")
+            .expect("StorageMountRed row");
+        assert_eq!(red.state, "critical");
+        let yellow = rows
+            .iter()
+            .find(|r| r.name == "StorageMountYellow")
+            .expect("StorageMountYellow row");
+        assert_eq!(yellow.state, "warn");
+        assert_eq!(worst_state(&rows), "critical");
+    }
+
+    #[test]
+    fn classify_critical_on_m060_publish_wedged() {
+        let mut series = HashMap::new();
+        series.insert(
+            "selfdef_m060_mirror_publish_wedged_count".to_string(),
+            7.0,
+        );
+        let rows = classify(&series);
+        let row = rows
+            .iter()
+            .find(|r| r.name == "M060PublishWedged")
+            .expect("M060PublishWedged row");
+        assert_eq!(row.state, "critical");
         assert_eq!(worst_state(&rows), "critical");
     }
 }
