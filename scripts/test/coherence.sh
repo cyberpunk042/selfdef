@@ -176,8 +176,13 @@ run_layer "L2: python suites (guardian / adversary / replay / ux-harness)" \
 # drift accumulated unseen). Run it via pytest; self-skip (not fail) when
 # pytest isn't installed so the harness still works on a bats-only box.
 if python3 -c 'import pytest' 2>/dev/null; then
-    run_layer "L2: observability pytest suite (alerts/dashboard/SHIPPED contracts)" \
-        python3 -m pytest tests/observability/ -q
+    # Every pytest-style test dir/file NOT covered by the unittest layer
+    # above. Keep this in sync with tests/observability/
+    # test_no_orphaned_pytest_tests.py, which fails if a new pytest-style
+    # test file lands outside this set (so an orphan can't recur).
+    run_layer "L2: observability + corpus pytest suites (alerts/dashboard/SHIPPED + rule-corpus)" \
+        python3 -m pytest tests/observability/ \
+            tests/replay/test_rule_corpus_coverage.py -q
 else
     LAYER_NAMES+=("L2: observability pytest")
     LAYER_STATUS+=("SKIP")
