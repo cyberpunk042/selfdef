@@ -706,3 +706,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service uses ProtectKernelLogs=true 99)" {
     grep -qE '^ProtectKernelLogs=true' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service uses ProtectKernelTunables=true 100)" {
+    grep -qE '^ProtectKernelTunables=true' "${UNIT}"
+}

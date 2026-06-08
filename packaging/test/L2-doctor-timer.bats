@@ -693,3 +693,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer file After= ordering line possible — derivation-syntactically-allowed 99)" {
     [ -f "${TIMER}" ]
 }
+@test "INVARIANT (.service unit file has Description line 100)" {
+    grep -qE '^Description=' "${SERVICE}"
+}

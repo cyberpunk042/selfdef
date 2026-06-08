@@ -811,3 +811,6 @@ EOF
 @test "INVARIANT (script writes to ring buffer dir — file-write-path 99)" {
     grep -qE 'RING_DIR' "${SCRIPT}"
 }
+@test "INVARIANT (script uses date command for timestamp 100)" {
+    grep -qE '\$\(date' "${SCRIPT}"
+}

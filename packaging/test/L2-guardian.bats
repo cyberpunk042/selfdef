@@ -527,3 +527,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service uses ProtectKernelLogs=true 99)" {
     grep -qE '^ProtectKernelLogs=true' "${UNIT}"
 }
+@test "INVARIANT (guardian.service uses ProtectKernelTunables=true 100)" {
+    grep -qE '^ProtectKernelTunables=true' "${UNIT}"
+}

@@ -769,3 +769,6 @@ setup() {
 @test "INVARIANT (lib defines die helper bash function 99)" {
     declare -F die >/dev/null
 }
+@test "INVARIANT (lib SELFDEF_MODULE_LIB_VERSION exported 100)" {
+    [ -n "${SELFDEF_MODULE_LIB_VERSION}" ]
+}

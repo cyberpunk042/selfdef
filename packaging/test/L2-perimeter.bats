@@ -872,3 +872,10 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert isinstance(data['kind'], str) and data['kind']
 "
 }
+@test "INVARIANT (YAML has at least one kprobe entry 100)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert len(data['spec']['kprobes']) >= 1
+"
+}
