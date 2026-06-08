@@ -54,6 +54,11 @@ pub struct Metrics {
     /// the log line.
     retention_sweeps_total: AtomicU64,
     retention_pruned_total: AtomicU64,
+    /// 1 when retention is enabled (`hot_retention_days > 0`), 0 when the
+    /// operator opted out. Lets a consumer alert distinguish "retention
+    /// disabled" (enabled=0 → sweeps stay 0 by design) from "retention
+    /// stalled" (enabled=1 but sweeps not advancing). Set once at startup.
+    retention_enabled: AtomicU64,
 
     /// M060 mirror-export per-artifact publish counters. Keys are the
     /// canonical artifact filename (e.g. `"grants.json"`); values are
@@ -85,6 +90,7 @@ impl Metrics {
             ingest_lag_events: AtomicU64::new(0),
             retention_sweeps_total: AtomicU64::new(0),
             retention_pruned_total: AtomicU64::new(0),
+            retention_enabled: AtomicU64::new(0),
             m060_publish_counts: Mutex::new(HashMap::new()),
             m060_last_publish_unix: Mutex::new(HashMap::new()),
         }
@@ -165,6 +171,13 @@ impl Metrics {
         self.retention_sweeps_total.fetch_add(1, Ordering::Relaxed);
         self.retention_pruned_total
             .fetch_add(pruned, Ordering::Relaxed);
+    }
+
+    /// Set whether retention is enabled (`hot_retention_days > 0`). Called
+    /// once at daemon startup; lets consumers tell "disabled" from "stalled".
+    pub fn set_retention_enabled(&self, enabled: bool) {
+        self.retention_enabled
+            .store(u64::from(enabled), Ordering::Relaxed);
     }
 
     /// Render the current counters as a Prometheus exposition-format
@@ -311,6 +324,16 @@ impl Metrics {
             out,
             "selfdef_store_retention_pruned_total {}",
             self.retention_pruned_total.load(Ordering::Relaxed),
+        )
+        .unwrap();
+        out.push_str(
+            "# HELP selfdef_store_retention_enabled 1 when hot_retention_days>0 (retention on), else 0 (SDD-081).\n",
+        );
+        out.push_str("# TYPE selfdef_store_retention_enabled gauge\n");
+        writeln!(
+            out,
+            "selfdef_store_retention_enabled {}",
+            self.retention_enabled.load(Ordering::Relaxed),
         )
         .unwrap();
 

@@ -398,6 +398,11 @@ async fn main() -> Result<()> {
     } else {
         None
     };
+    if let Some(m) = &metrics_handle {
+        // SDD-081: surface retention on/off so a consumer alert can tell
+        // "operator opted out" from "retention stalled".
+        m.set_retention_enabled(cfg.store.hot_retention_days > 0);
+    }
 
     // SD-R retention sweep (SDD-081): enforce StoreConfig::hot_retention_days.
     // Without it the knob is dead config and the hot store grows unbounded
