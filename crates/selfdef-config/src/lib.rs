@@ -361,6 +361,18 @@ impl Config {
             }
         }
 
+        // The NATS multi-host bridge only starts when it's enabled AND has a
+        // non-empty url (the daemon's `enabled && !url.trim().is_empty()`
+        // guard); enabling it without a url silently yields no bridge — the
+        // operator thinks they have multi-host fan-out and don't. Catch it.
+        if self.bus.nats.enabled && self.bus.nats.url.trim().is_empty() {
+            return Err(ConfigError::Invalid(
+                "[bus.nats] enabled = true but url is empty — the NATS bridge \
+                 needs a url (e.g. \"nats://host:4222\") or it silently never connects"
+                    .into(),
+            ));
+        }
+
         // journald mode selects between two entirely different collectors:
         // the daemon treats "file" as file-tail mode and ANY other value as
         // journalctl-subprocess mode (`mode == "file"` else Journalctl). So a
@@ -1605,6 +1617,22 @@ mod tests {
     fn defaults_validate_and_load() {
         // The default config (require_signed_rules=false) must pass validate.
         Config::default().validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_nats_enabled_without_url() {
+        let mut cfg = Config::default();
+        cfg.bus.nats.enabled = true;
+        cfg.bus.nats.url = "   ".to_owned(); // whitespace-only counts as empty
+        let err = cfg.validate().unwrap_err();
+        assert!(matches!(err, ConfigError::Invalid(_)), "got {err:?}");
+        assert!(err.to_string().contains("[bus.nats]"));
+        // A real url makes it valid; disabled-with-empty-url stays valid.
+        cfg.bus.nats.url = "nats://localhost:4222".to_owned();
+        cfg.validate().unwrap();
+        cfg.bus.nats.enabled = false;
+        cfg.bus.nats.url = String::new();
+        cfg.validate().unwrap();
     }
 
     #[test]

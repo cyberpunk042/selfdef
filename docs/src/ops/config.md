@@ -98,6 +98,7 @@ reason. Current rules:
 | `[perimeter]` | `third_party_policy_stance` not in `{warn, ignore, block}` | a typo (e.g. `blok`) would otherwise be mishandled at policy-apply time |
 | `[collectors.*]` | `read_from` not in `{start, end}` (empty = unset, allowed) | an unrecognized value silently defaults to `end`, dropping the historical replay you asked for |
 | `[collectors.journald]` | `mode` not in `{journalctl, file}` (empty = unset, allowed) | any non-`file` value silently falls back to journalctl mode, ignoring `input_path` |
+| `[bus.nats]` | `enabled = true` but `url` is empty/whitespace | the bridge only starts with a non-empty url — enabling it without one yields no multi-host fan-out, silently |
 
 These checks are additive and conservative — they only reject
 combinations that are unambiguously wrong, so a valid config (including
