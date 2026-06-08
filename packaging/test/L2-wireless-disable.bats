@@ -1350,3 +1350,14 @@ d = (data.get('profiles') or {}).get('default', '')
 assert isinstance(d, str) and d, f'profiles.default must be non-empty string, got {d!r}'
 "
 }
+
+@test "INVARIANT (wireless-disable module.toml [profiles] available field is a TOML list — TOML-profiles-available-list-canonical 124)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/wireless-disable/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+a = (data.get('profiles') or {}).get('available')
+assert isinstance(a, list), f'profiles.available must be list, got {type(a).__name__}'
+"
+}
