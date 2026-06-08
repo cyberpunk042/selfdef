@@ -1250,3 +1250,16 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/module.toml"
     grep -qE '^name[[:space:]]*=[[:space:]]*"apt-hooks-watchdog"' "${mtoml}"
 }
+
+@test "INVARIANT (apt-hooks-watchdog module.toml top-level keys before any [section] — TOML-top-level-keys-first 102)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/module.toml"
+    python3 -c "
+with open('${mtoml}') as fp:
+    for ln in fp:
+        s = ln.strip()
+        if not s or s.startswith('#'): continue
+        if s.startswith('['): break
+        assert '=' in ln
+        break
+"
+}

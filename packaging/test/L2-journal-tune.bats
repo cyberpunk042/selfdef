@@ -1150,3 +1150,17 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/journal-tune/module.toml"
     grep -qE '^name[[:space:]]*=[[:space:]]*"journal-tune"' "${mtoml}"
 }
+
+@test "INVARIANT (journal-tune module.toml top-level keys before any [section] header — TOML-top-level-keys-first 102)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/journal-tune/module.toml"
+    python3 -c "
+import re
+with open('${mtoml}') as fp:
+    for ln in fp:
+        s = ln.strip()
+        if not s or s.startswith('#'): continue
+        if s.startswith('['): break
+        assert '=' in ln, f'expected key=val before sections, got {ln!r}'
+        break
+"
+}

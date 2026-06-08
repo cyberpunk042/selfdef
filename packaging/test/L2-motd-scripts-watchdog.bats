@@ -1162,3 +1162,16 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/motd-scripts-watchdog/module.toml"
     grep -qE '^name[[:space:]]*=[[:space:]]*"motd-scripts-watchdog"' "${mtoml}"
 }
+
+@test "INVARIANT (motd-scripts-watchdog module.toml top-level keys before any [section] — TOML-top-level-keys-first 102)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/motd-scripts-watchdog/module.toml"
+    python3 -c "
+with open('${mtoml}') as fp:
+    for ln in fp:
+        s = ln.strip()
+        if not s or s.startswith('#'): continue
+        if s.startswith('['): break
+        assert '=' in ln
+        break
+"
+}
