@@ -99,6 +99,8 @@ reason. Current rules:
 | `[collectors.*]` | `read_from` not in `{start, end}` (empty = unset, allowed) | an unrecognized value silently defaults to `end`, dropping the historical replay you asked for |
 | `[collectors.journald]` | `mode` not in `{journalctl, file}` (empty = unset, allowed) | any non-`file` value silently falls back to journalctl mode, ignoring `input_path` |
 | `[bus.nats]` | `enabled = true` but `url` is empty/whitespace | the bridge only starts with a non-empty url — enabling it without one yields no multi-host fan-out, silently |
+| `[api]` | `enabled = true` but neither `unix_socket` nor `tcp_addr` is set | the api task would log "api server failed" and exit while the daemon runs on — no api, no startup failure |
+| `[api]` | `tcp_addr` is set but `token_file` is empty | the TCP transport refuses to serve unauthenticated; without a token it never comes up |
 
 These checks are additive and conservative — they only reject
 combinations that are unambiguously wrong, so a valid config (including

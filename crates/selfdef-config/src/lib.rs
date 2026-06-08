@@ -361,6 +361,32 @@ impl Config {
             }
         }
 
+        // API transport pre-flight. The api server enforces these at
+        // task-start, but the task only logs "api server failed" and exits
+        // while the daemon keeps running — so a misconfigured api silently
+        // doesn't serve. Mirror the transport layer's NoTransport +
+        // MissingToken checks here so `Config::load` (and `selfdefd
+        // --validate`) fail fast instead. Defaults pass: api is disabled by
+        // default, and an enabled default has a unix socket + token_file.
+        if self.api.enabled {
+            let has_unix = !self.api.unix_socket.trim().is_empty();
+            let has_tcp = !self.api.tcp_addr.trim().is_empty();
+            if !has_unix && !has_tcp {
+                return Err(ConfigError::Invalid(
+                    "[api] enabled = true but neither unix_socket nor tcp_addr is set — \
+                     set one transport or disable the api"
+                        .into(),
+                ));
+            }
+            if has_tcp && self.api.token_file.trim().is_empty() {
+                return Err(ConfigError::Invalid(
+                    "[api] tcp_addr is set but token_file is empty — the TCP transport \
+                     requires a bearer token_file (it refuses to serve unauthenticated)"
+                        .into(),
+                ));
+            }
+        }
+
         // The NATS multi-host bridge only starts when it's enabled AND has a
         // non-empty url (the daemon's `enabled && !url.trim().is_empty()`
         // guard); enabling it without a url silently yields no bridge — the
@@ -1617,6 +1643,40 @@ mod tests {
     fn defaults_validate_and_load() {
         // The default config (require_signed_rules=false) must pass validate.
         Config::default().validate().unwrap();
+    }
+
+    #[test]
+    fn validate_api_transport_preflight() {
+        // Default (api disabled) validates.
+        Config::default().validate().unwrap();
+
+        // Enabled with neither transport → rejected.
+        let mut cfg = Config::default();
+        cfg.api.enabled = true;
+        cfg.api.unix_socket = String::new();
+        cfg.api.tcp_addr = String::new();
+        let err = cfg.validate().unwrap_err();
+        assert!(
+            err.to_string().contains("neither unix_socket nor tcp_addr"),
+            "{err:?}"
+        );
+
+        // Enabled with a TCP bind but no token → rejected.
+        let mut cfg = Config::default();
+        cfg.api.enabled = true;
+        cfg.api.unix_socket = String::new();
+        cfg.api.tcp_addr = "127.0.0.1:8443".to_owned();
+        cfg.api.token_file = String::new();
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("token_file"), "{err:?}");
+
+        // Enabled with TCP + token → valid. Enabled with just the default
+        // unix socket → valid.
+        cfg.api.token_file = "/etc/selfdef/api.token".to_owned();
+        cfg.validate().unwrap();
+        let mut cfg = Config::default();
+        cfg.api.enabled = true; // default unix_socket + token_file present
+        cfg.validate().unwrap();
     }
 
     #[test]
