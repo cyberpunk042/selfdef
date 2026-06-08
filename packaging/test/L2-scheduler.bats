@@ -795,3 +795,8 @@ import re
 assert not re.search(b'\r(?!\n)', data), 'bare CR present'
 "
 }
+
+@test "INVARIANT (scheduler.service file contains at least 1 printable non-whitespace character — POSIX-text-printable-floor-canonical 117)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    LC_ALL=C grep -qP "[!-~]" "${F}"
+}
