@@ -667,3 +667,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst pre-creates /var/cache/selfdef/scheduler/ring dir — ring-buffer staging 86)" {
     grep -qE '/var/cache/selfdef/scheduler/ring' "${POSTINST}"
 }
+@test "INVARIANT (postinst creates dirs with -p flag — idempotent-dir-create 87)" {
+    grep -qE 'mkdir -p' "${POSTINST}"
+}

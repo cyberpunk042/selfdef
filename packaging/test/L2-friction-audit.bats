@@ -772,3 +772,6 @@ EOF
 @test "INVARIANT (script uses /var/cache/selfdef in canonical path — state-dir-convention 86)" {
     grep -qE '/var/cache/selfdef' "${SCRIPT}"
 }
+@test "INVARIANT (script declares jsonl emission newline-delimited — JSONL-format 87)" {
+    grep -qE "printf.*\\\\\\\\n|>>" "${SCRIPT}"
+}

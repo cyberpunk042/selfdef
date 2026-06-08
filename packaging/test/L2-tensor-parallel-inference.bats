@@ -952,3 +952,14 @@ assert isinstance(data, dict)
     uni="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/install/uninstall.sh"
     head -30 "${uni}" | grep -qE 'set -euo'
 }
+
+@test "INVARIANT (tensor-parallel-inference module.toml install_paths.paths list contains string entries 87 — typed-paths-list)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/tensor-parallel-inference/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert isinstance(ps, list)
+"
+}

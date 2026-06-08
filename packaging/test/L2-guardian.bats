@@ -488,3 +488,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postinst pre-creates /var/log/selfdef dir — log-dir staging 86)" {
     grep -qE '/var/log/selfdef' "${POSTINST}"
 }
+@test "INVARIANT (postinst creates dirs with -p flag — idempotent-dir-create 87)" {
+    grep -qE 'mkdir -p' "${POSTINST}"
+}

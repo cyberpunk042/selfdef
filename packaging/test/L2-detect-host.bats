@@ -819,3 +819,6 @@ assert isinstance(data, dict)
 @test "INVARIANT (detect-host module.toml declares requires field — runtime-dependency 86)" {
     grep -qE '^requires' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
 }
+@test "INVARIANT (detect-host module.toml has install_paths block 87)" {
+    grep -qE '^\[install_paths\]' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+}

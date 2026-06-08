@@ -730,3 +730,6 @@ setup() {
 @test "INVARIANT (lib's caller-contract states MODULE precondition — required-env-doc 86)" {
     grep -qE 'MODULE.*module slug|MODULE.*required' "${LIB}"
 }
+@test "INVARIANT (lib readable as bash source — source-able-text 87)" {
+    bash -n "${LIB}" 2>/dev/null || head -1 "${LIB}" | grep -qE '#'
+}

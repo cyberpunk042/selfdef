@@ -914,3 +914,6 @@ assert isinstance(data, dict)
     uni="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh"
     head -30 "${uni}" | grep -qE 'set -euo'
 }
+@test "INVARIANT (slm-cpu-loop module.toml has install_paths block 87)" {
+    grep -qE '^\[install_paths\]' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+}

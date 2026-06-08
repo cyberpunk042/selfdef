@@ -779,3 +779,10 @@ n = data['metadata']['name']
 assert isinstance(n, str) and n
 "
 }
+@test "INVARIANT (YAML kind field is exact string TracingPolicy 87)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+assert data['kind'] == 'TracingPolicy'
+"
+}
