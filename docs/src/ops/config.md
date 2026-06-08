@@ -72,4 +72,25 @@ selfdefd --validate    # planned — see SDD-002 follow-up
 
 For now, the most reliable check is `systemctl restart selfdefd`
 followed by `journalctl -u selfdefd --since='10 seconds ago'`.
-A bad config logs a parse error at startup.
+A bad config fails at startup — either a TOML parse error or one of
+the semantic checks below.
+
+### Startup validation (fail-fast)
+
+Beyond parse errors, `Config::load` runs a set of semantic checks and
+refuses to start on a misconfiguration that would otherwise be applied
+silently or wrongly. Each rejection names the offending section and the
+reason. Current rules:
+
+| Section | Rejected when | Why it's caught |
+|---|---|---|
+| `[security]` | `require_signed_rules = true` but `signing_public_key_file` unset | the correlator cannot verify rule signatures without a public key — every rule load would fail |
+| `[perimeter]` | `third_party_policy_stance` not in `{warn, ignore, block}` | a typo (e.g. `blok`) would otherwise be mishandled at policy-apply time |
+| `[collectors.*]` | `read_from` not in `{start, end}` (empty = unset, allowed) | an unrecognized value silently defaults to `end`, dropping the historical replay you asked for |
+| `[collectors.journald]` | `mode` not in `{journalctl, file}` (empty = unset, allowed) | any non-`file` value silently falls back to journalctl mode, ignoring `input_path` |
+
+These checks are additive and conservative — they only reject
+combinations that are unambiguously wrong, so a valid config (including
+every default) keeps loading. The list grows as new closed-vocabulary
+or interdependent fields are added; the authority is
+`Config::validate` in `crates/selfdef-config/src/lib.rs`.
