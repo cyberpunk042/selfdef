@@ -1439,3 +1439,14 @@ r = data.get('depends_on')
 assert isinstance(r, list), f'depends_on must be list, got {type(r).__name__}'
 "
 }
+
+@test "INVARIANT (pam-config-watchdog module.toml top-level consumes field is a TOML list — TOML-consumes-list-canonical 119)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-config-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('consumes')
+assert isinstance(r, list), f'consumes must be list, got {type(r).__name__}'
+"
+}
