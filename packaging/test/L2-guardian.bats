@@ -533,3 +533,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (guardian.service uses ProtectControlGroups=true 101)" {
     grep -qE '^ProtectControlGroups=true' "${UNIT}"
 }
+@test "INVARIANT (guardian.service file path coherent with selfdef-guardian naming 102)" {
+    case "${UNIT}" in *selfdef-guardian.service) ;; *) false ;; esac
+}

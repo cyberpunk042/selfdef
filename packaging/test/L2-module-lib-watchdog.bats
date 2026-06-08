@@ -775,3 +775,6 @@ setup() {
 @test "INVARIANT (lib bash function table includes all 5 SDD-006 helpers 101)" {
     declare -F log emit_status die run toml_get >/dev/null
 }
+@test "INVARIANT (lib file path coherent with module-lib naming 102)" {
+    case "${LIB}" in *module-lib.sh) ;; *) false ;; esac
+}

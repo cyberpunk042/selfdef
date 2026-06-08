@@ -885,3 +885,15 @@ assert any(p.startswith('/etc/selfdef/') or p.startswith('/etc/') for p in ps)
 @test "INVARIANT (detect-host module.toml name field equals \"detect-host\" 101)" {
     grep -qE '^name[[:space:]]*=[[:space:]]*"detect-host"' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
 }
+@test "INVARIANT (detect-host module.toml top-level keys before sections 102)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    python3 -c "
+with open('${mtoml}') as fp:
+    for ln in fp:
+        s = ln.strip()
+        if not s or s.startswith('#'): continue
+        if s.startswith('['): break
+        assert '=' in ln
+        break
+"
+}

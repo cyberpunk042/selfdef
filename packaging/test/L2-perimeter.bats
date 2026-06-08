@@ -886,3 +886,6 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert data['kind'] == 'TracingPolicy'
 "
 }
+@test "INVARIANT (YAML file path coherent with sovereign-perimeter naming 102)" {
+    case "${YAML}" in *sovereign-perimeter.yaml) ;; *) false ;; esac
+}

@@ -817,3 +817,6 @@ EOF
 @test "INVARIANT (script runs as bash entry point — interpreter-canonical 101)" {
     head -1 "${SCRIPT}" | grep -qE 'bash'
 }
+@test "INVARIANT (script file path coherent with friction-audit naming — file-name-canonical 102)" {
+    case "${SCRIPT}" in *friction-audit.sh) ;; *) false ;; esac
+}

@@ -712,3 +712,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service uses ProtectControlGroups=true 101)" {
     grep -qE '^ProtectControlGroups=true' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service file path coherent with selfdef-scheduler naming 102)" {
+    case "${UNIT}" in *selfdef-scheduler.service) ;; *) false ;; esac
+}

@@ -1020,3 +1020,16 @@ assert any(p.startswith('/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
     grep -qE '^name[[:space:]]*=[[:space:]]*"bitnet-gpu-inference"' "${mtoml}"
 }
+
+@test "INVARIANT (bitnet-gpu-inference module.toml top-level keys before any [section] header — TOML-top-level-keys-first 102)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/bitnet-gpu-inference/module.toml"
+    python3 -c "
+with open('${mtoml}') as fp:
+    for ln in fp:
+        s = ln.strip()
+        if not s or s.startswith('#'): continue
+        if s.startswith('['): break
+        assert '=' in ln
+        break
+"
+}

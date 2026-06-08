@@ -699,3 +699,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service Documentation references man:selfdefctl 101)" {
     grep -qE 'Documentation=.*selfdefctl' "${SERVICE}"
 }
+@test "INVARIANT (.timer file path coherent with naming convention — file-name-canonical 102)" {
+    case "${TIMER}" in *selfdef-doctor.timer) ;; *) false ;; esac
+}

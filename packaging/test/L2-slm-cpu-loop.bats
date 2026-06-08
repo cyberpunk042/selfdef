@@ -1004,3 +1004,15 @@ assert any(p.startswith('/etc/') for p in ps)
 @test "INVARIANT (slm-cpu-loop module.toml name field equals \"slm-cpu-loop\" 101)" {
     grep -qE '^name[[:space:]]*=[[:space:]]*"slm-cpu-loop"' "${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
 }
+@test "INVARIANT (slm-cpu-loop module.toml top-level keys before sections 102)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/module.toml"
+    python3 -c "
+with open('${mtoml}') as fp:
+    for ln in fp:
+        s = ln.strip()
+        if not s or s.startswith('#'): continue
+        if s.startswith('['): break
+        assert '=' in ln
+        break
+"
+}
