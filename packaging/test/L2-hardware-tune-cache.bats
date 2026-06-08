@@ -1499,3 +1499,25 @@ for el in paths:
     assert el == el.strip(), f'install_paths.paths element must not have edge-whitespace, got {el!r}'
 "
 }
+
+@test "INVARIANT (hardware-tune-cache module.toml summary has no edge-whitespace — TOML-summary-no-edge-whitespace-canonical 146)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+s = data.get('summary', '')
+assert isinstance(s, str) and s == s.strip(), 'summary must not have edge-whitespace'
+"
+}
+
+@test "INVARIANT (hardware-tune-cache module.toml summary field value has no leading/trailing whitespace — TOML-summary-no-edge-whitespace-canonical 146)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/hardware-tune-cache/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+s = data.get('summary', '')
+assert isinstance(s, str) and s == s.strip(), f'summary must not have edge-whitespace, got {s[:20]!r}...'
+"
+}

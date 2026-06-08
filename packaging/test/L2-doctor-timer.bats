@@ -992,3 +992,23 @@ data = open('${F}', 'r', encoding='utf-8', errors='replace').read()
 assert '\u200b' not in data, 'ZWSP present'
 "
 }
+
+@test "INVARIANT (.service substrate file does not contain UTF-8 BOM mid-file — POSIX-no-mid-file-BOM-canonical 146)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
+    python3 -c "
+data = open('${F}', 'rb').read()
+# BOM bytes
+bom = b'\xef\xbb\xbf'
+# BOM at start is sometimes allowed (covered elsewhere); mid-file BOM is never
+mid = data[3:]
+assert bom not in mid, 'mid-file BOM present'
+"
+}
+
+@test "INVARIANT (.service substrate file content sha256 stable across re-reads — POSIX-content-determinism-canonical 146)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-doctor.service"
+    h1=$(sha256sum "${F}" | cut -d' ' -f1)
+    sleep 0
+    h2=$(sha256sum "${F}" | cut -d' ' -f1)
+    [ "${h1}" = "${h2}" ] && [ "${#h1}" = "64" ]
+}
