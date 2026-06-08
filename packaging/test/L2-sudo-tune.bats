@@ -1151,3 +1151,8 @@ assert any('/var/lib/' in p or '/var/log/' in p or '/var/cache/' in p for p in p
     mtoml="${BATS_TEST_DIRNAME}/../../modules/sudo-tune/module.toml"
     grep -qE '^category[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (sudo-tune module.toml summary field uses double-quoted string syntax — TOML-string-quote 100)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/sudo-tune/module.toml"
+    grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

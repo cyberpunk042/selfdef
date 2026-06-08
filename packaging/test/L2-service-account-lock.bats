@@ -1264,3 +1264,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/service-account-lock/module.toml"
     grep -qE '^category[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (service-account-lock module.toml summary field uses double-quoted string syntax — TOML-string-quote 100)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/service-account-lock/module.toml"
+    grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

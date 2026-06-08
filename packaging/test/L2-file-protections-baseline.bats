@@ -1134,3 +1134,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/file-protections-baseline/module.toml"
     grep -qE '^category[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (file-protections-baseline module.toml summary field uses double-quoted string syntax — TOML-string-quote 100)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/file-protections-baseline/module.toml"
+    grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

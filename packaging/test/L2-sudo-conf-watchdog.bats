@@ -1167,3 +1167,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/sudo-conf-watchdog/module.toml"
     grep -qE '^category[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (sudo-conf-watchdog module.toml summary field double-quoted — TOML-string-quote 100)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/sudo-conf-watchdog/module.toml"
+    grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}

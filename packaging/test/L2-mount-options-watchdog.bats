@@ -1250,3 +1250,8 @@ assert len(ps) >= 1
     mtoml="${BATS_TEST_DIRNAME}/../../modules/mount-options-watchdog/module.toml"
     grep -qE '^category[[:space:]]*=[[:space:]]*"' "${mtoml}"
 }
+
+@test "INVARIANT (mount-options-watchdog module.toml summary field double-quoted — TOML-string-quote 100)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/mount-options-watchdog/module.toml"
+    grep -qE '^summary[[:space:]]*=[[:space:]]*"' "${mtoml}"
+}
