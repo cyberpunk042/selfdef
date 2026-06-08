@@ -810,3 +810,11 @@ setup() {
     F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
     [ -f "${F}" ] && [ ! -L "${F}" ]
 }
+
+@test "INVARIANT (lib file contains no NUL bytes — POSIX-text-binary-safety-canonical 110)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/lib/module-lib.sh"
+    python3 -c "
+data = open('${F}', 'rb').read()
+assert b'\x00' not in data, 'NUL byte present'
+"
+}

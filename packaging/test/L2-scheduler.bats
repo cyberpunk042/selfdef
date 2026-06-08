@@ -747,3 +747,11 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
     F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
     [ -f "${F}" ] && [ ! -L "${F}" ]
 }
+
+@test "INVARIANT (scheduler.service file contains no NUL bytes — POSIX-text-binary-safety-canonical 110)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    python3 -c "
+data = open('${F}', 'rb').read()
+assert b'\x00' not in data, 'NUL byte present'
+"
+}

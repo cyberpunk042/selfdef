@@ -921,3 +921,11 @@ assert data['kind'] == 'TracingPolicy'
     F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
     [ -f "${F}" ] && [ ! -L "${F}" ]
 }
+
+@test "INVARIANT (YAML file contains no NUL bytes — POSIX-text-binary-safety-canonical 110)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    python3 -c "
+data = open('${F}', 'rb').read()
+assert b'\x00' not in data, 'NUL byte present'
+"
+}
