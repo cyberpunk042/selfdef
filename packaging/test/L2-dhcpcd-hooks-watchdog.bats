@@ -1331,3 +1331,14 @@ r = data.get('provides')
 assert isinstance(r, list), f'provides must be list, got {type(r).__name__}'
 "
 }
+
+@test "INVARIANT (dhcpcd-hooks-watchdog module.toml top-level conflicts field is a TOML list — TOML-conflicts-list-canonical 117)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/dhcpcd-hooks-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('conflicts')
+assert isinstance(r, list), f'conflicts must be list, got {type(r).__name__}'
+"
+}
