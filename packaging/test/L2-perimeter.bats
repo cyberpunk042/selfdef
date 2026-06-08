@@ -1037,3 +1037,8 @@ assert mx <= 4, f'consecutive blank-line block of {mx} exceeds 4'
     F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
     grep -qE '[^[:space:]]' "${F}"
 }
+
+@test "INVARIANT (YAML file basename matches expected canonical filename pattern — POSIX-file-name-pattern-canonical 126)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/tetragon-policies/sovereign-perimeter.yaml"
+    basename "${F}" | grep -qE '^[a-zA-Z0-9._-]+$'
+}

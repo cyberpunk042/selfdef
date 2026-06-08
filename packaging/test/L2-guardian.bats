@@ -684,3 +684,8 @@ assert mx <= 4, f'consecutive blank-line block of {mx} exceeds 4'
     F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
     grep -qE '[^[:space:]]' "${F}"
 }
+
+@test "INVARIANT (guardian.service file basename matches expected canonical filename pattern — POSIX-file-name-pattern-canonical 126)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
+    basename "${F}" | grep -qE '^[a-zA-Z0-9._-]+$'
+}
