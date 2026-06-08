@@ -146,6 +146,9 @@ run_layer "L1: module operator-config-key discoverability (toml_get keys documen
 run_layer "L1: cross-repo mirror artifact filename binding (cockpit consumers)" \
     bash scripts/test/L1-mirror-artifact-filename-binding.sh
 
+run_layer "L1: info-hub runbook ⇄ selfdefctl verb binding (operator remediation)" \
+    bash scripts/test/L1-runbook-cli-verb-binding.sh
+
 run_layer "L1: CLI test-helper dedup (module_*.rs consume common/mod.rs; F-2026-060)" \
     bash scripts/test/L1-test-helper-dedup-coherence.sh
 
