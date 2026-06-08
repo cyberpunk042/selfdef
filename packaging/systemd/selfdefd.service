@@ -8,6 +8,12 @@ RequiresMountsFor=/var/lib/selfdef /var/log/selfdef
 [Service]
 Type=notify
 NotifyAccess=main
+# Pre-flight the config before the real start. A parse error or a semantic
+# fail-fast rejection (see `selfdefd --validate`) fails the unit cleanly at
+# the pre-start stage — the INVALID reason lands in the journal — instead of
+# ExecStart crash-looping under Restart=on-failure. Runs in the same
+# sandbox; only reads /etc/selfdef (ReadOnlyPaths), starts nothing.
+ExecStartPre=/usr/bin/selfdefd --config /etc/selfdef/selfdef.toml --validate
 ExecStart=/usr/bin/selfdefd --config /etc/selfdef/selfdef.toml
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
