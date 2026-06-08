@@ -1094,3 +1094,16 @@ for p in ps:
     assert isinstance(p, str) and p.startswith('/'), f'{p!r} not absolute'
 "
 }
+
+@test "INVARIANT (host-sentinel module.toml install_paths.paths all start with /etc /usr /var /lib /opt or /run — canonical-root-prefix 89)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/host-sentinel/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+prefixes = ('/etc/', '/usr/', '/var/', '/lib/', '/opt/', '/run/', '/srv/', '/boot/')
+for p in ps:
+    assert any(p.startswith(pf) for pf in prefixes), f'{p!r} not canonical-root'
+"
+}

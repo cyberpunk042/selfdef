@@ -1086,3 +1086,14 @@ for p in ps:
     assert isinstance(p, str) and p.startswith('/'), f'{p!r} not absolute'
 "
 }
+
+@test "INVARIANT (modprobe-config-watchdog module.toml provides list non-empty 89 — capability-export-present)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/modprobe-config-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+p = data.get('provides')
+assert isinstance(p, list) and len(p) >= 1
+"
+}
