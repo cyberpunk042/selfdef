@@ -818,3 +818,11 @@ assert '\\x00' not in data and '\\u0000' not in data, 'literal NUL-escape sequen
     h=$(sha256sum "${F}" | cut -d' ' -f1)
     [ "${#h}" = "64" ]
 }
+
+@test "INVARIANT (guardian.service substrate file does not contain UTF-8 ZWSP (U+200B) — POSIX-no-zero-width-space-canonical 145)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-guardian.service"
+    python3 -c "
+data = open('${F}', 'r', encoding='utf-8', errors='replace').read()
+assert '\u200b' not in data, 'ZWSP present'
+"
+}
