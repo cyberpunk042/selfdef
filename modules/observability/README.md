@@ -95,6 +95,22 @@ The daemon-side panels render flat / empty if the
 endpoint (or if the daemon isn't running). Both endpoints are
 required for full dashboard coverage.
 
+### Policy-data coupling (F-2026-080)
+
+The **Tetragon kills by policy** and **Map operation errors**
+panels render data only when *policy modules* are applied and
+actually firing — there is no kill/policy stream until something
+loads Tetragon TracingPolicies. In practice that means
+`agent-guard` (host-level invariants on AI agents) and the
+perimeter policies; an empty "kills by policy" panel on a host
+with no policy modules is **correct, not a fault**. This is a
+deliberate *runtime* coupling, not a module-manifest dependency:
+`observability` does not `depends_on` `agent-guard`, because the
+dashboard is useful (Tetragon event rate, process cache, the
+selfdef-daemon panels) even with zero policy modules. Operators
+who want the kill-by-policy view must apply at least one policy
+module (`selfdefctl modules apply … --only agent-guard`).
+
 ## Scraping the daemon
 
 The selfdef daemon's `/metrics` endpoint is auth-gated:
