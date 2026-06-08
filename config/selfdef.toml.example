@@ -66,6 +66,26 @@ hot_retention_days = 30
 # warm_path = "/var/lib/selfdef/warm"
 # warm_retention_days = 365
 
+[hardware_probe]
+# Periodic hardware/thermal probe (SD-R22). When disabled (default) the
+# daemon probes hardware ONCE at startup and never re-probes. Enable to
+# re-probe on a cadence and (optionally) emit thermal Detection Findings.
+enabled = false
+# Re-probe cadence in seconds. Default 300 (5 min). Values below 30 are
+# rejected at validation time (sub-30s yields no operator value).
+interval_seconds = 300
+# When true (and enabled=true), a sensor crossing the critical threshold
+# emits an OCSF Detection Finding (class_uid=2004, severity=Critical) to
+# the bus on the probe tick — i.e. thermal events flow into the notifier
+# chain. Default false (probe updates metrics only).
+emit_thermal_events = false
+# Warn / critical thresholds in °C (sain-01 profile baseline).
+thermal_warn_celsius = 85
+thermal_critical_celsius = 95
+# Override critical threshold for GPU sensors (source prefix
+# `nvidia-gpu-`). 0 = use thermal_critical_celsius for GPUs too.
+gpu_critical_celsius = 0
+
 [collectors]
 # Each collector has its own table; all default to disabled.
 
