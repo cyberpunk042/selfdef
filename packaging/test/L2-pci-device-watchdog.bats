@@ -1180,3 +1180,14 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert len(ps) >= 3, f'expected >=3 paths, got {len(ps)}'
 "
 }
+
+@test "INVARIANT (pci-device-watchdog module.toml install_paths.paths includes /etc/ entry — config-staging 91)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/pci-device-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert any(p.startswith('/etc/') for p in ps)
+"
+}

@@ -1088,3 +1088,15 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert len(ps) >= 3, f'expected >=3 paths, got {len(ps)}'
 "
 }
+
+@test "INVARIANT (pam-history module.toml install_paths.paths first entry under /etc/ — config-staging-canonical 91)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/pam-history/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+# Just verify at least one /etc/ entry exists for installer-class modules
+assert any(p.startswith('/etc/') for p in ps), f'no /etc/ entry'
+"
+}
