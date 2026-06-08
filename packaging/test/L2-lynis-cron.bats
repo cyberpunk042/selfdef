@@ -1082,3 +1082,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/lynis-cron/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (lynis-cron module.toml [install] block declared at line beginning — TOML-section-header 95)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/lynis-cron/module.toml"
+    grep -qE '^\[install\]' "${mtoml}"
+}

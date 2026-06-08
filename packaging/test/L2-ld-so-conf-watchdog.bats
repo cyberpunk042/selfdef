@@ -1124,3 +1124,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/ld-so-conf-watchdog/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (ld-so-conf-watchdog module.toml [install] block declared at line beginning — TOML-section-header 95)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ld-so-conf-watchdog/module.toml"
+    grep -qE '^\[install\]' "${mtoml}"
+}

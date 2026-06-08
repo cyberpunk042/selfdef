@@ -968,3 +968,8 @@ assert any('/var/lib/' in p or '/var/log/' in p or '/var/cache/' in p for p in p
     mtoml="${BATS_TEST_DIRNAME}/../../modules/observability/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (observability module.toml [install] block declared at line beginning — TOML-section-header 95)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/observability/module.toml"
+    grep -qE '^\[install\]' "${mtoml}"
+}

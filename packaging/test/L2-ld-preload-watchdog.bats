@@ -1089,3 +1089,8 @@ assert len(ps) >= 1
     mtoml="${BATS_TEST_DIRNAME}/../../modules/ld-preload-watchdog/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (ld-preload-watchdog module.toml [install] block declared at line beginning — TOML-section-header 95)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ld-preload-watchdog/module.toml"
+    grep -qE '^\[install\]' "${mtoml}"
+}

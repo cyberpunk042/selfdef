@@ -1127,3 +1127,8 @@ assert any(p.startswith('/var/') for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/fail2ban-action-watchdog/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (fail2ban-action-watchdog module.toml [install] block declared at line beginning — TOML-section-header 95)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/fail2ban-action-watchdog/module.toml"
+    grep -qE '^\[install\]' "${mtoml}"
+}

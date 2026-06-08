@@ -1168,3 +1168,8 @@ assert any('/var/lib/' in p or '/var/log/' in p or '/var/cache/' in p for p in p
     mtoml="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (selfdef-self-integrity module.toml [install] block declared at line beginning — TOML-section-header 95)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/selfdef-self-integrity/module.toml"
+    grep -qE '^\[install\]' "${mtoml}"
+}

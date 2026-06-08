@@ -1264,3 +1264,8 @@ assert any('/var/lib/' in p or '/var/log/' in p or '/var/cache/' in p for p in p
     mtoml="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (ssh-moduli-harden module.toml [install] block declared at line beginning — TOML-section-header 95)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ssh-moduli-harden/module.toml"
+    grep -qE '^\[install\]' "${mtoml}"
+}

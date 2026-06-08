@@ -1179,3 +1179,8 @@ assert len(ps) >= 1
     mtoml="${BATS_TEST_DIRNAME}/../../modules/nfs-mount-watchdog/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (nfs-mount-watchdog module.toml [install] block declared at line beginning — TOML-section-header 95)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/nfs-mount-watchdog/module.toml"
+    grep -qE '^\[install\]' "${mtoml}"
+}

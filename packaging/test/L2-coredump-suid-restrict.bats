@@ -1131,3 +1131,8 @@ assert any('/etc/selfdef/' in p for p in ps)
     mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/module.toml"
     grep -qE '^\[install_paths\]' "${mtoml}"
 }
+
+@test "INVARIANT (coredump-suid-restrict module.toml [install] block declared at line beginning — TOML-section-header 95)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/coredump-suid-restrict/module.toml"
+    grep -qE '^\[install\]' "${mtoml}"
+}
