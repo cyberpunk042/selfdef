@@ -816,3 +816,6 @@ assert isinstance(data, dict)
 @test "INVARIANT (detect-host module.toml declares conflicts field — mutual-exclusion 85)" {
     grep -qE '^conflicts' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
 }
+@test "INVARIANT (detect-host module.toml declares requires field — runtime-dependency 86)" {
+    grep -qE '^requires' "${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+}

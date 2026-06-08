@@ -771,3 +771,11 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert isinstance(data['spec'].get('kprobes'), list)
 "
 }
+@test "INVARIANT (YAML metadata.name field non-empty string — well-formed-CRD-name 86)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+n = data['metadata']['name']
+assert isinstance(n, str) and n
+"
+}

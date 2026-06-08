@@ -727,3 +727,6 @@ setup() {
 @test "INVARIANT (lib's SELFDEF_MODULE_LIB_VERSION is integer — version-numeric 85)" {
     [[ "${SELFDEF_MODULE_LIB_VERSION}" =~ ^[0-9]+$ ]]
 }
+@test "INVARIANT (lib's caller-contract states MODULE precondition — required-env-doc 86)" {
+    grep -qE 'MODULE.*module slug|MODULE.*required' "${LIB}"
+}

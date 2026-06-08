@@ -769,3 +769,6 @@ EOF
 @test "INVARIANT (script uses set -o pipefail — pipe-error contract 85)" {
     grep -qE 'pipefail' "${SCRIPT}"
 }
+@test "INVARIANT (script uses /var/cache/selfdef in canonical path — state-dir-convention 86)" {
+    grep -qE '/var/cache/selfdef' "${SCRIPT}"
+}

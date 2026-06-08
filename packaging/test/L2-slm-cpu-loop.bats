@@ -910,3 +910,7 @@ assert isinstance(data, dict)
     chk="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/check.sh"
     head -30 "${chk}" | grep -qE 'set -euo'
 }
+@test "INVARIANT (slm-cpu-loop install/uninstall.sh has set -euo prologue — Bash-strict 86)" {
+    uni="${BATS_TEST_DIRNAME}/../../modules/slm-cpu-loop/install/uninstall.sh"
+    head -30 "${uni}" | grep -qE 'set -euo'
+}

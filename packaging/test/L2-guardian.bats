@@ -485,3 +485,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (postrm references /etc/systemd/system/ unit removal — purge-cleanup-target 85)" {
     grep -qE '/etc/systemd/system' "${POSTRM}"
 }
+@test "INVARIANT (postinst pre-creates /var/log/selfdef dir — log-dir staging 86)" {
+    grep -qE '/var/log/selfdef' "${POSTINST}"
+}

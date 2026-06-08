@@ -650,3 +650,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.service file path is under packaging/systemd/ — canonical-package-layout 85)" {
     case "$(readlink -f "${SERVICE}")" in */packaging/systemd/*) ;; *) false ;; esac
 }
+@test "INVARIANT (.timer file path is under packaging/systemd/ — canonical-package-layout 86)" {
+    case "$(readlink -f "${TIMER}")" in */packaging/systemd/*) ;; *) false ;; esac
+}
