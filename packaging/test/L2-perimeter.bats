@@ -823,3 +823,11 @@ with open('${YAML}') as f: data = yaml.safe_load(f)
 assert data['spec']['kprobes'][0]['call'] == 'sys_execve'
 "
 }
+@test "INVARIANT (YAML spec.kprobes[0].selectors non-empty list — has-selector 93)" {
+    python3 -c "
+import yaml
+with open('${YAML}') as f: data = yaml.safe_load(f)
+s = data['spec']['kprobes'][0].get('selectors', [])
+assert isinstance(s, list) and len(s) >= 1
+"
+}

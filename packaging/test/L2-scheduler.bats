@@ -685,3 +685,6 @@ POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
 @test "INVARIANT (scheduler.service uses LockPersonality directive — anti-personality 92)" {
     grep -qE '^LockPersonality=true' "${UNIT}"
 }
+@test "INVARIANT (scheduler.service uses RestrictNamespaces — namespace-bound 93)" {
+    grep -qE '^RestrictNamespaces=true' "${UNIT}"
+}

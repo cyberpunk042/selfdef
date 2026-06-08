@@ -672,3 +672,6 @@ DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
 @test "INVARIANT (.timer declares OnBootSec OR OnUnitActiveSec — cadence-canonical 92)" {
     grep -qE '^(OnBootSec|OnUnitActiveSec)=' "${TIMER}"
 }
+@test "INVARIANT (.service file has at least one comment line — documented-config 93)" {
+    grep -qE '^#' "${SERVICE}"
+}

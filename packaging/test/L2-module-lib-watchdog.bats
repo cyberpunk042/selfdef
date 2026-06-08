@@ -748,3 +748,6 @@ setup() {
 @test "INVARIANT (lib's emit_status is bash function 92)" {
     type -t emit_status | grep -q '^function$'
 }
+@test "INVARIANT (lib defines log helper as bash function 93)" {
+    type -t log | grep -q '^function$'
+}

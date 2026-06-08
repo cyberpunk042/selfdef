@@ -854,3 +854,14 @@ sc = (data.get('install_paths') or {}).get('scope', '')
 assert sc in ('system', 'user', '')
 "
 }
+
+@test "INVARIANT (polarproxy module.toml install_paths.paths has /etc/selfdef/ entry 93 — selfdef-config-staging-canonical)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/polarproxy/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert any(p.startswith('/') for p in ps)
+"
+}

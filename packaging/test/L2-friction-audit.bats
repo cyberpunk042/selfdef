@@ -790,3 +790,6 @@ EOF
 @test "INVARIANT (script writes ts_ms in millisecond format from date+%s%N — millisecond-precision 92)" {
     grep -qE 'ts_ms=.*\$\(date|date \+%s%N' "${SCRIPT}"
 }
+@test "INVARIANT (script declares class_uid in OCSF emission — OCSF-event-class 93)" {
+    grep -qE 'class_uid' "${SCRIPT}"
+}

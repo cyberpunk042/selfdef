@@ -1072,3 +1072,15 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert any('libexec/selfdef' in p for p in ps)
 "
 }
+
+@test "INVARIANT (ld-preload-watchdog module.toml has install_paths section non-empty 93)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/ld-preload-watchdog/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ip = data.get('install_paths') or {}
+ps = ip.get('paths', [])
+assert len(ps) >= 1
+"
+}

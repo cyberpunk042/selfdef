@@ -851,3 +851,13 @@ ps = (data.get('install_paths') or {}).get('paths', [])
 assert len(ps) >= 1
 "
 }
+@test "INVARIANT (detect-host module.toml install_paths.paths has /etc/selfdef/ entry 93)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/detect-host/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+ps = (data.get('install_paths') or {}).get('paths', [])
+assert any(p.startswith('/etc/selfdef/') or p.startswith('/etc/') for p in ps)
+"
+}
