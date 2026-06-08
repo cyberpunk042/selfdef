@@ -1341,3 +1341,14 @@ r = data.get('consumes')
 assert isinstance(r, list), f'consumes must be list, got {type(r).__name__}'
 "
 }
+
+@test "INVARIANT (kernel-lockdown module.toml top-level instanced field is a TOML boolean — TOML-instanced-bool-canonical 120)" {
+    mtoml="${BATS_TEST_DIRNAME}/../../modules/kernel-lockdown/module.toml"
+    python3 -c "
+import tomllib
+with open('${mtoml}', 'rb') as fp:
+    data = tomllib.load(fp)
+r = data.get('instanced')
+assert isinstance(r, bool), f'instanced must be bool, got {type(r).__name__}'
+"
+}
