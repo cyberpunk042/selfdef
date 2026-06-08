@@ -778,3 +778,10 @@ assert b'\x00' not in data, 'NUL byte present'
     n=$(wc -l < "${F}")
     [ "${n}" -ge 5 ] && [ "${n}" -le 1000 ]
 }
+
+@test "INVARIANT (scheduler.service file path contains no '..' segments — POSIX-path-no-traverse-canonical 115)" {
+    F="${BATS_TEST_DIRNAME}/../../packaging/systemd/selfdef-scheduler.service"
+    case "${F}" in *..*) ;; *) skip "no parent traversal" ;; esac
+    abs=$(readlink -f "${F}")
+    case "${abs}" in *..*) return 1 ;; esac
+}
