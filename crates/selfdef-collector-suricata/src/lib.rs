@@ -80,6 +80,9 @@ impl SuricataCollector {
         }
         let mut reader = BufReader::new(file);
         let mut buf = String::new();
+        // Buffers a partial line read before its terminating newline arrived,
+        // so a write racing the reader can't split + drop an EVE event.
+        let mut pending = String::new();
 
         loop {
             if shutdown.is_cancelled() {
@@ -94,7 +97,10 @@ impl SuricataCollector {
                 tokio::time::sleep(POLL_INTERVAL).await;
                 continue;
             }
-            self.process_line(buf.trim_end());
+            pending.push_str(&buf);
+            for line in selfdef_collector_util::drain_complete_lines(&mut pending) {
+                self.process_line(&line);
+            }
         }
     }
 

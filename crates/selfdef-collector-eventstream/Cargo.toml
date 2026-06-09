@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 selfdef-core = { workspace = true }
 selfdef-bus = { workspace = true }
+selfdef-collector-util = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 thiserror = { workspace = true }

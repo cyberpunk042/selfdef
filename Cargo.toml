@@ -142,6 +142,7 @@ selfdef-collector-tetragon = { path = "crates/selfdef-collector-tetragon" }
 selfdef-collector-suricata = { path = "crates/selfdef-collector-suricata" }
 selfdef-collector-canary = { path = "crates/selfdef-collector-canary" }
 selfdef-collector-eventstream = { path = "crates/selfdef-collector-eventstream" }
+selfdef-collector-util = { path = "crates/selfdef-collector-util" }
 selfdef-collector-ebpf = { path = "crates/selfdef-collector-ebpf" }
 selfdef-ebpf-common = { path = "crates/selfdef-ebpf-common" }
 selfdef-ssh-wrap = { path = "crates/selfdef-ssh-wrap" }

@@ -150,7 +150,7 @@ impl EventstreamCollector {
             // newline is a partial write racing the reader; parsing it now would
             // split — and drop — the event.
             pending.push_str(&buf);
-            for line in drain_complete_lines(&mut pending) {
+            for line in selfdef_collector_util::drain_complete_lines(&mut pending) {
                 match serde_json::from_str::<Event>(&line) {
                     Ok(event) => self.publisher.publish_lossy(event),
                     Err(e) => debug!(error = %e, "skipping malformed eventstream line"),
@@ -306,28 +306,6 @@ async fn wait_for_file(path: &Path, shutdown: &CancellationToken) {
         }
         tokio::time::sleep(POLL_INTERVAL).await;
     }
-}
-
-/// Drain the COMPLETE (`'\n'`-terminated) lines from `pending`, returning each
-/// trimmed non-empty line and leaving any trailing partial line buffered in
-/// `pending` for the next read.
-///
-/// This is what makes the tailer robust to a partial write racing the reader:
-/// a chunk that doesn't reach a newline contributes nothing yet (the event is
-/// not split and dropped); it completes on a later read.
-fn drain_complete_lines(pending: &mut String) -> Vec<String> {
-    let Some(last_nl) = pending.rfind('\n') else {
-        return Vec::new(); // no complete line yet — keep buffering
-    };
-    let out: Vec<String> = pending[..=last_nl]
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .map(str::to_string)
-        .collect();
-    // Keep whatever follows the last newline (a partial line, or empty).
-    *pending = pending[last_nl + 1..].to_string();
-    out
 }
 
 #[cfg(test)]
@@ -538,42 +516,5 @@ mod tests {
 
         shutdown.cancel();
         let _ = tokio::time::timeout(Duration::from_secs(2), task).await;
-    }
-
-    // ---- partial-line accumulation (the write-race fix) ----
-
-    #[test]
-    fn drain_returns_nothing_for_a_partial_line() {
-        let mut p = String::from("{\"partial\":");
-        assert!(drain_complete_lines(&mut p).is_empty());
-        // the partial stays buffered for the next read.
-        assert_eq!(p, "{\"partial\":");
-    }
-
-    #[test]
-    fn partial_then_completion_yields_one_whole_line() {
-        // A write split across two reads must NOT lose the event.
-        let mut p = String::new();
-        p.push_str("{\"a\":1"); // first read: partial
-        assert!(drain_complete_lines(&mut p).is_empty());
-        p.push_str("}\n"); // second read: the completion
-        let lines = drain_complete_lines(&mut p);
-        assert_eq!(lines, vec!["{\"a\":1}".to_string()]);
-        assert!(p.is_empty(), "no leftover after a complete line");
-    }
-
-    #[test]
-    fn multiple_complete_lines_drain_leaving_trailing_partial() {
-        let mut p = String::from("one\ntwo\nthree-part");
-        let lines = drain_complete_lines(&mut p);
-        assert_eq!(lines, vec!["one".to_string(), "two".to_string()]);
-        assert_eq!(p, "three-part", "the trailing partial is preserved");
-    }
-
-    #[test]
-    fn blank_lines_are_skipped() {
-        let mut p = String::from("a\n\n  \nb\n");
-        assert_eq!(drain_complete_lines(&mut p), vec!["a".to_string(), "b".to_string()]);
-        assert!(p.is_empty());
     }
 }
