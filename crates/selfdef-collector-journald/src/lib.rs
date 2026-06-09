@@ -29,6 +29,19 @@ use tracing::{debug, info, warn};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 
+/// First delay before respawning a `journalctl` follower that exited, and the
+/// ceiling the delay backs off to. `journalctl --follow` exits when journald
+/// restarts or its process is killed; respawning (instead of giving up) keeps
+/// the collector alive across those transient outages, and the exponential cap
+/// stops a permanently-failing follower from respawn-storming.
+const MIN_RESPAWN_BACKOFF: Duration = Duration::from_millis(100);
+const MAX_RESPAWN_BACKOFF: Duration = Duration::from_secs(30);
+
+/// Double the respawn backoff, capped at [`MAX_RESPAWN_BACKOFF`].
+fn next_backoff(current: Duration) -> Duration {
+    (current * 2).min(MAX_RESPAWN_BACKOFF)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReadFrom {
     Start,
@@ -137,32 +150,76 @@ impl JournaldCollector {
         shutdown: CancellationToken,
     ) -> Result<(), JournaldError> {
         info!(binary = %binary.display(), ?units, "journald collector (subprocess mode) starting");
-        let mut cmd = Command::new(binary);
-        cmd.arg("--output=json")
-            .arg("--follow")
-            .arg("--no-pager")
-            .stdout(Stdio::piped());
-        for u in units {
-            cmd.arg("-u").arg(u);
-        }
-        let mut child = cmd.spawn()?;
-        let stdout = child.stdout.take().expect("stdout was piped");
-        let mut reader = BufReader::new(stdout).lines();
 
+        // Respawn loop. `journalctl --follow` exits when journald restarts or
+        // its process dies; previously that returned Ok(()) and the spawned task
+        // simply ended — the daemon does NOT watch collector tasks while it runs
+        // (it only joins them at shutdown), so the collector silently went dead
+        // and the IPS ran blind to journald (auth/ssh/sudo) until a daemon
+        // restart. Respawn the follower with an exponential backoff so a
+        // transient outage doesn't permanently disable the collector; the only
+        // clean exits are a shutdown signal (Ok) or a failure to even spawn the
+        // process (Err — a permanent fault worth surfacing loudly).
+        let mut backoff = MIN_RESPAWN_BACKOFF;
         loop {
-            tokio::select! {
-                () = shutdown.cancelled() => {
-                    let _ = child.kill().await;
-                    return Ok(());
-                }
-                next = reader.next_line() => match next? {
-                    Some(line) => self.process_line(&line),
-                    None => {
-                        warn!("journalctl stdout closed");
+            if shutdown.is_cancelled() {
+                return Ok(());
+            }
+            let mut cmd = Command::new(binary);
+            cmd.arg("--output=json")
+                .arg("--follow")
+                .arg("--no-pager")
+                .stdout(Stdio::piped());
+            for u in units {
+                cmd.arg("-u").arg(u);
+            }
+            // A spawn failure (e.g. the journalctl binary is missing) is a
+            // permanent configuration fault — surface it rather than
+            // respawn-storming on something that can never succeed.
+            let mut child = cmd.spawn()?;
+            let stdout = child.stdout.take().expect("stdout was piped");
+            let mut reader = BufReader::new(stdout).lines();
+
+            // Stream this follower until it closes its stdout or we're shut down.
+            let mut delivered = false;
+            loop {
+                tokio::select! {
+                    () = shutdown.cancelled() => {
+                        let _ = child.kill().await;
                         return Ok(());
+                    }
+                    next = reader.next_line() => match next {
+                        Ok(Some(line)) => {
+                            self.process_line(&line);
+                            delivered = true;
+                        }
+                        Ok(None) => break, // journalctl closed stdout (it exited)
+                        Err(e) => {
+                            // A read error usually means the pipe broke because
+                            // journalctl died — treat it like a close and respawn.
+                            warn!(error = %e, "journald: error reading journalctl stdout");
+                            break;
+                        }
                     }
                 }
             }
+
+            // The follower exited. Reap it, then back off before respawning. A
+            // follower that actually delivered events ran healthily, so reset the
+            // backoff — a flapping journald still recovers quickly after a good run.
+            let _ = child.kill().await;
+            if delivered {
+                backoff = MIN_RESPAWN_BACKOFF;
+            }
+            warn!(
+                backoff_ms = backoff.as_millis() as u64,
+                "journalctl follower exited; respawning after backoff"
+            );
+            tokio::select! {
+                () = shutdown.cancelled() => return Ok(()),
+                () = tokio::time::sleep(backoff) => {}
+            }
+            backoff = next_backoff(backoff);
         }
     }
 
@@ -260,5 +317,72 @@ mod tests {
         assert_eq!(ReadFrom::parse("start"), ReadFrom::Start);
         assert_eq!(ReadFrom::parse("end"), ReadFrom::End);
         assert_eq!(ReadFrom::parse(""), ReadFrom::End);
+    }
+
+    #[test]
+    fn backoff_doubles_and_caps() {
+        let b0 = MIN_RESPAWN_BACKOFF;
+        assert_eq!(next_backoff(b0), b0 * 2);
+        // repeated doubling saturates at the ceiling and stays there.
+        let mut b = b0;
+        for _ in 0..20 {
+            b = next_backoff(b);
+        }
+        assert_eq!(b, MAX_RESPAWN_BACKOFF);
+        assert_eq!(next_backoff(MAX_RESPAWN_BACKOFF), MAX_RESPAWN_BACKOFF);
+    }
+
+    #[tokio::test]
+    async fn journalctl_follower_respawns_after_exit() {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+
+        // A fake `journalctl` that ignores its args, emits ONE journal line, and
+        // exits — modelling a `journalctl --follow` that quits when journald
+        // restarts. A single spawn publishes exactly one event; seeing several
+        // proves the collector respawned the follower instead of going dead.
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("fake-journalctl");
+        {
+            let mut f = std::fs::File::create(&script).unwrap();
+            writeln!(f, "#!/bin/sh").unwrap();
+            writeln!(
+                f,
+                "printf '%s\\n' '{{\"MESSAGE\":\"hello\",\"PRIORITY\":\"6\"}}'"
+            )
+            .unwrap();
+            writeln!(f, "exit 0").unwrap();
+        }
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let bus = selfdef_bus::Bus::new(64);
+        let mut sub = bus.subscribe();
+        let collector = JournaldCollector::new(
+            InputMode::Journalctl {
+                binary: script.clone(),
+                units: vec![],
+            },
+            bus.publisher(),
+            "test-host".into(),
+        );
+        let token = CancellationToken::new();
+        let run_token = token.clone();
+        let handle = tokio::spawn(async move { collector.run(run_token).await });
+
+        // With the 100ms respawn backoff we should see several events within a
+        // couple of seconds; require at least two (one per follower spawn).
+        let mut count = 0;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while count < 2 && tokio::time::Instant::now() < deadline {
+            if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_secs(1), sub.recv()).await {
+                count += 1;
+            }
+        }
+        token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), handle).await;
+        assert!(
+            count >= 2,
+            "expected >= 2 events from respawned followers, got {count}"
+        );
     }
 }
