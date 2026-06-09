@@ -303,11 +303,18 @@ impl SandboxRegistry {
         let mut changed = 0usize;
         for a in &mut self.snapshot.allocations {
             if matches!(a.state, AllocationState::Running | AllocationState::Pending) {
-                if let Ok(rel) = OffsetDateTime::parse(&a.release_at, &Rfc3339) {
-                    if rel <= now {
-                        a.state = AllocationState::Released;
-                        changed += 1;
-                    }
+                let release = match OffsetDateTime::parse(&a.release_at, &Rfc3339) {
+                    Ok(rel) => rel <= now,
+                    // Unparseable release time: `allocate()` always writes
+                    // RFC3339, so a malformed value means the persisted store was
+                    // corrupted or tampered. Fail safe — release an allocation
+                    // whose lifecycle window we cannot read, rather than leaving
+                    // it Running indefinitely (fail-open: a leaked sandbox slot).
+                    Err(_) => true,
+                };
+                if release {
+                    a.state = AllocationState::Released;
+                    changed += 1;
                 }
             }
         }
@@ -498,6 +505,23 @@ mod tests {
         assert_eq!(r.expire_due(later).unwrap(), 1);
         assert_eq!(r.allocations()[0].state, AllocationState::Released);
         assert_eq!(r.expire_due(later).unwrap(), 0);
+    }
+
+    #[test]
+    fn expire_due_fails_safe_on_unparseable_release_at() {
+        let mut r = SandboxRegistry::new();
+        let (lo, _) = ms032_range_for(SandboxTier::TierA);
+        let mut q = req(SandboxTier::TierA, lo);
+        q.ttl_seconds = 3600;
+        r.allocate(&q, "alloc-1", "t1", now()).unwrap();
+        r.start("alloc-1", now()).unwrap();
+        // Tamper/corrupt the persisted release time to a non-RFC3339 value.
+        r.snapshot.allocations[0].release_at = "not-a-timestamp".into();
+        // `now` is within the original 3600s TTL, yet an allocation whose
+        // release time can't be parsed must be released (fail-safe), never left
+        // Running indefinitely.
+        assert_eq!(r.expire_due(now()).unwrap(), 1);
+        assert_eq!(r.allocations()[0].state, AllocationState::Released);
     }
 
     #[test]
