@@ -577,6 +577,47 @@ impl Config {
             }
         }
 
+        // Per-channel severity floors (wall / write / per-subscription). Each is
+        // parsed with the same grade vocabulary; an unrecognized token silently
+        // breaks the channel — the wall/write builder REFUSES the channel
+        // (fail-closed: no notifications), and a subscription floor falls open
+        // (the channel fires on EVERY finding instead of its intended gate, a
+        // paging storm). Catch the typo at load either way. Empty/unset is the
+        // documented "use the default / no floor" sentinel and is accepted.
+        let bad_grade = |value: &str| {
+            let v = value.trim().to_ascii_lowercase();
+            !v.is_empty() && !VALID_SEVERITY_GRADE.contains(&v.as_str())
+        };
+        if bad_grade(&self.notifier.wall.severity_floor) {
+            return Err(ConfigError::Invalid(format!(
+                "[notifier.wall] severity_floor = {:?} is not a recognized severity grade \
+                 (use one of informational/low/medium/high/critical/fatal, or leave it unset \
+                 for the default) — an unrecognized token makes the builder refuse the wall \
+                 channel, silently disabling its broadcasts",
+                self.notifier.wall.severity_floor
+            )));
+        }
+        if bad_grade(&self.notifier.write.severity_floor) {
+            return Err(ConfigError::Invalid(format!(
+                "[notifier.write] severity_floor = {:?} is not a recognized severity grade \
+                 (use one of informational/low/medium/high/critical/fatal, or leave it unset \
+                 for the default) — an unrecognized token silently disables the write channel",
+                self.notifier.write.severity_floor
+            )));
+        }
+        for (name, sub) in &self.notifier.subscriptions {
+            if let Some(raw) = &sub.severity_floor {
+                if bad_grade(raw) {
+                    return Err(ConfigError::Invalid(format!(
+                        "[notifier.subscriptions.{name}] severity_floor = {raw:?} is not a \
+                         recognized severity grade (use one of informational/low/medium/high/\
+                         critical/fatal, or leave it unset) — an unrecognized token is silently \
+                         dropped, so the channel fires on every finding instead of its intended gate"
+                    )));
+                }
+            }
+        }
+
         // The hardware-probe loop re-probes every interval_seconds, but only
         // when enabled. The loop floors the cadence at 30s
         // (`interval_seconds.max(30)`) as a runtime backstop — so a sub-30
@@ -1943,6 +1984,58 @@ mod tests {
         cfg.api.tcp_addr = "127.0.0.1:8443".into();
         cfg.api.token_file = "/run/selfdef/token".into();
         cfg.api.unix_socket_mode = "garbage".into();
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_unknown_channel_severity_floors() {
+        // wall / write / per-subscription severity floors are grade vocabularies;
+        // a typo silently breaks the channel (wall/write refuse → no
+        // notifications; subscription falls open → fires on everything).
+        let mut cfg = Config::default();
+        // wall typo.
+        cfg.notifier.wall.severity_floor = "hihg".into();
+        assert!(
+            cfg.validate()
+                .unwrap_err()
+                .to_string()
+                .contains("notifier.wall")
+        );
+        cfg.notifier.wall.severity_floor = "high".into();
+        // write typo.
+        cfg.notifier.write.severity_floor = "kritical".into();
+        assert!(
+            cfg.validate()
+                .unwrap_err()
+                .to_string()
+                .contains("notifier.write")
+        );
+        cfg.notifier.write.severity_floor = "critical".into();
+        cfg.validate().unwrap(); // wall+write now valid
+        // subscription typo names the channel.
+        let sub = SubscriptionConfig {
+            severity_floor: Some("hi".into()),
+            ..Default::default()
+        };
+        cfg.notifier.subscriptions.insert("ntfy".into(), sub);
+        assert!(
+            cfg.validate()
+                .unwrap_err()
+                .to_string()
+                .contains("notifier.subscriptions.ntfy")
+        );
+        // valid subscription floor + an unset one both pass.
+        let sub_ok = SubscriptionConfig {
+            severity_floor: Some("high".into()),
+            ..Default::default()
+        };
+        cfg.notifier.subscriptions.insert("ntfy".into(), sub_ok);
+        cfg.notifier
+            .subscriptions
+            .insert("signal".into(), SubscriptionConfig::default()); // floor None
+        cfg.validate().unwrap();
+        // empty wall floor (= default) is accepted.
+        cfg.notifier.wall.severity_floor = String::new();
         cfg.validate().unwrap();
     }
 
