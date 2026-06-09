@@ -42,7 +42,22 @@ pub enum CounterError {
 }
 
 fn key(subject: &str, action: &str, resource: &str) -> String {
-    format!("{subject}|{action}|{resource}")
+    // Length-prefix each field so the join is injective. A plain `{subject}|
+    // {action}|{resource}` collides whenever a field CONTAINS the `|`
+    // separator — and `|` is a legal byte in usernames and file paths — so
+    // `("a|b","c","r")` and `("a","b|c","r")` would share one counter, letting a
+    // crafted resource name blend distinct (subject, action, resource) tuples
+    // into the same replay count. Prefixing each field with its byte length
+    // (`<len>:<field>`) makes the key unambiguous regardless of field content.
+    format!(
+        "{}:{}{}:{}{}:{}",
+        subject.len(),
+        subject,
+        action.len(),
+        action,
+        resource.len(),
+        resource
+    )
 }
 
 impl ActionReplayCounter {
@@ -153,6 +168,24 @@ mod tests {
         c.record("a", "x", "/r2", 1000).unwrap();
         assert_eq!(c.count("a", "x", "/r1", 1000), 1);
         assert_eq!(c.count("a", "x", "/r2", 1000), 1);
+    }
+
+    #[test]
+    fn separator_in_field_does_not_collide() {
+        // `|` is a legal byte in usernames and paths. ("a|b","c","r") and
+        // ("a","b|c","r") must be DISTINCT counters — a naive `|`-join would
+        // merge them, letting a crafted field manipulate another tuple's count.
+        let mut c = ActionReplayCounter::new(60_000).unwrap();
+        c.record("a|b", "c", "r", 1000).unwrap();
+        c.record("a", "b|c", "r", 1000).unwrap();
+        assert_eq!(c.count("a|b", "c", "r", 1000), 1);
+        assert_eq!(c.count("a", "b|c", "r", 1000), 1);
+        // and a field whose content mimics the length-prefix encoding still
+        // doesn't collide with a differently-split tuple.
+        c.record("1:x", "y", "z", 1000).unwrap();
+        c.record("1", ":xy", "z", 1000).unwrap();
+        assert_eq!(c.count("1:x", "y", "z", 1000), 1);
+        assert_eq!(c.count("1", ":xy", "z", 1000), 1);
     }
 
     #[test]
