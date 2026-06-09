@@ -405,6 +405,25 @@ impl Config {
                         .into(),
                 ));
             }
+            // The UNIX socket is "trusted via filesystem permissions" — its mode
+            // IS the access-control boundary. The daemon parses unix_socket_mode
+            // as `from_str_radix(.., 8).unwrap_or(0o660)`, so ANY value it cannot
+            // parse (a typo, stray whitespace, a non-octal digit) silently
+            // becomes 0660 — group-readable — *widening* access to the control
+            // API instead of honoring the operator's intent. Reject exactly what
+            // the daemon could not parse, mirroring its parse so validation and
+            // runtime agree, and only when the unix transport is actually used.
+            if has_unix
+                && u32::from_str_radix(self.api.unix_socket_mode.trim_start_matches('0'), 8)
+                    .is_err()
+            {
+                return Err(ConfigError::Invalid(format!(
+                    "[api] unix_socket_mode = {:?} is not a valid octal file mode (e.g. \"0660\") — \
+                     an unparseable mode silently falls back to 0660 (group-readable), widening \
+                     permissions on the trusted control API socket",
+                    self.api.unix_socket_mode
+                )));
+            }
         }
 
         // The NATS multi-host bridge only starts when it's enabled AND has a
@@ -1778,6 +1797,39 @@ mod tests {
         assert!(err.to_string().contains("inproc_capacity"));
         // Any positive value is fine (default is 4096).
         cfg.bus.inproc_capacity = 1;
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_invalid_unix_socket_mode() {
+        // The daemon parses unix_socket_mode with `unwrap_or(0o660)`, so an
+        // unparseable mode silently widens the trusted control socket to
+        // group-readable. validate must reject it (when the unix transport is
+        // used) so the operator gets an actionable error, not a silent widening.
+        let mut cfg = Config::default();
+        cfg.api.enabled = true;
+        cfg.api.unix_socket = "/run/selfdef/api.sock".into();
+        for bad in ["xyz", "0o660", "rw-", "0660 ", "", "099", "0"] {
+            cfg.api.unix_socket_mode = bad.into();
+            let err = cfg.validate().unwrap_err();
+            assert!(matches!(err, ConfigError::Invalid(_)), "{bad:?} → {err:?}");
+            assert!(
+                err.to_string().contains("unix_socket_mode"),
+                "msg should name the field for {bad:?}: {err}"
+            );
+        }
+        // Valid octal modes pass (with or without the leading zero).
+        for good in ["0600", "0660", "0640", "660", "700", "0700"] {
+            cfg.api.unix_socket_mode = good.into();
+            cfg.validate()
+                .unwrap_or_else(|e| panic!("mode {good:?} must be valid, got {e:?}"));
+        }
+        // A bad mode in a config whose unix transport is unused does not block
+        // loading (only TCP enabled), matching the gating of the other checks.
+        cfg.api.unix_socket = String::new();
+        cfg.api.tcp_addr = "127.0.0.1:8443".into();
+        cfg.api.token_file = "/run/selfdef/token".into();
+        cfg.api.unix_socket_mode = "garbage".into();
         cfg.validate().unwrap();
     }
 
