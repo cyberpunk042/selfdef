@@ -86,4 +86,45 @@ if [[ "${failures}" -gt 0 ]]; then
     exit 1
 fi
 
-echo "L1-grafana-template PASS: all four-watchdog series + metadata locked"
+# Gate 4: every metric a panel's PromQL expr QUERIES must actually be
+# emitted by a producer. Gate 3 only checks the reverse (named series HAVE
+# a panel); it does not catch a panel querying a typo'd / renamed / removed
+# metric, which renders a silently-EMPTY panel — no data, no signal, the
+# observability failure the cockpit exists to prevent. Mirrors the alert
+# dead-metric gate (L1-prometheus-alerts Gate 4b). Metrics are pulled from
+# panel `targets[].expr` only (titles/descriptions may name series in prose).
+expr_metrics="$(python3 -c "
+import json, re
+d = json.load(open('${TEMPLATE}'))
+mets = set()
+def walk(panels):
+    for p in panels:
+        for t in (p.get('targets') or []):
+            mets.update(re.findall(r'selfdef_[a-z_0-9]+', t.get('expr', '')))
+        if p.get('panels'):
+            walk(p['panels'])
+walk(d.get('panels') or [])
+print('\n'.join(sorted(mets)))
+")"
+if [[ -z "${expr_metrics}" ]]; then
+    echo "  FAIL no selfdef_* metrics found in any panel expr (template shape changed?)"
+    exit 1
+fi
+dead=0
+for m in ${expr_metrics}; do
+    hits="$(grep -rlE "${m}" crates packaging/scripts modules 2>/dev/null \
+        --include=*.rs --include=*.sh --include=*.py \
+        | grep -vE '/tests?/|\.json\.template' | head -1)"
+    if [[ -n "${hits}" ]]; then
+        echo "  PASS panel metric ${m} is emitted by a producer"
+    else
+        echo "  FAIL panel metric ${m} is NOT emitted anywhere — silently-empty panel"
+        dead=$((dead + 1))
+    fi
+done
+if [[ "${dead}" -gt 0 ]]; then
+    echo "L1-grafana-template FAIL: ${dead} panel(s) query an unemitted (dead) metric"
+    exit 1
+fi
+
+echo "L1-grafana-template PASS: all four-watchdog series + metadata + panel-metric emission locked"
