@@ -1555,6 +1555,15 @@ impl Default for TwilioConfig {
 pub struct ResponderConfig {
     pub dry_run: bool,
     pub allowed_actions: Vec<String>,
+    /// Autonomous-response severity floor (F-2026-092). Findings graded below
+    /// this are not auto-dispatched on the bus path — a guard against an
+    /// allow-listed aggressive action (e.g. `kill_pid`) firing on a
+    /// low-confidence finding. Accepts `none` / `unknown` (no floor — every
+    /// finding is processed, the default) or a grade token (`info`, `low`,
+    /// `medium`, `high`, `critical`, `fatal`). Operator-commanded paths
+    /// (`selfdefctl panic`, the authenticated `/actions/{name}/run` API) bypass
+    /// the floor by design.
+    pub min_severity: String,
     /// Directory under which `snapshot_proc` writes per-event dumps.
     pub snapshot_dir: PathBuf,
     /// Script invoked by `lockdown_egress` action.
@@ -1575,6 +1584,9 @@ impl Default for ResponderConfig {
         Self {
             dry_run: true,
             allowed_actions: vec!["notify".into()],
+            // No floor by default: matches the pre-F-2026-092 behavior where
+            // every finding is processed. Operators opt into a higher floor.
+            min_severity: "none".to_owned(),
             snapshot_dir: PathBuf::from("/var/lib/selfdef/snapshots"),
             lockdown_script: PathBuf::from("/usr/local/sbin/selfdef-lockdown.sh"),
             revoke_session_script: PathBuf::from("/usr/local/sbin/selfdef-revoke-session.sh"),
@@ -2659,6 +2671,34 @@ mod tests {
         assert_eq!(
             cfg.notifier.oracle_triage.filter.kinds,
             vec!["POLICY_VIOLATION".to_owned(), "CONN_ANOMALY".to_owned()]
+        );
+    }
+
+    /// F-2026-092: the responder autonomous-response severity floor defaults to
+    /// `none` (no floor) and is overridable from `[responder] min_severity`.
+    #[test]
+    fn responder_min_severity_defaults_none_and_parses_from_toml() {
+        // Default: no floor.
+        assert_eq!(ResponderConfig::default().min_severity, "none");
+
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [responder]
+            dry_run = false
+            allowed_actions = ["notify", "kill_pid"]
+            min_severity = "high"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.responder.min_severity, "high");
+        assert!(!cfg.responder.dry_run);
+        // Unset fields still fall back to the struct default (serde(default)).
+        assert_eq!(
+            cfg.responder.snapshot_dir,
+            ResponderConfig::default().snapshot_dir
         );
     }
 

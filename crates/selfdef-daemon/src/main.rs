@@ -644,11 +644,35 @@ async fn main() -> Result<()> {
             cfg.responder.velociraptor_args.clone(),
         )),
     ];
-    let responder = Arc::new(Responder::new(
-        actions,
-        cfg.responder.allowed_actions.clone(),
-        cfg.responder.dry_run,
-    ));
+    let responder = {
+        let base = Responder::new(
+            actions,
+            cfg.responder.allowed_actions.clone(),
+            cfg.responder.dry_run,
+        );
+        // F-2026-092: apply the optional autonomous-response severity floor.
+        // `none`/`unknown`/empty means no floor (process every finding, the
+        // default). A recognized grade raises the floor; an unrecognized token
+        // is logged and treated as no floor rather than silently dropping.
+        let token = cfg.responder.min_severity.trim();
+        let floored = match token.to_ascii_lowercase().as_str() {
+            "" | "none" | "unknown" => base,
+            other => match parse_severity_floor(other) {
+                Some(floor) => {
+                    info!(floor = %floor, "responder autonomous-response severity floor enabled");
+                    base.with_min_severity(floor)
+                }
+                None => {
+                    warn!(
+                        token = %token,
+                        "unrecognized responder.min_severity; no floor applied (every finding processed)"
+                    );
+                    base
+                }
+            },
+        };
+        Arc::new(floored)
+    };
 
     let responder_task = {
         let sub = bus.subscribe();
