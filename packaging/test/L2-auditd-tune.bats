@@ -137,6 +137,35 @@ run_wd() {
     grep -q 'auditctl -b 16384' "${AUDITCTL_LOG}"
 }
 
+@test "invalid backlog_limit → die (never silently un-set the audit backlog)" {
+    # A non-numeric/negative backlog_limit would otherwise be passed to
+    # `auditctl -b`, rejected, and swallowed by `|| true` — apply reports
+    # ok while the kernel audit backlog stays unset (dropped audit events).
+    for bad in "8k" "-1" "16384  " "twelve"; do
+        {
+            printf 'profile = "standard"\n'
+            printf 'backlog_limit = "%s"\n' "${bad}"
+        } > "${CONF}"
+        run env PATH="${BIN}:${PATH}" \
+            SELFDEF_AUDITD_TUNE_CONFIG="${CONF}" \
+            SELFDEF_AUDITD_CONF="${AUDITD_CONF}" \
+            bash "${WD}"
+        [ "$status" -ne 0 ]
+        [[ "${output}" == *"backlog_limit must be a non-negative integer"* ]]
+        # auditctl must NOT have been invoked with the bad value.
+        ! grep -q "auditctl -b ${bad}" "${AUDITCTL_LOG}"
+    done
+}
+
+@test "backlog_limit = 0 is accepted (auditctl: no limit)" {
+    {
+        printf 'profile = "standard"\n'
+        printf 'backlog_limit = "0"\n'
+    } > "${CONF}"
+    run_wd
+    grep -q 'auditctl -b 0' "${AUDITCTL_LOG}"
+}
+
 @test "INVARIANT: idempotent — byte-identical re-install fires NO auditd restart" {
     write_config "standard"
     run_wd

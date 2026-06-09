@@ -33,6 +33,16 @@ esac
 
 BACKLOG_LIMIT=$(toml_get backlog_limit "$CONFIG_FILE" || echo "8192")
 BACKLOG_LIMIT="${SELFDEF_AUDITD_BACKLOG_LIMIT:-$BACKLOG_LIMIT}"
+# Validate before handing to `auditctl -b` (line ~81). A non-numeric or
+# negative value (operator typo, e.g. "8k" or "-1") would otherwise be
+# passed straight to auditctl, which rejects it — but the `|| true` there
+# swallows the error, so the apply would report success while the kernel
+# audit backlog limit stays UNSET. An overflowing audit backlog drops
+# audit events, i.e. a security blind spot on a security module. Fail fast
+# with a clear message, mirroring the profile validation above. (0 is
+# permitted: auditctl treats backlog_limit=0 as "no limit".)
+[[ "$BACKLOG_LIMIT" =~ ^[0-9]+$ ]] \
+    || die "backlog_limit must be a non-negative integer, got '$BACKLOG_LIMIT'"
 
 src="${CONFIGS_SRC}/${PROFILE}.conf"
 [[ -r "$src" ]] || die "profile source missing: $src"
