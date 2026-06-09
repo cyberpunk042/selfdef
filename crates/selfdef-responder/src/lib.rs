@@ -48,6 +48,15 @@ pub struct Responder {
     actions: Vec<Arc<dyn Action>>,
     allowed_actions: HashSet<String>,
     dry_run: bool,
+    /// Autonomous-response severity floor (F-2026-092). Findings whose
+    /// `severity_id` is strictly below this are not auto-dispatched on the bus
+    /// path — a guard against destructive actions (e.g. `kill_pid`) firing on
+    /// low-confidence findings. Defaults to [`SeverityId::Unknown`] (the lowest
+    /// grade), so the bare [`Responder::new`] processes every finding exactly as
+    /// before; raise it with [`Responder::with_min_severity`]. The floor gates
+    /// only the autonomous bus path; [`Responder::dispatch_single`] (explicit,
+    /// operator-authenticated) and [`Responder::fire`] are unaffected.
+    min_severity: SeverityId,
 }
 
 impl std::fmt::Debug for Responder {
@@ -59,6 +68,7 @@ impl std::fmt::Debug for Responder {
             )
             .field("allowed_actions", &self.allowed_actions)
             .field("dry_run", &self.dry_run)
+            .field("min_severity", &self.min_severity)
             .finish()
     }
 }
@@ -69,7 +79,21 @@ impl Responder {
             actions,
             allowed_actions: allowed_actions.into_iter().collect(),
             dry_run,
+            // Lowest grade: every finding is processed, preserving the
+            // pre-floor behavior for callers that don't opt in.
+            min_severity: SeverityId::Unknown,
         }
+    }
+
+    /// Set the autonomous-response severity floor (F-2026-092). Findings below
+    /// `floor` are not auto-dispatched on the bus path. Builder-style; chain
+    /// onto [`Responder::new`]. Example: `Responder::new(..).with_min_severity(
+    /// SeverityId::High)` so only High/Critical/Fatal findings trigger
+    /// autonomous actions.
+    #[must_use]
+    pub fn with_min_severity(mut self, floor: SeverityId) -> Self {
+        self.min_severity = floor;
+        self
     }
 
     /// Direct-fire: dispatch all allowed actions for a single event without
@@ -120,7 +144,24 @@ impl Responder {
                 res = sub.recv() => {
                     match res {
                         Ok(event) if event.category_uid == CategoryUid::Findings => {
-                            self.handle_finding(&event).await;
+                            // F-2026-092: autonomous-response severity floor.
+                            // Below the floor we do not auto-dispatch — keeps
+                            // destructive actions (e.g. kill_pid) off low-
+                            // confidence findings on the autonomous path. The
+                            // default floor is `Unknown`, so this never trips
+                            // unless a caller opted in via `with_min_severity`.
+                            // Operator-commanded paths (`fire`, `dispatch_single`)
+                            // deliberately bypass this gate.
+                            if event.severity_id < self.min_severity {
+                                debug!(
+                                    event_id = %event.id,
+                                    severity = %event.severity_id,
+                                    floor = %self.min_severity,
+                                    "finding below autonomous-response floor; not dispatching"
+                                );
+                            } else {
+                                self.handle_finding(&event).await;
+                            }
                         }
                         Ok(_) => {}
                         Err(BusError::Lagged(n)) => warn!(missed = n, "responder lagged"),
