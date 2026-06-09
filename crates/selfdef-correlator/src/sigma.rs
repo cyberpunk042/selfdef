@@ -14,8 +14,10 @@
 //! - **detection.timeframe**: e.g. `60s`, `5m`, `1h`.
 //! - **detection.condition**: one of
 //!   - `<selection_name>` — fire on any event matching the selection.
-//!   - `<selection_name> | count() by <field> > <N>` — fire when ≥ N matches
-//!     share a value of `<field>` within `timeframe`.
+//!   - `<selection_name> | count() by <field> > <N>` — fire when MORE THAN `N`
+//!     matches (i.e. the `N+1`-th) share a value of `<field>` within
+//!     `timeframe`. The `>` is strict: `> 5` fires on the 6th match, not the
+//!     5th (matching standard Sigma `count()` semantics).
 //!
 //! Complex boolean conditions (`and`, `or`, `not`, multiple selections) are
 //! a later milestone.
@@ -163,8 +165,10 @@ pub struct CompiledRule {
 pub enum Condition {
     /// Fire on any event matching the named selection.
     Single(String),
-    /// Fire when ≥ threshold events match the selection sharing the same
-    /// value of `group_by_field` within timeframe.
+    /// Fire when the count of matching events sharing the same value of
+    /// `group_by_field` within `timeframe` STRICTLY EXCEEDS `threshold` (i.e.
+    /// on the `threshold + 1`-th match — `Aggregator::observe` fires on
+    /// `len > threshold`, matching the strict `> N` Sigma syntax).
     Count {
         selection: String,
         group_by_field: String,
@@ -907,6 +911,9 @@ level: high
         let rule = compile_rule(raw, PathBuf::from("inline.yml")).unwrap();
         let engine = Engine { rules: vec![rule] };
         let seq = AtomicU64::new(0);
+        // `> 2` is STRICT: the 1st AND the 2nd (the threshold-th) match must NOT
+        // fire — only MORE THAN 2 (the 3rd) does. Locks the `> N` semantics
+        // against a regression to `>= N` (which would fire one match early).
         for _ in 0..2 {
             let f = engine.process(&ssh_failure_event(), "host", &seq);
             assert!(f.is_empty());
