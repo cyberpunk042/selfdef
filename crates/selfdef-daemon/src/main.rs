@@ -59,14 +59,14 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    // Honor [daemon].log_format for the stderr fallback logger. Best-effort
-    // peek: the authoritative config load + error handling happens below;
-    // default to "text" if the file is missing/invalid so logging still
-    // initialises (and the real load reports the error properly).
-    let log_format = Config::load(Some(&args.config))
-        .map(|c| c.daemon.log_format)
-        .unwrap_or_else(|_| "text".to_string());
-    init_tracing(args.log_level.as_deref(), &log_format)?;
+    // Honor [daemon].log_level + log_format for the stderr fallback logger.
+    // Best-effort peek: the authoritative config load + error handling happens
+    // below; default to "info"/"text" if the file is missing/invalid so logging
+    // still initialises (and the real load reports the error properly).
+    let (config_level, log_format) = Config::load(Some(&args.config))
+        .map(|c| (c.daemon.log_level, c.daemon.log_format))
+        .unwrap_or_else(|_| ("info".to_string(), "text".to_string()));
+    init_tracing(args.log_level.as_deref(), &config_level, &log_format)?;
 
     // SDD-002 follow-up: `--validate` is a pure pre-flight. Load the config
     // (which runs the TOML parse + every semantic fail-fast rule) and exit
@@ -2114,12 +2114,32 @@ fn parse_severity_floor(s: &str) -> Option<selfdef_core::severity::SeverityId> {
     }
 }
 
-fn init_tracing(level_override: Option<&str>, log_format: &str) -> Result<()> {
+/// Resolve which log-filter directive to apply, by precedence:
+/// `--log-level` / `$SELFDEF_LOG` (the explicit override) > `[daemon].log_level`
+/// (config) > `$RUST_LOG` / built-in default. Returns `Some(directive)` to use
+/// explicitly, or `None` to fall back to `EnvFilter::from_default_env`.
+///
+/// The config field previously did nothing: it was never threaded into
+/// `init_tracing`, so a `[daemon].log_level = "debug"` was silently ignored, and
+/// a default daemon (no `--log-level`, no `$RUST_LOG`) logged at near-silent
+/// ERROR via `from_default_env` despite the field's documented `"info"` default.
+fn resolve_log_level<'a>(cli_level: Option<&'a str>, config_level: &'a str) -> Option<&'a str> {
+    cli_level
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            let c = config_level.trim();
+            (!c.is_empty()).then_some(c)
+        })
+}
+
+fn init_tracing(level_override: Option<&str>, config_level: &str, log_format: &str) -> Result<()> {
     use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-    let filter = level_override.map_or_else(EnvFilter::from_default_env, |lvl| {
-        EnvFilter::try_new(lvl).unwrap_or_else(|_| EnvFilter::new("info"))
-    });
+    let filter = match resolve_log_level(level_override, config_level) {
+        Some(lvl) => EnvFilter::try_new(lvl).unwrap_or_else(|_| EnvFilter::new("info")),
+        None => EnvFilter::from_default_env(),
+    };
 
     if let Ok(journald) = tracing_journald::layer() {
         // journald carries structured fields natively; [daemon].log_format
@@ -2302,5 +2322,57 @@ async fn run_heartbeat() {
     loop {
         tick.tick().await;
         let _ = sd_notify::notify(false, &[sd_notify::NotifyState::Watchdog]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_log_level;
+
+    // `--log-level` / $SELFDEF_LOG wins over the config field.
+    #[test]
+    fn cli_override_beats_config() {
+        assert_eq!(resolve_log_level(Some("debug"), "warn"), Some("debug"));
+    }
+
+    // With no CLI override, the config field is honored (the bug: it was ignored).
+    #[test]
+    fn config_used_when_no_cli_override() {
+        assert_eq!(resolve_log_level(None, "debug"), Some("debug"));
+        // the documented default still produces an explicit "info" directive
+        // (not the near-silent ERROR-only from_default_env path).
+        assert_eq!(resolve_log_level(None, "info"), Some("info"));
+    }
+
+    // An empty config field (explicitly unset) falls through to $RUST_LOG /
+    // default via the None sentinel — the escape hatch is preserved.
+    #[test]
+    fn empty_config_falls_through_to_env() {
+        assert_eq!(resolve_log_level(None, ""), None);
+        assert_eq!(resolve_log_level(None, "   "), None);
+    }
+
+    // A blank CLI value does not shadow a real config value.
+    #[test]
+    fn blank_cli_falls_through_to_config() {
+        assert_eq!(resolve_log_level(Some(""), "trace"), Some("trace"));
+        assert_eq!(resolve_log_level(Some("  "), "trace"), Some("trace"));
+    }
+
+    // Both empty → fall through to the env/default path.
+    #[test]
+    fn both_empty_falls_through() {
+        assert_eq!(resolve_log_level(None, ""), None);
+        assert_eq!(resolve_log_level(Some(""), ""), None);
+    }
+
+    // Complex EnvFilter directives (per-target) survive — log_level is a
+    // directive string, not a closed level vocabulary.
+    #[test]
+    fn complex_directive_passes_through() {
+        assert_eq!(
+            resolve_log_level(None, "info,selfdef_correlator=debug"),
+            Some("info,selfdef_correlator=debug")
+        );
     }
 }

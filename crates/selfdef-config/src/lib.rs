@@ -473,6 +473,11 @@ impl Config {
 #[serde(default)]
 pub struct DaemonConfig {
     pub host_tag: Option<String>,
+    /// Tracing verbosity as an `EnvFilter` directive (`"info"` default; also
+    /// accepts per-target directives like `"info,selfdef_correlator=debug"`).
+    /// Consumed by `selfdef-daemon` main `init_tracing`. Precedence:
+    /// `--log-level` / `$SELFDEF_LOG` (explicit override) > this field >
+    /// `$RUST_LOG` / built-in default (set this to `""` to defer to `$RUST_LOG`).
     pub log_level: String,
     /// `"text"` (default) or `"json"`. Consumed by the daemon's tracing
     /// init (`selfdef-daemon` main `init_tracing`) for the stderr fallback
