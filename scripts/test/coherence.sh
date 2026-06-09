@@ -246,6 +246,25 @@ for i in "${!LAYER_NAMES[@]}"; do
 done
 
 if [[ "${overall_fail}" -gt 0 ]]; then
+    # Diagnostic: the L2 observability pytest layer's output is buried thousands
+    # of lines deep behind the 200+ bats layers, past the reachable tail of the
+    # CI job log — so a remote operator can't see WHICH test failed. If that
+    # layer is among the failures, re-run it verbosely here (read-only,
+    # idempotent) so the failing test surfaces at the very end of the log.
+    # Remove this block once the failure is diagnosed and fixed.
+    for i in "${!LAYER_NAMES[@]}"; do
+        if [[ "${LAYER_STATUS[${i}]}" == "FAIL" \
+            && "${LAYER_NAMES[${i}]}" == *"observability + corpus pytest"* ]] \
+            && command -v python3 >/dev/null 2>&1; then
+            echo
+            echo "── DIAGNOSTIC: re-running failed L2 observability pytest (tail) ──"
+            python3 -m pytest tests/observability/ \
+                tests/replay/test_rule_corpus_coverage.py -rA -q 2>&1 \
+                | grep -E "FAILED|ERROR|assert|Error|short test summary|passed|failed" \
+                | tail -40 || true
+            echo "── END DIAGNOSTIC ──"
+        fi
+    done
     echo
     echo "RESULT: ${overall_fail} layer(s) failed."
     echo "Runbook: ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md"
