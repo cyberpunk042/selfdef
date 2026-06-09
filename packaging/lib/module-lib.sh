@@ -63,8 +63,18 @@ toml_get() {
     local line
     line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | head -1 || true)
     [[ -z "$line" ]] && return 1
-    line="${line#*=}"; line="${line## }"; line="${line%% #*}"
-    line="${line%\"}"; line="${line#\"}"
+    line="${line#*=}"      # drop the key and '='
+    line="${line%% #*}"    # drop an inline ' #' comment, if any
+    # Trim ALL surrounding whitespace (spaces AND tabs), not just a single
+    # leading space. The old `${line## }` removed at most one leading space and
+    # nothing trailing, so `key =  value` (irregular spacing) kept a leading
+    # space and `key = "value" ` (trailing space) parsed to `value"` with the
+    # closing quote stripped off the wrong end — silently corrupting the value a
+    # module then matches against (e.g. a `profile` that no longer equals
+    # "enforce"). These idioms strip the leading then trailing whitespace run.
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    line="${line%\"}"; line="${line#\"}"   # strip one surrounding quote pair
     printf '%s' "$line"
 }
 

@@ -458,6 +458,29 @@ setup() {
     rm -f "${tmp}"
 }
 
+@test "INVARIANT (toml_get trims irregular surrounding whitespace — value matches exactly downstream)" {
+    # Module scripts feed toml_get's output straight into exact matches
+    # (e.g. `case "$PROFILE" in report|enforce)`), so a leaked leading/trailing
+    # space silently breaks the match: a valid `enforce` would fall to the `*)`
+    # die arm, and a quoted value would have its closing quote stripped off the
+    # wrong end. The old single-space `${line## }` trimmed at most one leading
+    # space and nothing trailing. Locks full leading+trailing whitespace trim
+    # (spaces AND tabs) over the toml_get substrate.
+    local tmp
+    tmp=$(mktemp)
+    printf 'a =  spaced\n' >>"${tmp}"        # two leading spaces
+    printf 'b = trailing \n' >>"${tmp}"      # trailing space, unquoted
+    printf 'c = "quoted" \n' >>"${tmp}"      # trailing space after a quoted value
+    printf 'd =\tenforce\t\n' >>"${tmp}"     # tabs around the value
+    printf 'e = report # note\n' >>"${tmp}"  # inline comment + spacing
+    [ "$(toml_get a "${tmp}")" = "spaced" ]
+    [ "$(toml_get b "${tmp}")" = "trailing" ]
+    [ "$(toml_get c "${tmp}")" = "quoted" ]
+    [ "$(toml_get d "${tmp}")" = "enforce" ]
+    [ "$(toml_get e "${tmp}")" = "report" ]
+    rm -f "${tmp}"
+}
+
 @test "INVARIANT (log() helper writes to stderr — operator-diagnostic-channel discipline)" {
     # Sister to brain-wide stderr-vs-stdout INVARIANT family.
     # The module-lib's log() helper MUST write to stderr (>&2)
