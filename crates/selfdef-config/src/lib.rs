@@ -298,6 +298,27 @@ impl Config {
     /// Load configuration from `path` (if it exists), overlaying environment
     /// variables on top of the file and built-in defaults.
     pub fn load(path: Option<&Path>) -> Result<Self, ConfigError> {
+        let cfg = Self::parse(path)?;
+        cfg.validate()?;
+        Ok(cfg)
+    }
+
+    /// Parse configuration like [`Config::load`] but WITHOUT the semantic
+    /// [`Config::validate`] gate. Intended for diagnostic tools (e.g.
+    /// `selfdefctl doctor`) that must be able to PARSE a semantically-broken
+    /// config in order to report precisely which invariant it violates — the
+    /// strict [`Config::load`] aborts at the validation gate before the
+    /// diagnostic can run, which would leave the operator with a bare load
+    /// error instead of the doctor's per-check report. The daemon and all
+    /// mutating commands keep using [`Config::load`] (fail-fast at startup).
+    pub fn load_unvalidated(path: Option<&Path>) -> Result<Self, ConfigError> {
+        Self::parse(path)
+    }
+
+    /// Build the config from defaults + optional TOML file + `SELFDEF_` env,
+    /// without semantic validation. Shared by [`Config::load`] (which then
+    /// validates) and [`Config::load_unvalidated`] (which does not).
+    fn parse(path: Option<&Path>) -> Result<Self, ConfigError> {
         let mut fig = Figment::from(Serialized::defaults(Self::default()));
 
         if let Some(p) = path {
@@ -307,7 +328,6 @@ impl Config {
         }
 
         let cfg: Self = fig.merge(Env::prefixed("SELFDEF_").split("__")).extract()?;
-        cfg.validate()?;
         Ok(cfg)
     }
 
