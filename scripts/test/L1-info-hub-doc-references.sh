@@ -68,6 +68,8 @@ hard_failures=0
 # Format: <path>|<reason>
 ADVISORY_PATHS=(
     "wiki/spine/doctrine/peace-machine-and-core-law.md|operator-supervised authoring per SDD-031 line 147; on info-hub PR #17 (branch claude/recover-projects-b0oT6) awaiting operator decision"
+    "wiki/runbooks/metrics-correlator-lag.md|F-2026-094 correlator bus-lag runbook; on info-hub PR #18 (branch claude/clever-cerf-WPcVs) awaiting operator merge"
+    "wiki/runbooks/metrics-responder-lag.md|F-2026-094 responder bus-lag runbook; on info-hub PR #18 (branch claude/clever-cerf-WPcVs) awaiting operator merge"
 )
 
 is_advisory_path() {
