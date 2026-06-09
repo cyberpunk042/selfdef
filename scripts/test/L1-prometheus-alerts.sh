@@ -159,6 +159,39 @@ if [[ "${failures}" -gt 0 ]]; then
     exit 1
 fi
 
+# Gate 4b: every metric an alert EXPR fires on must actually be emitted
+# somewhere in the producer (a crate or a textfile-emitter script). Gate 4
+# only checks the reverse (the 9 named series HAVE an alert); it does not
+# catch an alert that references a typo'd / renamed / removed metric, which
+# would be a silently-DEAD alert (never fires, no signal). This is the
+# verification gate for "every alert fires on a real series". Metrics are
+# pulled from `expr:` lines only (description prose mentions series like
+# selfdef_events_* that aren't alert conditions).
+expr_metrics="$(grep -E '^\s*expr:' "${ALERTS}" | grep -oE 'selfdef_[a-z_0-9]+' | sort -u)"
+if [[ -z "${expr_metrics}" ]]; then
+    echo "  FAIL no selfdef_* metrics found in any alert expr (template shape changed?)"
+    exit 1
+fi
+dead=0
+for m in ${expr_metrics}; do
+    # List producer files (crate sources + textfile-emitter scripts + module
+    # assets) that emit this series, excluding test files and the alerts
+    # template itself (the consumer).
+    hits="$(grep -rlE "${m}" crates packaging/scripts modules 2>/dev/null \
+        --include=*.rs --include=*.sh --include=*.py \
+        | grep -vE '/tests?/|selfdef\.yml\.template' | head -1)"
+    if [[ -n "${hits}" ]]; then
+        echo "  PASS expr metric ${m} is emitted by a producer (${hits})"
+    else
+        echo "  FAIL expr metric ${m} is NOT emitted anywhere — silently-dead alert"
+        dead=$((dead + 1))
+    fi
+done
+if [[ "${dead}" -gt 0 ]]; then
+    echo "L1-prometheus-alerts FAIL: ${dead} alert(s) reference an unemitted (dead) metric"
+    exit 1
+fi
+
 # Gate 5: modules/observability/install/apply.sh wires the alert
 # template into the deployment path. Drift catcher.
 APPLY_SH="${APPLY_SH:-modules/observability/install/apply.sh}"
