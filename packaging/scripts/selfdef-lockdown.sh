@@ -26,7 +26,16 @@ cmd_activate() {
 
     nft add table inet selfdef_panic
     nft 'add chain inet selfdef_panic output { type filter hook output priority 0 ; policy drop ; }'
-    nft 'add rule inet selfdef_panic output ct state established,related accept'
+    # TRADE-OFF (read before relying on this for a compromise response): accepting
+    # `established,related` keeps EXISTING connections alive — including an active
+    # C2 / exfil channel the attacker already opened. It only blocks NEW egress.
+    # It is kept by default so the lockdown doesn't also sever YOUR management /
+    # SSH session. For a true panic that must CUT active connections, set
+    # SELFDEF_LOCKDOWN_CUT_ESTABLISHED=1 (and make sure your lifeline rule below
+    # covers the IP you manage the host from, or you will lock yourself out).
+    if [ "${SELFDEF_LOCKDOWN_CUT_ESTABLISHED:-0}" != "1" ]; then
+        nft 'add rule inet selfdef_panic output ct state established,related accept'
+    fi
     nft 'add rule inet selfdef_panic output oifname "lo" accept'
     # WireGuard interface allowed — operator-defined; uncomment if applicable.
     # nft 'add rule inet selfdef_panic output oifname "wg0" accept'
