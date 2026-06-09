@@ -207,8 +207,22 @@ impl AuditRegistry {
         Ok(Self { snapshot })
     }
 
-    /// Atomically persist.
+    /// Atomically and durably persist (tempfile + fsync + rename + dir fsync).
+    ///
+    /// Rename gives crash *consistency* (no torn read); the fsyncs give crash
+    /// *durability*. This is an append-only, hash-chained audit log: write+
+    /// rename can both return Ok with the bytes still in the page cache, so a
+    /// power loss right after appending a span could lose that span, resurrect
+    /// a stale chain tail, or leave a zero-length store — and a dropped span
+    /// breaks the `prev_chain_hash` linkage, which is exactly the tamper
+    /// signal the chain exists to make detectable. The audit chain must
+    /// survive a crash, not merely avoid tearing. Fsync the tempfile contents
+    /// before the rename, then fsync the parent directory so the rename's new
+    /// directory entry is durable too. Directory fsync is best-effort. Matches
+    /// the selfdef-cli init / guardian fsync convention.
     pub fn save(&self, path: &Path) -> Result<(), RegistryError> {
+        use std::io::Write as _;
+
         let io_err = |e: std::io::Error| RegistryError::Io {
             path: path.display().to_string(),
             source: e,
@@ -224,8 +238,22 @@ impl AuditRegistry {
                 source: e,
             })?;
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, body).map_err(io_err)?;
+        {
+            let mut f = std::fs::File::create(&tmp).map_err(io_err)?;
+            f.write_all(body.as_bytes()).map_err(io_err)?;
+            f.sync_all().map_err(io_err)?;
+        }
         std::fs::rename(&tmp, path).map_err(io_err)?;
+        if let Some(dir) = path.parent() {
+            let dir = if dir.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                dir
+            };
+            if let Ok(d) = std::fs::File::open(dir) {
+                let _ = d.sync_all();
+            }
+        }
         Ok(())
     }
 
@@ -500,6 +528,34 @@ mod tests {
         assert_eq!(back.spans().len(), 2);
         assert_eq!(back.spans()[0].trace_id, "t1");
         back.snapshot().validate_schema().unwrap();
+    }
+
+    #[test]
+    fn save_overwrites_existing_and_creates_missing_dirs_chain_intact() {
+        // Durable save must create absent parent dirs and truncate a longer
+        // prior file (File::create) so a shorter re-save leaves no stale tail,
+        // and the reloaded chain must still verify (prev_chain_hash linkage).
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/deeper/audit.json");
+
+        let mut r = AuditRegistry::new();
+        r.append_span(&span("t1"), now()).unwrap();
+        r.append_span(&span("t2"), now()).unwrap();
+        r.append_span(&span("t3"), now()).unwrap();
+        r.save(&path).unwrap();
+        assert_eq!(AuditRegistry::load(&path).unwrap().spans().len(), 3);
+
+        // Shorter re-save over the longer file: no stale tail, chain valid.
+        let mut r2 = AuditRegistry::new();
+        r2.append_span(&span("only"), now()).unwrap();
+        r2.save(&path).unwrap();
+
+        let mut back = AuditRegistry::load(&path).unwrap();
+        assert_eq!(back.spans().len(), 1);
+        assert_eq!(back.spans()[0].trace_id, "only");
+        assert!(back.verify_tail(now()).unwrap(), "reloaded chain verifies");
+        back.snapshot().validate_schema().unwrap();
+        assert!(!path.with_extension("json.tmp").exists());
     }
 
     #[test]
