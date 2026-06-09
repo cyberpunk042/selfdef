@@ -260,6 +260,32 @@ EOF
     [ "${rc}" -ne 0 ]
 }
 
+@test "INVARIANT (compute_baseline tolerates an unhashable path — TOCTOU delete — and surfaces it as drift, never aborts)" {
+    # Distinct from the 'file deleted BEFORE check' axis above (there
+    # expand_paths simply omits the gone file). This covers the TOCTOU
+    # window: expand_paths emits a regular file, then it VANISHES (active
+    # tampering) before sha256sum hashes it, so sha256sum fails -> xargs
+    # exits 123. Under the callers' `set -euo pipefail` that 123 must NOT
+    # abort compute_baseline (which would crash check.sh/apply.sh BEFORE
+    # emit_drift_event + emit_status, silently dropping the operator's
+    # tamper notification). The unhashable path must instead be absent from
+    # the output so the diff surfaces it as drift.
+    TEST_DIR="$(mktemp -d)"
+    echo "real" > "${TEST_DIR}/real.txt"
+    run bash -c "
+        set -euo pipefail
+        MODULE=integrity-sentinel DRY_RUN=0
+        source '${INSTALL_DIR}/lib.sh'
+        printf '%s\0%s\0' '${TEST_DIR}/real.txt' '${TEST_DIR}/gone.txt' | compute_baseline
+        echo MARKER_REACHED
+    "
+    rm -rf "${TEST_DIR}"
+    [ "${status}" -eq 0 ]                                   # no abort under pipefail
+    [[ "${output}" == *MARKER_REACHED* ]]                  # reached past the pipe
+    [[ "${output}" == *real.txt* ]]                        # the hashable file is present
+    [[ "${output}" != *gone.txt* ]]                        # the unhashable file is absent -> drift
+}
+
 @test "INVARIANT (baseline.sha256 mode is 0600 — confidentiality of monitored-file inventory)" {
     # The baseline.sha256 enumerates which paths are being watched
     # — that's sensitive intelligence (an attacker who knows the

@@ -90,7 +90,19 @@ expand_paths() {
 compute_baseline() {
     # xargs -0 sha256sum gets us the exact format we want. We sort by
     # path afterwards for stable diffs.
-    xargs -0 -r sha256sum 2>/dev/null | LC_ALL=C sort -k 2
+    #
+    # A per-file sha256sum failure (a monitored file expanded by
+    # `expand_paths` but then DELETED before we hash it — a TOCTOU race
+    # during active tampering — or an I/O error) makes `xargs` exit 123.
+    # Callers run under `set -euo pipefail`, so without the `|| true` that
+    # 123 propagates and ABORTS check.sh/apply.sh *before* the diff,
+    # `emit_drift_event`, and `emit_status` — i.e. the integrity monitor
+    # crashes silently (no operator notification) on the exact tamper it
+    # exists to catch. Tolerate the partial failure instead: the unhashable
+    # file simply has no line in the output, so the diff surfaces it as
+    # drift and the notifier fires. `sha256sum`/`sort` presence is already
+    # asserted by the callers, so the only failures here are per-file.
+    xargs -0 -r sha256sum 2>/dev/null | LC_ALL=C sort -k 2 || true
 }
 
 # Optional: append a Detection Finding (OCSF class 2004) to the
