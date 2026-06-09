@@ -277,3 +277,32 @@ groups:
           summary: "selfdef metrics ingest lag on {{ $labels.instance }} ({{ $value }} events dropped in 10m)"
           description: "The selfdef-api metrics-ingest subscriber missed {{ $value }} bus events in the last 10m (selfdef_ingest_lag_events_total rising) — the in-process bus broadcast is over-subscribed, so selfdef_events_* / selfdef_findings_* counters now UNDER-count reality and every counter-based alert here may not fire for events that landed in a dropped batch. Detection still happens (correlator + responder subscribe independently); it's the observability that's degraded. Remediate the event-storm source or raise [bus] inproc_capacity. See runbook."
           runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/metrics-ingest-lag.md"
+
+      # The correlator is a bus subscriber too: if IT lags, raw events are
+      # dropped before the rules ever evaluate them (F-2026-094). That is a
+      # DETECTION gap, strictly worse than ingest lag — a pattern in a dropped
+      # batch produces no finding at all. Same overflow mechanism, different
+      # (load-bearing) subscriber.
+      - alert: SelfdefCorrelatorBusLag
+        expr: increase(selfdef_correlator_lag_events_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "selfdef correlator bus lag on {{ $labels.instance }} ({{ $value }} raw events dropped before detection in 10m)"
+          description: "The selfdef correlator subscriber missed {{ $value }} bus events in the last 10m (selfdef_correlator_lag_events_total rising) — the in-process bus broadcast over-subscribed and those raw events were NEVER run through the Sigma/correlation rules, so any detection they would have triggered did not happen. Unlike ingest lag this degrades the DEFENSE, not just the metrics: it is a detection gap proportional to the drop count, and it spikes exactly when event volume does (during an incident). Remediate the event-storm source, raise [bus] inproc_capacity, or resolve correlator CPU starvation. See runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/metrics-correlator-lag.md"
+
+      # The responder is the last bus subscriber: if IT lags, findings are
+      # dropped before any autonomous action fires (F-2026-094). Detection
+      # happened, but no block/quarantine/notify was dispatched for those
+      # findings — a RESPONSE gap.
+      - alert: SelfdefResponderBusLag
+        expr: increase(selfdef_responder_lag_events_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "selfdef responder bus lag on {{ $labels.instance }} ({{ $value }} findings dropped before any action in 10m)"
+          description: "The selfdef responder subscriber missed {{ $value }} findings in the last 10m (selfdef_responder_lag_events_total rising) — the in-process bus broadcast over-subscribed and for those findings NO autonomous response fired (no block/quarantine/notify). Detection happened; the gap is between detecting and acting. An attacker flooding low-value findings to bury a high-value one under responder lag is a plausible evasion. Make the action path faster/async, raise [bus] inproc_capacity, or resolve responder CPU starvation. See runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/metrics-responder-lag.md"

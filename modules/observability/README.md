@@ -159,10 +159,11 @@ checked-in template propagate.
 
 ## Alert rules
 
-`assets/alerts/selfdef.yml.template` ships 16 Prometheus alert rules
+`assets/alerts/selfdef.yml.template` ships 18 Prometheus alert rules
 across 4 groups: the MS027 four-watchdog set, the M060 cross-repo
 mirror-export loop, the SDD-062 detection-watchdog finding stream, and
-the meta-observability ingest-lag warning.
+the meta-observability warnings (metrics-ingest lag + correlator bus lag
++ responder bus lag).
 
 ### MS027 four-watchdog set (MS046 + MS047 + MS044 + MS048)
 
@@ -199,11 +200,18 @@ the meta-observability ingest-lag warning.
 | Severity | Alert | Triggers when |
 |---|---|---|
 | warning | SelfdefMetricsIngestLag | `selfdef_ingest_lag_events_total` rises in 10m — the metrics-ingest subscriber dropped bus events, so `/metrics` under-counts and the counter-based alerts above may not fire for events in a dropped batch |
+| warning | SelfdefCorrelatorBusLag | `selfdef_correlator_lag_events_total` rises in 10m — the correlator subscriber dropped raw events, so they were never rule-evaluated and produced no finding at all (a detection gap, not just a metrics gap) |
+| warning | SelfdefResponderBusLag | `selfdef_responder_lag_events_total` rises in 10m — the responder subscriber dropped findings, so no autonomous block/quarantine/notify action fired for them (a response gap) |
 
-This one watches the observability path itself: detection still happens
-(correlator + responder subscribe to the bus independently), but the
-counters degrade. Remediate the event-storm source or raise
-`[bus] inproc_capacity`. Runbook: `wiki/runbooks/metrics-ingest-lag.md`.
+The ingest-lag alert watches the observability path itself: detection still
+happens (correlator + responder subscribe to the bus independently), but the
+counters degrade. The correlator- and responder-lag alerts are stronger: when
+those subscribers lag, the bus overflow degrades the *defense* — raw events
+bypass detection entirely (correlator) or findings fire no response
+(responder). All three share the `[bus] inproc_capacity` overflow mechanism.
+Runbooks: `wiki/runbooks/metrics-ingest-lag.md`,
+`wiki/runbooks/metrics-correlator-lag.md`,
+`wiki/runbooks/metrics-responder-lag.md`.
 
 Every alert carries `runbook_url` pointing at the matching
 remediation procedure. The four-watchdog + detection-watchdog + the

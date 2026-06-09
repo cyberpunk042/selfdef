@@ -85,6 +85,8 @@ if [[ -d "${INFOHUB_RUNBOOKS}" ]]; then
     ADVISORY_RUNBOOKS=(
         "m060-mirror-export-publish-anomalies.md|on info-hub PR #17 (branch claude/recover-projects-b0oT6) awaiting operator merge"
         "selfdef-watchdog-alert-finding.md|on info-hub PR #17 (branch claude/recover-projects-b0oT6) awaiting operator merge"
+        "metrics-correlator-lag.md|on info-hub branch claude/clever-cerf-WPcVs awaiting operator merge (F-2026-094 correlator bus-lag alert)"
+        "metrics-responder-lag.md|on info-hub branch claude/clever-cerf-WPcVs awaiting operator merge (F-2026-094 responder bus-lag alert)"
     )
     eval_result="$(python3 -c "
 import yaml, os

@@ -49,6 +49,7 @@ declare -A ALLOWED=(
     [selfdef_build_info]="info metric — a constant 1 whose value is its label set (version/commit); surfaced via labels on other panels, not a standalone series."
     [selfdef_events_total]="aggregate rollup — the 'events / second by class' panel (selfdef_events_by_class_total) sums to this; a dedicated total panel would duplicate it."
     [selfdef_findings_total]="aggregate rollup — the by-severity and by-rule panels (selfdef_findings_by_severity_total / _by_rule_total) cover this; a dedicated total panel would duplicate them."
+    [selfdef_responder_min_severity_floor]="config-reflection gauge (F-2026-092) — its value IS the active [responder].min_severity floor (OCSF severity_id; 0 = no floor), not a time-varying operational signal. Like selfdef_build_info, it is surfaced as context (and referenced in the responder-lag runbook), not as a standalone panel/alert; there is no condition on it to alert."
 )
 
 echo "L1-api-metric-observability-coverage: checking ${METRICS_RS}"
