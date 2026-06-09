@@ -935,8 +935,20 @@ async fn main() -> Result<()> {
     shutdown.cancel();
 
     for (name, h) in collector_handles {
-        let _ = tokio::time::timeout(Duration::from_secs(5), h).await;
-        info!(collector = name, "collector stopped");
+        match tokio::time::timeout(Duration::from_secs(5), h).await {
+            Ok(Ok(())) => info!(collector = name, "collector stopped"),
+            // The handle was already finished with a JoinError — the collector
+            // task panicked at some earlier point in the run, NOT during this
+            // shutdown. Nothing was watching it live, so events from this
+            // source were silently lost until now. Report the truth instead of
+            // logging a clean "stopped" (the old `let _ = …` swallowed this).
+            Ok(Err(e)) => warn!(
+                collector = name, error = %e,
+                "collector task terminated abnormally (panicked) before shutdown \
+                 — events from this source were silently lost while the daemon ran"
+            ),
+            Err(_) => warn!(collector = name, "collector did not stop within 5s"),
+        }
     }
     if let Some(h) = correlator_task {
         let _ = tokio::time::timeout(Duration::from_secs(5), h).await;
