@@ -35,9 +35,57 @@ pub fn drain_complete_lines(pending: &mut String) -> Vec<String> {
     out
 }
 
+/// Decide whether a tailed file must be reopened because it was rotated out
+/// from under the reader.
+///
+/// A naive tailer opens the path once and follows the open handle forever; when
+/// `logrotate` (or any rotation) moves the file aside, new events go to a file
+/// the reader never opened and it silently goes blind. The two rotation styles
+/// are both detected here:
+///
+/// - **rename-and-recreate** — the path now resolves to a *different* inode than
+///   our open handle (`open_inode != path_inode`); the new file must be opened.
+/// - **copytruncate** — the same inode is truncated back to (near) zero, so the
+///   file is now *shorter than our read offset* (`current_len < read_pos`); we
+///   must seek back to its start.
+///
+/// `read_pos` is the byte offset the reader has consumed; `current_len` and
+/// `path_inode` describe the file the path resolves to *now*; `open_inode` is
+/// the inode of the handle currently being read. Pure so it can be unit-tested
+/// without touching the filesystem.
+#[must_use]
+pub fn should_reopen(read_pos: u64, current_len: u64, open_inode: u64, path_inode: u64) -> bool {
+    open_inode != path_inode || current_len < read_pos
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_reopen_during_normal_tailing() {
+        // same inode, file at least as long as we've read → just keep tailing.
+        assert!(!should_reopen(100, 100, 7, 7));
+        assert!(!should_reopen(100, 250, 7, 7));
+        assert!(!should_reopen(0, 0, 7, 7));
+    }
+
+    #[test]
+    fn reopen_on_rename_rotation() {
+        // the path now points at a different inode (logrotate rename+create).
+        assert!(should_reopen(100, 250, 7, 9));
+        // true regardless of length — even a longer new file is a new stream.
+        assert!(should_reopen(0, 0, 7, 9));
+    }
+
+    #[test]
+    fn reopen_on_copytruncate() {
+        // same inode, but the file shrank below our offset (truncated in place).
+        assert!(should_reopen(500, 0, 7, 7));
+        assert!(should_reopen(500, 499, 7, 7));
+        // exactly equal length is not a shrink.
+        assert!(!should_reopen(500, 500, 7, 7));
+    }
 
     #[test]
     fn partial_line_yields_nothing_and_stays_buffered() {

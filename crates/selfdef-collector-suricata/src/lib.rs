@@ -11,6 +11,7 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -78,6 +79,8 @@ impl SuricataCollector {
         if self.read_from == ReadFrom::End {
             file.seek(std::io::SeekFrom::End(0)).await?;
         }
+        let mut read_pos = file.stream_position().await.unwrap_or(0);
+        let mut open_inode = file.metadata().await.map(|m| m.ino()).unwrap_or(0);
         let mut reader = BufReader::new(file);
         let mut buf = String::new();
         // Buffers a partial line read before its terminating newline arrived,
@@ -94,9 +97,32 @@ impl SuricataCollector {
                 () = shutdown.cancelled() => return Ok(()),
             };
             if n == 0 {
+                // EOF — but eve.json is rotated by logrotate (rename+create, or
+                // copytruncate). Without detecting that we'd tail a dead handle
+                // forever and silently go blind to every event after the nightly
+                // rotation. Check whether the path was rotated/truncated out from
+                // under us and, if so, reopen the fresh file from its start.
+                if let Ok(md) = tokio::fs::metadata(&self.input_path).await {
+                    if selfdef_collector_util::should_reopen(
+                        read_pos,
+                        md.len(),
+                        open_inode,
+                        md.ino(),
+                    ) {
+                        if let Ok(f) = tokio::fs::File::open(&self.input_path).await {
+                            open_inode = f.metadata().await.map(|m| m.ino()).unwrap_or(open_inode);
+                            reader = BufReader::new(f); // rotated/truncated → fresh stream
+                            read_pos = 0;
+                            pending.clear();
+                            info!(path = %self.input_path.display(), "eve.json rotated/truncated; reopened");
+                            continue;
+                        }
+                    }
+                }
                 tokio::time::sleep(POLL_INTERVAL).await;
                 continue;
             }
+            read_pos += n as u64;
             pending.push_str(&buf);
             for line in selfdef_collector_util::drain_complete_lines(&mut pending) {
                 self.process_line(&line);
@@ -265,5 +291,67 @@ mod tests {
         assert_eq!(event.class_uid, ClassUid::DETECTION_FINDING);
         assert_eq!(event.severity_id, SeverityId::Medium);
         assert!(event.message.unwrap().contains("nmap probe"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn reopens_after_log_rotation() {
+        use std::io::Write;
+        let alert = |sig: &str| {
+            format!(
+                r#"{{"event_type":"alert","src_ip":"192.0.2.5","src_port":1,"dest_ip":"203.0.113.10","dest_port":22,"alert":{{"signature":"{sig}","category":"x","severity":2}}}}"#
+            )
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("eve.json");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(f, "{}", alert("before-rotation")).unwrap();
+        }
+
+        let bus = Bus::new(64);
+        let mut sub = bus.subscribe();
+        let collector =
+            SuricataCollector::new(path.clone(), ReadFrom::Start, bus.publisher(), "h".into());
+        let token = CancellationToken::new();
+        let run_token = token.clone();
+        let handle = tokio::spawn(async move { collector.run(run_token).await });
+
+        // pre-rotation event arrives.
+        let e1 = tokio::time::timeout(Duration::from_secs(3), sub.recv())
+            .await
+            .expect("first event timed out")
+            .expect("recv error");
+        assert!(e1.message.unwrap().contains("before-rotation"));
+
+        // logrotate: rename the live file aside and create a NEW file at the same
+        // path with a fresh alert (the rename+create rotation style).
+        std::fs::rename(&path, dir.path().join("eve.json.1")).unwrap();
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(f, "{}", alert("after-rotation")).unwrap();
+        }
+
+        // The post-rotation event must arrive — proving the collector detected the
+        // new inode and reopened, rather than tailing the renamed-away file forever.
+        let mut got_after = false;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while !got_after && tokio::time::Instant::now() < deadline {
+            if let Ok(Ok(ev)) = tokio::time::timeout(Duration::from_secs(1), sub.recv()).await {
+                if ev
+                    .message
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("after-rotation")
+                {
+                    got_after = true;
+                }
+            }
+        }
+        token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), handle).await;
+        assert!(
+            got_after,
+            "collector did not pick up events from the rotated-in file"
+        );
     }
 }
