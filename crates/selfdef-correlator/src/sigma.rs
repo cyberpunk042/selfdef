@@ -231,10 +231,31 @@ impl MatchValue {
 
 // ---------------------------------- aggregator
 
+/// Run an opportunistic stale-group sweep once every this many observations.
+/// The aggregator keys on `group_by_field` (e.g. source IP, username, pid),
+/// which is attacker-influenced: a flood of distinct one-shot values would
+/// otherwise park one map entry per value forever, since a group is only
+/// pruned when that same key is observed again. Sweeping on a fixed cadence
+/// reclaims groups whose newest observation has already aged out of the
+/// window, bounding memory to (groups active within the window) + at most one
+/// cadence of stragglers. Gated on a counter, not on map size, so the sweep
+/// amortizes to O(1) per observe instead of O(n) every call — an O(n)-per-event
+/// sweep would make a high-cardinality flood worse, not better.
+const GC_EVERY: u64 = 1024;
+
+/// Aggregator state behind the lock: the per-group observation deques plus a
+/// monotonic observe counter that drives the periodic GC sweep.
+#[derive(Debug, Default)]
+struct AggState {
+    /// (group key) -> deque of observation times (front = oldest).
+    groups: HashMap<String, VecDeque<Instant>>,
+    /// Total observations since construction; gates the GC sweep cadence.
+    observes: u64,
+}
+
 #[derive(Debug)]
 pub struct Aggregator {
-    /// (group key) -> deque of observation times.
-    state: Mutex<HashMap<String, VecDeque<Instant>>>,
+    state: Mutex<AggState>,
     threshold: u32,
     window: Duration,
 }
@@ -242,32 +263,64 @@ pub struct Aggregator {
 impl Aggregator {
     fn new(threshold: u32, window: Duration) -> Self {
         Self {
-            state: Mutex::new(HashMap::new()),
+            state: Mutex::new(AggState::default()),
             threshold,
             window,
         }
     }
 
     /// Returns Some(key) if observation pushes that group over threshold.
-    /// Clears the group's window on fire so we don't double-fire.
-    fn observe(&self, key: String) -> Option<String> {
-        let now = Instant::now();
+    /// Removes the group's entry on fire so we don't double-fire and so a
+    /// fired group doesn't leave an empty deque parked in the map.
+    ///
+    /// `now` is injected (rather than read from `Instant::now()` here) so the
+    /// window and GC behaviour are deterministically testable; the production
+    /// caller passes `Instant::now()`.
+    fn observe(&self, key: String, now: Instant) -> Option<String> {
+        let window = self.window;
         let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
-        let queue = state.entry(key.clone()).or_default();
+        state.observes = state.observes.wrapping_add(1);
+
+        // Periodic GC: drop groups whose most-recent observation is already
+        // older than the window. Such a group would prune to empty the next
+        // time it is touched, but a group that is never seen again would
+        // otherwise linger forever — the unbounded-growth vector for
+        // high-cardinality, attacker-influenced group-by values. Active groups
+        // (newest observation within the window) are kept, so verdicts are
+        // unaffected.
+        if state.observes % GC_EVERY == 0 {
+            state.groups.retain(|_, q| {
+                q.back()
+                    .is_some_and(|&last| now.duration_since(last) <= window)
+            });
+        }
+
+        let queue = state.groups.entry(key.clone()).or_default();
         queue.push_back(now);
         while let Some(&front) = queue.front() {
-            if now.duration_since(front) > self.window {
+            if now.duration_since(front) > window {
                 queue.pop_front();
             } else {
                 break;
             }
         }
-        if queue.len() as u32 > self.threshold {
-            queue.clear();
+        let fired = queue.len() as u32 > self.threshold;
+        if fired {
+            state.groups.remove(&key);
             Some(key)
         } else {
             None
         }
+    }
+
+    /// Number of tracked groups (test-only; asserts the GC bound).
+    #[cfg(test)]
+    fn group_count(&self) -> usize {
+        self.state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .groups
+            .len()
     }
 }
 
@@ -648,7 +701,7 @@ impl Engine {
                                 .or_else(|| Some(v.to_string()))
                         })
                         .unwrap_or_default();
-                    if let Some(k) = agg.observe(key) {
+                    if let Some(k) = agg.observe(key, Instant::now()) {
                         findings.push(build_finding(rule, event, host_tag, sequence, Some(k)));
                     }
                 }
@@ -923,6 +976,50 @@ level: high
         assert_eq!(f[0].severity_id, SeverityId::High);
         assert!(!f[0].attack.is_empty());
         assert_eq!(f[0].attack[0].id, "T1110");
+    }
+
+    #[test]
+    fn fired_group_is_removed_from_state() {
+        // `count() > 0` fires on the first match of each group. Each fired
+        // group must be removed from the map, not left as an empty deque —
+        // otherwise a stream of distinct one-shot group-by values (e.g.
+        // spoofed source IPs) parks one residual entry per value forever.
+        let agg = Aggregator::new(0, Duration::from_secs(60));
+        let t = Instant::now();
+        assert_eq!(agg.observe("ip-a".into(), t), Some("ip-a".into()));
+        assert_eq!(agg.observe("ip-b".into(), t), Some("ip-b".into()));
+        assert_eq!(agg.observe("ip-c".into(), t), Some("ip-c".into()));
+        assert_eq!(agg.group_count(), 0, "fired groups leave no residue");
+    }
+
+    #[test]
+    fn stale_silent_groups_are_swept() {
+        // A group keyed on an attacker-influenced field that is seen once and
+        // never again would linger forever without the periodic GC. Observe a
+        // large set of distinct one-shot keys, advance past the window so they
+        // are all stale, then drive enough further observes to cross a GC
+        // cadence — the stale silent groups must be reclaimed, leaving the map
+        // bounded rather than monotonically growing.
+        let window = Duration::from_millis(10);
+        let agg = Aggregator::new(1_000_000, window); // threshold never met
+        let t0 = Instant::now();
+        for i in 0..2000 {
+            assert!(agg.observe(format!("k{i}"), t0).is_none());
+        }
+        assert_eq!(agg.group_count(), 2000);
+
+        // Past the window: every `k*` is now stale. Drive one GC cadence worth
+        // of fresh observes; the sweep that fires mid-loop drops the stale
+        // groups while keeping the fresh ones.
+        let t1 = t0 + window + Duration::from_millis(1);
+        for i in 0..GC_EVERY {
+            agg.observe(format!("fresh{i}"), t1);
+        }
+        assert!(
+            agg.group_count() < 2000,
+            "stale silent groups reclaimed by GC (was {})",
+            agg.group_count()
+        );
     }
 
     #[test]
