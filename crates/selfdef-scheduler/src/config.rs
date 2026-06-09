@@ -493,6 +493,54 @@ kid = "kid-prod-2026"
     }
 
     #[test]
+    fn shipped_example_loads_and_spot_checks() {
+        // packaging/config/scheduler.toml.example is what operators copy to
+        // /etc/selfdef/scheduler.toml. The existing load tests use SYNTHETIC
+        // configs, so nothing exercised the shipped example itself — a typo,
+        // wrong-typed value, or a mis-sectioned key (cf. selfdef.toml's
+        // responder fields that drifted under [api.tls]) would only surface
+        // on a real operator's daemon start. Lock it (parity with the
+        // selfdef-config example_config_loads test): the shipped example MUST
+        // load through the real loader, and a value from EACH section is
+        // spot-checked so a section that silently stopped parsing is caught.
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packaging/config/scheduler.toml.example");
+        assert!(
+            path.exists(),
+            "shipped scheduler example missing at {}",
+            path.display()
+        );
+        let c = SchedulerConfig::load_from(&path)
+            .unwrap_or_else(|e| panic!("scheduler.toml.example failed to load: {e}"));
+
+        // [substrate]
+        assert_eq!(
+            c.substrate.state_root,
+            PathBuf::from("/var/lib/selfdef"),
+            "substrate section read"
+        );
+        assert_eq!(
+            c.substrate.dcgm_indices,
+            DcgmGpuIndices::custom(0, 1),
+            "substrate.dcgm_indices nested table read"
+        );
+        // [emit]
+        assert!(c.emit.audit_enabled, "emit section read");
+        assert_eq!(c.emit.audit_max_generations, 10, "emit.audit_max_generations");
+        // [thresholds]
+        assert!(
+            (c.thresholds.blackwell_vram_high - 0.90).abs() < 1e-5,
+            "thresholds section read"
+        );
+        assert_eq!(c.thresholds.human_gate_queue_high, 5, "thresholds.human_gate");
+        // [signer] — kid is commented out in the example (unsigned default).
+        assert_eq!(
+            c.signer.kid, None,
+            "signer.kid is documented commented-out → unsigned mode"
+        );
+    }
+
+    #[test]
     fn partial_config_fills_in_defaults() {
         // Operator only overrides one section; the rest defaults.
         let c = SchedulerConfig::parse_str(
