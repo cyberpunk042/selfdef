@@ -274,9 +274,19 @@ impl SubscriberGuard {
                 // Undo the per-token increment so the next request
                 // under the same token still gets its full slice.
                 if let Some((map, fp)) = &per_token {
-                    let m = map.lock().unwrap_or_else(|p| p.into_inner());
+                    let mut m = map.lock().unwrap_or_else(|p| p.into_inner());
                     if let Some(c) = m.get(fp) {
-                        c.fetch_sub(1, Ordering::AcqRel);
+                        // Mirror Drop's prune-on-zero. This entry was created
+                        // by the per-token step just above purely for a request
+                        // we're now rejecting; if the decrement empties it, it
+                        // must be removed, not parked at 0. Otherwise every
+                        // distinct fingerprint turned away by a saturated global
+                        // cap leaves a zombie {fp: 0} entry and the map grows
+                        // unboundedly — defeating the bound the Drop path keeps.
+                        let prev = c.fetch_sub(1, Ordering::AcqRel);
+                        if prev == 1 {
+                            m.remove(fp);
+                        }
                     }
                 }
                 return Err(AcquireError::GlobalCap);

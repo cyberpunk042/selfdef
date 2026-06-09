@@ -1129,6 +1129,54 @@ async fn events_stream_per_token_counter_drops_to_zero_on_disconnect() {
     );
 }
 
+/// The global-cap rejection path must not leak per-token map entries. A
+/// fingerprint that creates its per-token entry only to be turned away by a
+/// saturated global cap must not leave a zombie `{fp: 0}` entry behind —
+/// otherwise the map grows unboundedly under sustained global-cap pressure
+/// across distinct fingerprints, defeating the prune the guard's Drop performs.
+#[tokio::test]
+async fn events_stream_global_cap_rejection_does_not_leak_per_token_entry() {
+    use selfdef_api::{SseCaps, TokenFingerprint};
+
+    let (state, _bus, _store, _dir) = build_state().await;
+    let state = state.with_sse_caps(SseCaps {
+        global: Some(1),
+        per_token: None,
+    });
+
+    let fp_a = TokenFingerprint::of("alice-holds-global");
+    let fp_b = TokenFingerprint::of("bob-rejected-by-global");
+
+    // A takes the single global slot and HOLDS it (response kept in scope).
+    let app_a = app_for_token(state.clone(), fp_a);
+    let req_a = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let r_a = app_a.oneshot(req_a).await.unwrap();
+    assert_eq!(r_a.status(), StatusCode::OK);
+
+    // B is rejected by the saturated global cap. Its per-token entry was
+    // created during try_acquire, then undone by the global-cap rollback.
+    let app_b = app_for_token(state.clone(), fp_b);
+    let req_b = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let r_b = app_b.oneshot(req_b).await.unwrap();
+    assert_eq!(r_b.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    let keys = state.sse_subscribers_per_token_keys();
+    assert!(
+        !keys.contains(&fp_b),
+        "global-cap-rejected fingerprint leaked a per-token entry; keys: {keys:?}",
+    );
+
+    drop(r_a);
+}
+
 mod prom {
     //! Minimal Prometheus exposition parser for SDD-005 D-2b. Not a
     //! general parser — only handles what we emit (counters and gauges
