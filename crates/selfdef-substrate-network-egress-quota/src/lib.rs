@@ -214,6 +214,16 @@ impl SubstrateEgressQuota {
                 cap: cfg.max_request_bytes,
             });
         }
+        // Self-bound the record set. account() is the per-send hot path; without
+        // this it appends a record on every accepted send and never trims, so a
+        // long-running daemon that calls account() but forgets the separate
+        // public rotate() would grow records without bound AND make
+        // in_window_bytes() (a full scan) O(n) per call — O(n²) overall — on a
+        // security-critical egress-budget path. rotate() drops only records
+        // older than the largest configured window, which lie outside every
+        // profile's per-window cutoff and so never contribute to an in_window
+        // sum: verdicts are unchanged, memory and scan cost stay bounded.
+        self.rotate(now_ms);
         let used = self.in_window_bytes(profile, &cfg, now_ms);
         let would = used.saturating_add(bytes);
         if would > cfg.window_budget_bytes {
@@ -332,6 +342,26 @@ mod tests {
         q.account(Profile::Fast, 1024, 0).unwrap();
         q.rotate(10 * 60_000);
         assert!(q.records.is_empty());
+    }
+
+    #[test]
+    fn account_self_bounds_records_without_explicit_rotate() {
+        // The per-send hot path must not leak: accounting repeatedly, each call
+        // beyond the max window after the last, must keep records bounded even
+        // though the caller never invokes rotate itself.
+        let mut q = SubstrateEgressQuota::canonical();
+        for i in 0..1000u64 {
+            let now = i * (10 * 60_000); // 10 min apart > 5 min window
+            assert!(matches!(
+                q.account(Profile::Fast, 1024, now).unwrap(),
+                EgressVerdict::Accepted
+            ));
+        }
+        assert!(
+            q.records.len() < 5,
+            "records self-bounded by account (was {})",
+            q.records.len()
+        );
     }
 
     #[test]

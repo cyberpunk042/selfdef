@@ -214,6 +214,16 @@ impl SubstrateDiskQuota {
                 cap: cfg.max_file_bytes,
             });
         }
+        // Self-bound the record set. account() is the per-write hot path;
+        // without this it appends a record on every accepted write and never
+        // trims, so a long-running daemon that calls account() but forgets the
+        // separate public rotate() would grow records without bound AND make
+        // in_window_bytes() (a full scan) O(n) per call — O(n²) overall — on a
+        // security-critical disk-budget path. rotate() drops only records older
+        // than the largest configured window, which lie outside every profile's
+        // per-window cutoff and so never contribute to an in_window sum:
+        // verdicts are unchanged, memory and scan cost stay bounded.
+        self.rotate(now_ms);
         let used = self.in_window_bytes(profile, &cfg, now_ms);
         let would = used.saturating_add(bytes);
         if would > cfg.window_budget_bytes {
@@ -309,6 +319,27 @@ mod tests {
         let day_ms: u64 = 24 * 60 * 60 * 1000;
         q.rotate(day_ms + 1000);
         assert!(q.records.is_empty());
+    }
+
+    #[test]
+    fn account_self_bounds_records_without_explicit_rotate() {
+        // The per-write hot path must not leak: accounting repeatedly, each call
+        // beyond the max window after the last, must keep records bounded even
+        // though the caller never invokes rotate itself.
+        let mut q = SubstrateDiskQuota::canonical();
+        let day_ms: u64 = 24 * 60 * 60 * 1000;
+        for i in 0..1000u64 {
+            let now = i * (2 * day_ms); // 2 days apart > 1 day window
+            assert!(matches!(
+                q.account(Profile::Fast, 1024, now).unwrap(),
+                AccountVerdict::Accepted
+            ));
+        }
+        assert!(
+            q.records.len() < 5,
+            "records self-bounded by account (was {})",
+            q.records.len()
+        );
     }
 
     #[test]
