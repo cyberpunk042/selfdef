@@ -185,6 +185,14 @@ observability module ships a Grafana dashboard + Prometheus alert
 rules that consume these. No authentication is performed on
 `/metrics` over the UNIX socket; on TCP, the read token is required.
 
+If you set a `responder.min_severity` floor (see
+[config](config.md)), watch `selfdef_responder_min_severity_floor`
+(the active floor as an OCSF `severity_id`, `0` = no floor)
+alongside `selfdef_findings_by_severity_total`: dividing the
+findings below the floor by the total tells you how much the floor
+is suppressing, so a too-high floor silently swallowing real
+detections is visible rather than invisible.
+
 ### SSE live tail
 
 The `/events/stream` endpoint subscribes to a fresh bus subscriber per

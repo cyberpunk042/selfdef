@@ -441,6 +441,14 @@ async fn main() -> Result<()> {
         // SDD-081: surface retention on/off so a consumer alert can tell
         // "operator opted out" from "retention stalled".
         m.set_retention_enabled(cfg.store.hot_retention_days > 0);
+        // F-2026-092: surface the responder's autonomous-response severity
+        // floor (0 = none) so a dashboard can chart suppression against
+        // selfdef_findings_by_severity_total instead of guessing the config.
+        let floor_repr = match cfg.responder.min_severity.trim().to_ascii_lowercase().as_str() {
+            "" | "none" | "unknown" => 0,
+            other => parse_severity_floor(other).map_or(0, |s| s as u32),
+        };
+        m.set_responder_min_severity_floor(floor_repr);
     }
 
     // SD-R retention sweep (SDD-081): enforce StoreConfig::hot_retention_days.

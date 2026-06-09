@@ -59,6 +59,14 @@ pub struct Metrics {
     /// disabled" (enabled=0 → sweeps stay 0 by design) from "retention
     /// stalled" (enabled=1 but sweeps not advancing). Set once at startup.
     retention_enabled: AtomicU64,
+    /// Configured responder autonomous-response severity floor as its OCSF
+    /// `severity_id` repr (F-2026-092): 0 = no floor (every finding processed),
+    /// else the minimum grade a finding must reach to be auto-dispatched on the
+    /// bus path. Set once at startup. Combined with
+    /// `selfdef_findings_by_severity_total`, an operator can chart exactly how
+    /// many findings the floor is suppressing — a too-high floor silently
+    /// swallowing real detections becomes visible rather than invisible.
+    responder_min_severity_floor: AtomicU64,
 
     /// M060 mirror-export per-artifact publish counters. Keys are the
     /// canonical artifact filename (e.g. `"grants.json"`); values are
@@ -91,6 +99,7 @@ impl Metrics {
             retention_sweeps_total: AtomicU64::new(0),
             retention_pruned_total: AtomicU64::new(0),
             retention_enabled: AtomicU64::new(0),
+            responder_min_severity_floor: AtomicU64::new(0),
             m060_publish_counts: Mutex::new(HashMap::new()),
             m060_last_publish_unix: Mutex::new(HashMap::new()),
         }
@@ -178,6 +187,14 @@ impl Metrics {
     pub fn set_retention_enabled(&self, enabled: bool) {
         self.retention_enabled
             .store(u64::from(enabled), Ordering::Relaxed);
+    }
+
+    /// Set the configured responder autonomous-response severity floor as its
+    /// OCSF `severity_id` repr (F-2026-092). `0` means no floor. Called once at
+    /// daemon startup after the floor is parsed from `responder.min_severity`.
+    pub fn set_responder_min_severity_floor(&self, floor_repr: u32) {
+        self.responder_min_severity_floor
+            .store(u64::from(floor_repr), Ordering::Relaxed);
     }
 
     /// Render the current counters as a Prometheus exposition-format
@@ -334,6 +351,17 @@ impl Metrics {
             out,
             "selfdef_store_retention_enabled {}",
             self.retention_enabled.load(Ordering::Relaxed),
+        )
+        .unwrap();
+
+        out.push_str(
+            "# HELP selfdef_responder_min_severity_floor Responder autonomous-response severity floor as OCSF severity_id (0 = no floor); findings below it are not auto-dispatched (F-2026-092).\n",
+        );
+        out.push_str("# TYPE selfdef_responder_min_severity_floor gauge\n");
+        writeln!(
+            out,
+            "selfdef_responder_min_severity_floor {}",
+            self.responder_min_severity_floor.load(Ordering::Relaxed),
         )
         .unwrap();
 
@@ -630,6 +658,30 @@ mod tests {
             "{body}"
         );
         assert!(body.contains("selfdef_store_retention_enabled 1"), "{body}");
+    }
+
+    #[test]
+    fn responder_min_severity_floor_renders_default_zero_and_set_value() {
+        // F-2026-092: the floor gauge defaults to 0 (no floor) and reflects the
+        // configured grade once set. Locks the TYPE line + both values so the
+        // suppression-observability series can't silently drop.
+        let m = Metrics::new("h");
+        let default_body = m.render(0);
+        assert!(
+            default_body.contains("# TYPE selfdef_responder_min_severity_floor gauge"),
+            "{default_body}"
+        );
+        assert!(
+            default_body.contains("selfdef_responder_min_severity_floor 0"),
+            "default floor is 0 (none):\n{default_body}"
+        );
+        // SeverityId::High has OCSF severity_id repr 4.
+        m.set_responder_min_severity_floor(4);
+        let set_body = m.render(0);
+        assert!(
+            set_body.contains("selfdef_responder_min_severity_floor 4"),
+            "floor set to High(4):\n{set_body}"
+        );
     }
 
     #[test]
