@@ -440,6 +440,37 @@ impl Config {
                     self.api.unix_socket_mode
                 )));
             }
+            // TLS for the TCP transport. The daemon enables TLS only when BOTH
+            // cert_path and key_path are set, and requires client certs (mTLS)
+            // only when client_ca is *also* set — all inside that same TLS
+            // branch (`build_api_config`). So a half-configured TLS (exactly one
+            // of cert/key) or an mTLS-only block (client_ca without cert+key)
+            // silently DISABLES TLS and serves the TCP control API in PLAINTEXT,
+            // gated by the bearer token alone — the opposite of the operator's
+            // evident intent, since they supplied a cert / key / CA precisely to
+            // encrypt it. Fail fast instead of silently downgrading. Only the
+            // TCP transport uses TLS, so this is gated on `has_tcp`.
+            if has_tcp {
+                let cert = !self.api.tls.cert_path.trim().is_empty();
+                let key = !self.api.tls.key_path.trim().is_empty();
+                let client_ca = !self.api.tls.client_ca.trim().is_empty();
+                if cert != key {
+                    return Err(ConfigError::Invalid(
+                        "[api.tls] cert_path and key_path must BOTH be set (or both empty) — \
+                         exactly one is set, which silently disables TLS and serves the TCP \
+                         control API in plaintext (bearer token only)"
+                            .into(),
+                    ));
+                }
+                if client_ca && !(cert && key) {
+                    return Err(ConfigError::Invalid(
+                        "[api.tls] client_ca (mTLS) is set but cert_path/key_path are not — \
+                         mTLS requires TLS, so without a cert+key the TCP control API silently \
+                         serves plaintext with no client-certificate requirement"
+                            .into(),
+                    ));
+                }
+            }
         }
 
         // The NATS multi-host bridge only starts when it's enabled AND has a
@@ -1846,6 +1877,51 @@ mod tests {
         cfg.api.tcp_addr = "127.0.0.1:8443".into();
         cfg.api.token_file = "/run/selfdef/token".into();
         cfg.api.unix_socket_mode = "garbage".into();
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_half_configured_api_tls() {
+        // A cert without a key (or vice versa), or client_ca without cert+key,
+        // makes the daemon silently disable TLS and serve the TCP control API in
+        // plaintext. validate must reject these — but only when TCP is in use.
+        let base = || {
+            let mut c = Config::default();
+            c.api.enabled = true;
+            c.api.tcp_addr = "127.0.0.1:8443".into();
+            c.api.token_file = "/run/selfdef/token".into();
+            c
+        };
+        // cert without key → rejected.
+        let mut cfg = base();
+        cfg.api.tls.cert_path = "/etc/selfdef/api.crt".into();
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("cert_path and key_path"), "{err}");
+        // key without cert → rejected.
+        let mut cfg = base();
+        cfg.api.tls.key_path = "/etc/selfdef/api.key".into();
+        assert!(matches!(cfg.validate(), Err(ConfigError::Invalid(_))));
+        // client_ca (mTLS) without cert+key → rejected.
+        let mut cfg = base();
+        cfg.api.tls.client_ca = "/etc/selfdef/ca.crt".into();
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("client_ca"), "{err}");
+        // cert+key → valid TLS; adding client_ca → valid mTLS.
+        let mut cfg = base();
+        cfg.api.tls.cert_path = "/etc/selfdef/api.crt".into();
+        cfg.api.tls.key_path = "/etc/selfdef/api.key".into();
+        cfg.validate().unwrap();
+        cfg.api.tls.client_ca = "/etc/selfdef/ca.crt".into();
+        cfg.validate().unwrap();
+        // Neither set → TLS off, valid (plain HTTP + bearer, the documented default).
+        base().validate().unwrap();
+        // A half-TLS config with NO TCP transport (unix only) is not a plaintext
+        // hazard — there is no TCP listener — so it must still load.
+        let mut cfg = Config::default();
+        cfg.api.enabled = true;
+        cfg.api.unix_socket = "/run/selfdef/api.sock".into();
+        cfg.api.tcp_addr = String::new();
+        cfg.api.tls.cert_path = "/etc/selfdef/api.crt".into(); // key intentionally empty
         cfg.validate().unwrap();
     }
 
