@@ -190,14 +190,36 @@ impl RulesRegistry {
                 source: e,
             }
         })?;
-        std::fs::write(&tmp, &bytes).map_err(|e| RegistryError::Io {
-            path: tmp.display().to_string(),
-            source: e,
-        })?;
+        // fsync the tempfile contents before the rename publishes them, so a
+        // power loss right after a rule change cannot lose the mutation,
+        // resurrect a stale rules.json, or leave a zero-length store the daemon
+        // reloads as an empty ruleset. The rename alone gives crash
+        // consistency (no torn read) but not durability. fsync the parent
+        // directory afterward so the rename's new directory entry is durable
+        // too. Directory fsync is best-effort. Matches the selfdef-cli init /
+        // guardian fsync convention.
+        {
+            use std::io::Write as _;
+            let mut f = std::fs::File::create(&tmp).map_err(|e| RegistryError::Io {
+                path: tmp.display().to_string(),
+                source: e,
+            })?;
+            f.write_all(&bytes).map_err(|e| RegistryError::Io {
+                path: tmp.display().to_string(),
+                source: e,
+            })?;
+            f.sync_all().map_err(|e| RegistryError::Io {
+                path: tmp.display().to_string(),
+                source: e,
+            })?;
+        }
         std::fs::rename(&tmp, path).map_err(|e| RegistryError::Io {
             path: path.display().to_string(),
             source: e,
         })?;
+        if let Ok(d) = std::fs::File::open(parent) {
+            let _ = d.sync_all();
+        }
         Ok(())
     }
 }
@@ -295,6 +317,40 @@ mod tests {
         assert_eq!(loaded.rule_count(), 2);
         assert_eq!(loaded.snapshot().schema_version, SCHEMA_VERSION);
         assert_eq!(loaded.summaries().len(), 2);
+    }
+
+    #[test]
+    fn save_overwrites_existing_and_creates_missing_dirs() {
+        // Durable save must create absent parent dirs and truncate a longer
+        // prior file (File::create) so a shorter re-save leaves no stale tail.
+        let tmpdir = tempfile::tempdir().unwrap();
+        let path = tmpdir.path().join("nested/deeper/rules.json");
+
+        let mut r = RulesRegistry::new();
+        r.replace_rules(vec![
+            sample_rule(TrustRing::SovereignKernel, 1, 100),
+            sample_rule(TrustRing::CloudExternal, 99, 999),
+        ]);
+        r.save_to_path(&path).unwrap();
+        assert_eq!(
+            RulesRegistry::load_from_path(&path).unwrap().rule_count(),
+            2
+        );
+
+        let mut r2 = RulesRegistry::new();
+        r2.replace_rules(vec![sample_rule(TrustRing::SovereignKernel, 7, 7)]);
+        r2.save_to_path(&path).unwrap();
+
+        let back = RulesRegistry::load_from_path(&path).unwrap();
+        assert_eq!(back.rule_count(), 1);
+        assert_eq!(back.snapshot().rules[0].handle, 7);
+        // No leftover tempfile in the deepest dir.
+        let leftovers: Vec<_> = std::fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp."))
+            .collect();
+        assert!(leftovers.is_empty());
     }
 
     #[test]
