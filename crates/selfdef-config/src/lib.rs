@@ -405,6 +405,22 @@ impl Config {
                         .into(),
                 ));
             }
+            // tcp_addr must be a literal IP:port. The daemon parses it as a std
+            // `SocketAddr` (`cfg.tcp_addr.parse()`), which does NOT resolve
+            // hostnames; on failure it only logs "tcp transport disabled" and
+            // serves nothing while the daemon keeps running. So a hostname
+            // ("localhost:8443"), a missing port ("127.0.0.1"), or stray
+            // whitespace passes the non-empty check above yet leaves the operator
+            // with a TCP API that silently never listens. Mirror the daemon's
+            // exact (untrimmed) parse so validation and runtime agree.
+            if has_tcp && self.api.tcp_addr.parse::<std::net::SocketAddr>().is_err() {
+                return Err(ConfigError::Invalid(format!(
+                    "[api] tcp_addr = {:?} is not a valid IP:port socket address \
+                     (e.g. \"127.0.0.1:8443\"; hostnames are not resolved) — the daemon \
+                     cannot bind it and would silently serve no TCP API",
+                    self.api.tcp_addr
+                )));
+            }
             // The UNIX socket is "trusted via filesystem permissions" — its mode
             // IS the access-control boundary. The daemon parses unix_socket_mode
             // as `from_str_radix(.., 8).unwrap_or(0o660)`, so ANY value it cannot
@@ -1831,6 +1847,41 @@ mod tests {
         cfg.api.token_file = "/run/selfdef/token".into();
         cfg.api.unix_socket_mode = "garbage".into();
         cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_unparseable_tcp_addr() {
+        // The daemon parses tcp_addr as a std SocketAddr (no hostname
+        // resolution) and silently disables the TCP transport on failure — so a
+        // hostname, a missing port, or stray whitespace passes the non-empty
+        // check yet never listens. validate must reject it. A unix socket +
+        // token are set so only tcp_addr validity is under test.
+        let mut cfg = Config::default();
+        cfg.api.enabled = true;
+        cfg.api.unix_socket = "/run/selfdef/api.sock".into();
+        cfg.api.token_file = "/run/selfdef/token".into();
+        for bad in [
+            "localhost:8443",
+            "127.0.0.1",
+            ":8443",
+            "127.0.0.1:8443 ",
+            "not-an-addr",
+            "256.0.0.1:1",
+        ] {
+            cfg.api.tcp_addr = bad.into();
+            let err = cfg.validate().unwrap_err();
+            assert!(matches!(err, ConfigError::Invalid(_)), "{bad:?} → {err:?}");
+            assert!(
+                err.to_string().contains("tcp_addr"),
+                "msg should name the field for {bad:?}: {err}"
+            );
+        }
+        // Valid IPv4 and IPv6 socket addresses pass.
+        for good in ["127.0.0.1:8443", "0.0.0.0:9000", "[::1]:8443"] {
+            cfg.api.tcp_addr = good.into();
+            cfg.validate()
+                .unwrap_or_else(|e| panic!("addr {good:?} must be valid, got {e:?}"));
+        }
     }
 
     #[test]
