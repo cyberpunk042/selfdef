@@ -204,6 +204,51 @@ pub fn validate(m: &DashboardManifest) -> Result<(), ManifestError> {
     Ok(())
 }
 
+/// Validate a SET of manifests for mutual consistency, on top of each
+/// manifest's own [`validate`] rules.
+///
+/// selfdef ships one manifest per module, and the sovereign-os
+/// master-dashboard aggregator mounts them all under a single super-port — so
+/// two selfdef dashboards claiming the same `module`, `port`, or `subpath`
+/// would silently route to the same place. The consumer side (sovereign-os
+/// `master-dashboard discover`) detects this, but the producer side must not
+/// emit a colliding set in the first place: this is the selfdef-side
+/// guarantee. Each manifest is [`validate`]d individually, then the set is
+/// checked for a duplicate module / port / subpath, reporting the two
+/// offending indices.
+pub fn validate_set(manifests: &[DashboardManifest]) -> Result<(), ManifestError> {
+    use std::collections::HashMap;
+    let mut modules: HashMap<&str, usize> = HashMap::new();
+    let mut ports: HashMap<u16, usize> = HashMap::new();
+    let mut subpaths: HashMap<&str, usize> = HashMap::new();
+    for (i, m) in manifests.iter().enumerate() {
+        validate(m)?;
+        let d = &m.dashboard;
+        if let Some(&j) = modules.get(d.module.as_str()) {
+            return Err(ManifestError::Validation(format!(
+                "duplicate dashboard.module={:?} shared by manifests #{j} and #{i}",
+                d.module
+            )));
+        }
+        modules.insert(d.module.as_str(), i);
+        if let Some(&j) = ports.get(&d.port) {
+            return Err(ManifestError::Validation(format!(
+                "duplicate dashboard.port={} shared by manifests #{j} and #{i}",
+                d.port
+            )));
+        }
+        ports.insert(d.port, i);
+        if let Some(&j) = subpaths.get(d.subpath.as_str()) {
+            return Err(ManifestError::Validation(format!(
+                "duplicate dashboard.subpath={:?} shared by manifests #{j} and #{i}",
+                d.subpath
+            )));
+        }
+        subpaths.insert(d.subpath.as_str(), i);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -368,5 +413,82 @@ auth_tier     = "no-auth"
 "#;
         let m = from_toml_str(without).unwrap();
         assert!(m.dashboard.surfaces.is_empty());
+    }
+
+    // ---- validate_set: producer-side cross-manifest uniqueness ----
+
+    fn mk(module: &str, port: u16, subpath: &str) -> DashboardManifest {
+        from_toml_str(&format!(
+            "schema_version = 1\n[dashboard]\nmodule = {module:?}\n\
+             port = {port}\nhealthz_path = \"/healthz\"\n\
+             subpath = {subpath:?}\nlabel = {module:?}\nauth_tier = \"basic\"\n"
+        ))
+        .expect("manifest builds")
+    }
+
+    #[test]
+    fn validate_set_accepts_distinct_manifests() {
+        let set = [
+            mk("agent-guard", 8090, "/agent-guard/"),
+            mk("perimeter", 8091, "/perimeter/"),
+            mk("integrity", 8092, "/integrity/"),
+        ];
+        validate_set(&set).expect("distinct set is valid");
+    }
+
+    #[test]
+    fn validate_set_rejects_duplicate_port() {
+        let set = [
+            mk("agent-guard", 8090, "/agent-guard/"),
+            mk("perimeter", 8090, "/perimeter/"), // same port
+        ];
+        let err = validate_set(&set).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("duplicate dashboard.port=8090"), "{msg}");
+        assert!(msg.contains("#0 and #1"), "{msg}");
+    }
+
+    #[test]
+    fn validate_set_rejects_duplicate_subpath() {
+        let set = [
+            mk("agent-guard", 8090, "/shared/"),
+            mk("perimeter", 8091, "/shared/"), // same subpath
+        ];
+        assert!(
+            validate_set(&set)
+                .unwrap_err()
+                .to_string()
+                .contains("duplicate dashboard.subpath=\"/shared/\"")
+        );
+    }
+
+    #[test]
+    fn validate_set_rejects_duplicate_module() {
+        let set = [
+            mk("agent-guard", 8090, "/a/"),
+            mk("agent-guard", 8091, "/b/"), // same module
+        ];
+        assert!(
+            validate_set(&set)
+                .unwrap_err()
+                .to_string()
+                .contains("duplicate dashboard.module=\"agent-guard\"")
+        );
+    }
+
+    #[test]
+    fn validate_set_still_enforces_per_manifest_rules() {
+        // A privileged port fails the per-manifest validate inside the set.
+        let bad = from_toml_str(
+            "schema_version = 1\n[dashboard]\nmodule = \"x\"\nport = 8090\n\
+             healthz_path = \"/healthz\"\nsubpath = \"/x/\"\nlabel = \"x\"\n\
+             auth_tier = \"basic\"\n",
+        )
+        .unwrap();
+        // Hand-lower the port below 1024 to trip per-manifest validation.
+        let mut bad2 = bad.clone();
+        bad2.dashboard.port = 80;
+        let err = validate_set(&[bad, bad2]).unwrap_err();
+        assert!(err.to_string().contains("must be ≥1024"), "{err}");
     }
 }
