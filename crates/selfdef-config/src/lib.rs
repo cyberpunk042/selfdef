@@ -511,6 +511,39 @@ impl Config {
             )));
         }
 
+        // responder.min_severity (F-2026-092) is the floor that stops aggressive
+        // autonomous actions (e.g. kill_pid) from firing on low-confidence
+        // findings. The daemon treats ANY unrecognized token as "no floor —
+        // every finding processed": it logs a warn and then runs fail-OPEN, so a
+        // typo ("hgih" for "high") silently DROPS the operator's opt-in safety
+        // floor and lets allow-listed aggressive actions fire on low findings.
+        // Catch the typo at load (and `--validate`) so the requested floor is
+        // actually applied; the runtime warn stays as a backstop for the
+        // unvalidated path. Empty/none/unknown legitimately mean "no floor".
+        const VALID_MIN_SEVERITY: [&str; 11] = [
+            "none",
+            "unknown",
+            "info",
+            "informational",
+            "low",
+            "medium",
+            "med",
+            "high",
+            "critical",
+            "crit",
+            "fatal",
+        ];
+        let min_sev = self.responder.min_severity.trim().to_ascii_lowercase();
+        if !min_sev.is_empty() && !VALID_MIN_SEVERITY.contains(&min_sev.as_str()) {
+            return Err(ConfigError::Invalid(format!(
+                "[responder] min_severity = {:?} is not a recognized severity floor \
+                 (use one of none/info/low/medium/high/critical/fatal) — an unrecognized \
+                 token silently applies NO floor, letting aggressive autonomous actions \
+                 fire on low-confidence findings",
+                self.responder.min_severity
+            )));
+        }
+
         // The hardware-probe loop re-probes every interval_seconds, but only
         // when enabled. The loop floors the cadence at 30s
         // (`interval_seconds.max(30)`) as a runtime backstop — so a sub-30
@@ -1878,6 +1911,48 @@ mod tests {
         cfg.api.token_file = "/run/selfdef/token".into();
         cfg.api.unix_socket_mode = "garbage".into();
         cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_unknown_responder_min_severity() {
+        // A typo in the autonomous-response floor silently runs fail-open (no
+        // floor → every finding processed, aggressive actions can fire on low
+        // findings). validate must reject an unrecognized token.
+        let mut cfg = Config::default();
+        for bad in ["hgih", "severe", "warn", "9", "high!", "none "] {
+            // note: "none " has trailing space but trims to "none" — valid; keep
+            // it out of the bad set below by testing real typos only.
+            if bad.trim().eq_ignore_ascii_case("none") {
+                continue;
+            }
+            cfg.responder.min_severity = bad.into();
+            let err = cfg.validate().unwrap_err();
+            assert!(matches!(err, ConfigError::Invalid(_)), "{bad:?} → {err:?}");
+            assert!(
+                err.to_string().contains("min_severity"),
+                "msg should name the field for {bad:?}: {err}"
+            );
+        }
+        // Recognized tokens (any case), the aliases, empty, and the default all pass.
+        for good in [
+            "none",
+            "unknown",
+            "",
+            "info",
+            "informational",
+            "low",
+            "medium",
+            "med",
+            "high",
+            "HIGH",
+            "critical",
+            "crit",
+            "fatal",
+        ] {
+            cfg.responder.min_severity = good.into();
+            cfg.validate()
+                .unwrap_or_else(|e| panic!("min_severity {good:?} must be valid, got {e:?}"));
+        }
     }
 
     #[test]
