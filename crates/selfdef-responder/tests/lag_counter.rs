@@ -31,7 +31,14 @@ impl Action for NoopAction {
 }
 
 fn finding(seq: u64) -> Event {
-    Event::new(ClassUid::DETECTION_FINDING, 1, SeverityId::Critical, "host", "test", seq)
+    Event::new(
+        ClassUid::DETECTION_FINDING,
+        1,
+        SeverityId::Critical,
+        "host",
+        "test",
+        seq,
+    )
 }
 
 #[tokio::test]
@@ -48,8 +55,7 @@ async fn lag_counter_counts_findings_dropped_to_a_bus_lag() {
     let lag = Arc::new(AtomicU64::new(0));
     let action: Arc<dyn Action> = Arc::new(NoopAction);
     let responder = Arc::new(
-        Responder::new(vec![action], vec!["noop".into()], false)
-            .with_lag_counter(Arc::clone(&lag)),
+        Responder::new(vec![action], vec!["noop".into()], false).with_lag_counter(Arc::clone(&lag)),
     );
 
     let shutdown = CancellationToken::new();
@@ -66,12 +72,19 @@ async fn lag_counter_counts_findings_dropped_to_a_bus_lag() {
             break;
         }
         if tokio::time::Instant::now() >= deadline {
-            panic!("lag counter never reached the 3 dropped findings (got {})", lag.load(Ordering::SeqCst));
+            panic!(
+                "lag counter never reached the 3 dropped findings (got {})",
+                lag.load(Ordering::SeqCst)
+            );
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
-    assert_eq!(lag.load(Ordering::SeqCst), 3, "exactly 3 findings were dropped");
+    assert_eq!(
+        lag.load(Ordering::SeqCst),
+        3,
+        "exactly 3 findings were dropped"
+    );
 
     shutdown.cancel();
     let _ = task.await;

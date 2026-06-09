@@ -603,8 +603,12 @@ mod tests {
 
         let bus = Bus::new(64);
         let mut sub = bus.subscribe();
-        let collector =
-            AuditdCollector::new(path.clone(), ReadFrom::Start, bus.publisher(), "test-host".into());
+        let collector = AuditdCollector::new(
+            path.clone(),
+            ReadFrom::Start,
+            bus.publisher(),
+            "test-host".into(),
+        );
         let shutdown = CancellationToken::new();
         let sd = shutdown.clone();
         let task = tokio::spawn(async move { collector.run(sd).await });
@@ -618,7 +622,10 @@ mod tests {
 
         // Complete the line, then the terminating newline.
         {
-            let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap();
             f.write_all(&full.as_bytes()[split..]).unwrap();
             f.write_all(b"\n").unwrap();
             f.flush().unwrap();

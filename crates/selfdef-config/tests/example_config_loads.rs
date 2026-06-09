@@ -52,14 +52,11 @@ fn canonical_example_loads_through_real_loader() {
 /// and assert every top-level table appears in the example.
 #[test]
 fn every_top_level_config_section_is_documented_in_example() {
-    let default_toml = toml::to_string(&Config::default())
-        .expect("Config::default serializes to TOML");
-    let default: toml::Value =
-        toml::from_str(&default_toml).expect("serialized default re-parses");
-    let example_str =
-        std::fs::read_to_string(example_path()).expect("read example");
-    let example: toml::Value =
-        toml::from_str(&example_str).expect("example parses as TOML");
+    let default_toml =
+        toml::to_string(&Config::default()).expect("Config::default serializes to TOML");
+    let default: toml::Value = toml::from_str(&default_toml).expect("serialized default re-parses");
+    let example_str = std::fs::read_to_string(example_path()).expect("read example");
+    let example: toml::Value = toml::from_str(&example_str).expect("example parses as TOML");
 
     let default_tbl = default.as_table().expect("default is a table");
     let example_tbl = example.as_table().expect("example is a table");
@@ -92,10 +89,8 @@ fn every_top_level_config_section_is_documented_in_example() {
 /// (or a section header inserted above it) that displaces it fails loudly.
 #[test]
 fn operator_critical_fields_are_under_the_correct_section() {
-    let example_str =
-        std::fs::read_to_string(example_path()).expect("read example");
-    let example: toml::Value =
-        toml::from_str(&example_str).expect("example parses as TOML");
+    let example_str = std::fs::read_to_string(example_path()).expect("read example");
+    let example: toml::Value = toml::from_str(&example_str).expect("example parses as TOML");
     let tbl = example.as_table().expect("example is a table");
 
     // (section path, field) pairs that MUST be present at that exact path.
@@ -123,13 +118,18 @@ fn operator_critical_fields_are_under_the_correct_section() {
             }
         }
         let present = ok
-            && node.as_table().map(|t| t.contains_key(*field)).unwrap_or(false);
+            && node
+                .as_table()
+                .map(|t| t.contains_key(*field))
+                .unwrap_or(false);
         if !present {
             // Find where it actually landed, for a useful message.
             let found_in: Vec<&String> = tbl
                 .iter()
                 .filter(|(_, v)| {
-                    v.as_table().map(|t| t.contains_key(*field)).unwrap_or(false)
+                    v.as_table()
+                        .map(|t| t.contains_key(*field))
+                        .unwrap_or(false)
                 })
                 .map(|(k, _)| k)
                 .collect();

@@ -453,7 +453,13 @@ async fn main() -> Result<()> {
         // F-2026-092: surface the responder's autonomous-response severity
         // floor (0 = none) so a dashboard can chart suppression against
         // selfdef_findings_by_severity_total instead of guessing the config.
-        let floor_repr = match cfg.responder.min_severity.trim().to_ascii_lowercase().as_str() {
+        let floor_repr = match cfg
+            .responder
+            .min_severity
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
             "" | "none" | "unknown" => 0,
             other => parse_severity_floor(other).map_or(0, |s| s as u32),
         };

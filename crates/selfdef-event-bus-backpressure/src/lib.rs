@@ -223,12 +223,18 @@ mod tests {
         b.register("policy.update", 1, 2).unwrap();
         assert_eq!(
             b.enqueue("policy.update"),
-            EnqueueVerdict::HighWater { pending: 1, high_water: 1 }
+            EnqueueVerdict::HighWater {
+                pending: 1,
+                high_water: 1
+            }
         );
         // Fills to cap=2 → HighWater{pending == cap}, accepted.
         assert_eq!(
             b.enqueue("policy.update"),
-            EnqueueVerdict::HighWater { pending: 2, high_water: 1 }
+            EnqueueVerdict::HighWater {
+                pending: 2,
+                high_water: 1
+            }
         );
         // Only now, with pending already == cap, is the enqueue rejected.
         assert_eq!(

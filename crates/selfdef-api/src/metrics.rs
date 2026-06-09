@@ -11,8 +11,8 @@
 
 use std::collections::HashMap;
 use std::fmt::Write;
-use std::sync::{Arc, Mutex, OnceLock};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 use selfdef_bus::{Bus, BusError};
@@ -400,14 +400,24 @@ impl Metrics {
                 "# HELP selfdef_responder_lag_events_total Findings dropped because the responder lagged the bus (no action fired).\n",
             );
             out.push_str("# TYPE selfdef_responder_lag_events_total counter\n");
-            writeln!(out, "selfdef_responder_lag_events_total {}", c.load(Ordering::Relaxed)).unwrap();
+            writeln!(
+                out,
+                "selfdef_responder_lag_events_total {}",
+                c.load(Ordering::Relaxed)
+            )
+            .unwrap();
         }
         if let Some(c) = self.correlator_lag.get() {
             out.push_str(
                 "# HELP selfdef_correlator_lag_events_total Raw events dropped because the correlator lagged the bus (missed detections).\n",
             );
             out.push_str("# TYPE selfdef_correlator_lag_events_total counter\n");
-            writeln!(out, "selfdef_correlator_lag_events_total {}", c.load(Ordering::Relaxed)).unwrap();
+            writeln!(
+                out,
+                "selfdef_correlator_lag_events_total {}",
+                c.load(Ordering::Relaxed)
+            )
+            .unwrap();
         }
 
         // M060 mirror-export per-artifact publish counters. Two series
@@ -740,7 +750,10 @@ mod tests {
             !unwired.contains("selfdef_responder_lag_events_total"),
             "lag series must be absent until wired:\n{unwired}"
         );
-        assert!(!unwired.contains("selfdef_correlator_lag_events_total"), "{unwired}");
+        assert!(
+            !unwired.contains("selfdef_correlator_lag_events_total"),
+            "{unwired}"
+        );
 
         let responder_lag = Arc::new(AtomicU64::new(0));
         let correlator_lag = Arc::new(AtomicU64::new(0));
@@ -750,9 +763,18 @@ mod tests {
         responder_lag.fetch_add(7, Ordering::Relaxed);
         correlator_lag.fetch_add(2, Ordering::Relaxed);
         let wired = m.render(0);
-        assert!(wired.contains("# TYPE selfdef_responder_lag_events_total counter"), "{wired}");
-        assert!(wired.contains("selfdef_responder_lag_events_total 7"), "{wired}");
-        assert!(wired.contains("selfdef_correlator_lag_events_total 2"), "{wired}");
+        assert!(
+            wired.contains("# TYPE selfdef_responder_lag_events_total counter"),
+            "{wired}"
+        );
+        assert!(
+            wired.contains("selfdef_responder_lag_events_total 7"),
+            "{wired}"
+        );
+        assert!(
+            wired.contains("selfdef_correlator_lag_events_total 2"),
+            "{wired}"
+        );
     }
 
     #[test]

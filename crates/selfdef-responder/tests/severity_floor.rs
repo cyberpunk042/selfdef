@@ -35,11 +35,11 @@ impl Action for CountingAction {
     }
 }
 
-fn responder_with(
-    floor: Option<SeverityId>,
-) -> (Arc<Responder>, Arc<AtomicUsize>) {
+fn responder_with(floor: Option<SeverityId>) -> (Arc<Responder>, Arc<AtomicUsize>) {
     let calls = Arc::new(AtomicUsize::new(0));
-    let action: Arc<dyn Action> = Arc::new(CountingAction { calls: calls.clone() });
+    let action: Arc<dyn Action> = Arc::new(CountingAction {
+        calls: calls.clone(),
+    });
     let mut r = Responder::new(vec![action], vec!["counter".into()], false);
     if let Some(f) = floor {
         r = r.with_min_severity(f);
@@ -117,7 +117,9 @@ async fn default_responder_processes_every_grade() {
     });
 
     let publisher = bus.publisher();
-    publisher.publish(finding(SeverityId::Informational, 1)).unwrap();
+    publisher
+        .publish(finding(SeverityId::Informational, 1))
+        .unwrap();
     publisher.publish(finding(SeverityId::Low, 2)).unwrap();
     publisher.publish(finding(SeverityId::Critical, 3)).unwrap();
 

@@ -526,13 +526,19 @@ kid = "kid-prod-2026"
         );
         // [emit]
         assert!(c.emit.audit_enabled, "emit section read");
-        assert_eq!(c.emit.audit_max_generations, 10, "emit.audit_max_generations");
+        assert_eq!(
+            c.emit.audit_max_generations, 10,
+            "emit.audit_max_generations"
+        );
         // [thresholds]
         assert!(
             (c.thresholds.blackwell_vram_high - 0.90).abs() < 1e-5,
             "thresholds section read"
         );
-        assert_eq!(c.thresholds.human_gate_queue_high, 5, "thresholds.human_gate");
+        assert_eq!(
+            c.thresholds.human_gate_queue_high, 5,
+            "thresholds.human_gate"
+        );
         // [signer] — kid is commented out in the example (unsigned default).
         assert_eq!(
             c.signer.kid, None,
