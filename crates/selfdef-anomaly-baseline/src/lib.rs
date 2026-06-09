@@ -78,6 +78,9 @@ pub enum BaselineError {
     /// NaN value.
     #[error("value is NaN")]
     NanValue,
+    /// Infinite value.
+    #[error("value is infinite")]
+    InfiniteValue,
 }
 
 impl AnomalyBaseline {
@@ -111,9 +114,20 @@ impl AnomalyBaseline {
     }
 
     /// Observe (records sample + returns classification).
+    ///
+    /// Rejects any non-finite `value`. NaN is the obvious case, but ±infinity
+    /// is just as corrosive and was previously let through: a single infinite
+    /// sample makes the window's `mean` infinite, which makes the variance
+    /// `inf - inf = NaN`, hence `stddev` NaN — and since `NaN > 0.0` is false,
+    /// every later observation falls into the `z = NaN ⇒ Normal` branch. One
+    /// infinite value therefore silently blinds the detector for a whole window
+    /// of subsequent samples. Reject it at the door alongside NaN.
     pub fn observe(&mut self, value: f64) -> Result<Observation, BaselineError> {
         if value.is_nan() {
             return Err(BaselineError::NanValue);
+        }
+        if value.is_infinite() {
+            return Err(BaselineError::InfiniteValue);
         }
         let (mean, std) = self.stats();
         let n_now = self.samples.len() as u32;
@@ -255,6 +269,29 @@ mod tests {
             b.observe(f64::NAN).unwrap_err(),
             BaselineError::NanValue
         ));
+    }
+
+    #[test]
+    fn infinite_value_rejected_and_does_not_blind_detector() {
+        let mut b = AnomalyBaseline::new(20, 5, 2.0, 4.0).unwrap();
+        for v in [10.0, 11.0, 9.0, 10.5, 9.5, 10.2, 9.8] {
+            b.observe(v).unwrap();
+        }
+        // An infinite sample must be rejected, not recorded.
+        assert!(matches!(
+            b.observe(f64::INFINITY).unwrap_err(),
+            BaselineError::InfiniteValue
+        ));
+        assert!(matches!(
+            b.observe(f64::NEG_INFINITY).unwrap_err(),
+            BaselineError::InfiniteValue
+        ));
+        // The baseline is intact: stats are finite and a far outlier still
+        // classifies Anomalous (it would be NaN/Normal-blinded had the inf
+        // poisoned the window).
+        let (mean, std) = b.stats();
+        assert!(mean.is_finite() && std.is_finite());
+        assert_eq!(b.observe(100.0).unwrap().tier, AnomalyTier::Anomalous);
     }
 
     #[test]
