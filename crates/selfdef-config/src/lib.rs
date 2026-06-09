@@ -399,6 +399,18 @@ impl Config {
             ));
         }
 
+        // inproc_capacity feeds `Bus::new` → tokio `broadcast::channel`, which
+        // PANICS if capacity == 0. A config typo would otherwise crash the
+        // daemon at startup with a raw panic instead of an actionable error.
+        if self.bus.inproc_capacity == 0 {
+            return Err(ConfigError::Invalid(
+                "[bus] inproc_capacity = 0 is invalid — the in-process event \
+                 bus needs a positive per-subscriber backlog (default 4096); \
+                 a 0 capacity would panic the daemon at startup"
+                    .into(),
+            ));
+        }
+
         // journald mode selects between two entirely different collectors:
         // the daemon treats "file" as file-tail mode and ANY other value as
         // journalctl-subprocess mode (`mode == "file"` else Journalctl). So a
@@ -1696,6 +1708,20 @@ mod tests {
         cfg.validate().unwrap();
         cfg.bus.nats.enabled = false;
         cfg.bus.nats.url = String::new();
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_zero_inproc_capacity() {
+        // inproc_capacity == 0 → tokio broadcast::channel(0) panics; validate
+        // must surface it as an actionable config error, not a daemon crash.
+        let mut cfg = Config::default();
+        cfg.bus.inproc_capacity = 0;
+        let err = cfg.validate().unwrap_err();
+        assert!(matches!(err, ConfigError::Invalid(_)), "got {err:?}");
+        assert!(err.to_string().contains("inproc_capacity"));
+        // Any positive value is fine (default is 4096).
+        cfg.bus.inproc_capacity = 1;
         cfg.validate().unwrap();
     }
 
