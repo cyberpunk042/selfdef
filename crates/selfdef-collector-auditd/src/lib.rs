@@ -121,23 +121,41 @@ impl AuditdCollector {
                 return Ok(());
             }
 
-            buf.clear();
+            // `buf` is intentionally NOT cleared at the top of the loop:
+            // `read_line` appends, and we only clear after consuming a COMPLETE
+            // (newline-terminated) line. A partial line left by an in-flight /
+            // interrupted writer is retained in `buf` and completed on the next
+            // read instead of being parsed as a torn record — the same
+            // partial-line write-race fixed for the other file-tailing
+            // collectors via selfdef-collector-util::drain_complete_lines.
+            // auditd's read_line + SYSCALL/EXECVE pairing loop carries the
+            // partial in `buf` directly rather than through that helper.
             let n = tokio::select! {
                 r = reader.read_line(&mut buf) => r?,
                 () = shutdown.cancelled() => return Ok(()),
             };
 
             if n == 0 {
-                // EOF — wait for more data.
+                // EOF — wait for more data. Any partial line stays in `buf`.
                 tokio::time::sleep(POLL_INTERVAL).await;
                 continue;
             }
 
-            let line = buf.trim_end();
-            if line.is_empty() {
+            // `read_line` returns a newline-less result only at EOF, so a `buf`
+            // not ending in '\n' means we read a line mid-write. Retain it and
+            // wait for the rest rather than parsing a torn record.
+            if !buf.ends_with('\n') {
+                tokio::time::sleep(POLL_INTERVAL).await;
                 continue;
             }
 
+            // Blank line (just the newline) — clear and move on.
+            if buf.trim_end().is_empty() {
+                buf.clear();
+                continue;
+            }
+
+            let line = buf.trim_end();
             match parser::parse_line(line) {
                 Some(record) => {
                     match record.kind.as_str() {
@@ -191,6 +209,9 @@ impl AuditdCollector {
                     debug!(line, "ignored unparseable audit line");
                 }
             }
+
+            // Consumed a complete line; reset for the next one.
+            buf.clear();
         }
     }
 
@@ -557,5 +578,60 @@ mod tests {
         assert_eq!(ReadFrom::parse("start"), ReadFrom::Start);
         assert_eq!(ReadFrom::parse("end"), ReadFrom::End);
         assert_eq!(ReadFrom::parse("garbage"), ReadFrom::End); // default
+    }
+
+    /// A line written in two chunks (a partial flush, then the rest) must NOT
+    /// be parsed as a torn record: the collector waits for the terminating
+    /// newline before emitting. The split is placed *after* the parseable
+    /// `type=`/`msg=audit(` prefix, so the old code (which parsed whatever
+    /// `read_line` returned) WOULD have emitted a malformed event from the
+    /// partial — this test fails against that behavior and passes against the
+    /// newline-gated read.
+    #[tokio::test]
+    async fn partial_line_is_not_emitted_until_newline_arrives() {
+        use std::io::Write as _;
+
+        use selfdef_bus::Bus;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.log");
+        let full = r#"type=USER_LOGIN msg=audit(1736944500.123:1234568): pid=4567 uid=0 acct="alice" exe="/usr/sbin/sshd" hostname=192.0.2.5 res=success"#;
+        // Cut right before `res=` so the first chunk still parses (type + msg +
+        // serial present) but the record is incomplete.
+        let split = full.find("res=").unwrap();
+        std::fs::write(&path, &full[..split]).unwrap();
+
+        let bus = Bus::new(64);
+        let mut sub = bus.subscribe();
+        let collector =
+            AuditdCollector::new(path.clone(), ReadFrom::Start, bus.publisher(), "test-host".into());
+        let shutdown = CancellationToken::new();
+        let sd = shutdown.clone();
+        let task = tokio::spawn(async move { collector.run(sd).await });
+
+        // The partial (newline-less) line must produce no event.
+        let early = tokio::time::timeout(Duration::from_millis(600), sub.recv()).await;
+        assert!(
+            early.is_err(),
+            "a partial line (no terminating newline) must not be emitted, got {early:?}"
+        );
+
+        // Complete the line, then the terminating newline.
+        {
+            let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
+            f.write_all(&full.as_bytes()[split..]).unwrap();
+            f.write_all(b"\n").unwrap();
+            f.flush().unwrap();
+        }
+
+        // Now exactly one event must arrive.
+        let got = tokio::time::timeout(Duration::from_secs(3), sub.recv()).await;
+        assert!(
+            matches!(got, Ok(Ok(_))),
+            "the completed line must be emitted once its newline arrives, got {got:?}"
+        );
+
+        shutdown.cancel();
+        let _ = task.await;
     }
 }
