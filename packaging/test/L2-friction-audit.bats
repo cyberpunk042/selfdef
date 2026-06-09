@@ -74,6 +74,26 @@ EOF
     [ "${status}" -eq 0 ]
 }
 
+@test "PCIe gate SKIPS when lspci not installed (operator-extension)" {
+    # Deterministically force lspci absence regardless of runner: build an
+    # isolated bin with every system tool symlinked EXCEPT lspci/zpool/dmidecode
+    # (GitHub images ship pciutils, so we cannot rely on lspci simply being
+    # absent from PATH the way the zfs/memory skip tests do). All three gates
+    # then take their skip branch and the script exits 0.
+    local iso="${TEST_DIR}/isobin"
+    mkdir -p "${iso}"
+    for d in /usr/bin /bin /usr/sbin /sbin; do
+        [ -d "${d}" ] || continue
+        for f in "${d}"/*; do
+            [ -e "${f}" ] && ln -sf "${f}" "${iso}/$(basename "${f}")"
+        done
+    done
+    rm -f "${iso}/lspci" "${iso}/zpool" "${iso}/dmidecode"
+    PATH="${iso}" run bash "${SCRIPT}"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"Hardware Matrix Audited Successfully"* ]]
+}
+
 # ============================================================
 # R10820-R10826 — ZFS gate
 # ============================================================

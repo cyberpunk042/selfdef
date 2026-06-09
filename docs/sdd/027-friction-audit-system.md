@@ -177,6 +177,7 @@ Every operator-extension MUST be tagged in the artifact source comments and in t
 - Override manifest TTL ≤ 7 days default (Deliverable 4) — sain-01 silent; operator-extended (MS046 R10873)
 - Multi-sig ≥ 2 distinct signer_kid (Deliverable 4) — operator-extended for production profile (MS046 R11080 binding to MS040 authority profile)
 - 5 failure-mode operator runbooks (Deliverable 8) — operator-extended; sain-01 doesn't require runbooks
+- PCIe gate `command -v lspci` skip-guard (Deliverable 1) — sain-01 §5.1 step 1 assumes lspci is always present; operator-extended so non-PCIe hosts (containers/VMs) SKIP the gate (emit a SKIP audit event, exit continues) instead of hard-failing on `LANE_AUDIT_COUNT=0`. Mirrors the existing zpool/dmidecode skip-guards (R10832/R10932). When lspci IS present the gate is unchanged (a real <2 x8-lane reading still fails exit 1).
 
 ## Out of scope for this SDD
 
