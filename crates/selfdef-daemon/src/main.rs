@@ -677,6 +677,21 @@ async fn main() -> Result<()> {
             cfg.responder.dry_run,
         )
         .with_lag_counter(Arc::clone(&responder_lag));
+        // Surface allowlisted action names that match no registered action. The
+        // dispatch loop only runs registered+allowed actions, so such an entry is
+        // inert — almost always a typo (e.g. `kil_pid`) that silently means the
+        // operator's intended response will NOT fire on a real threat. Warned,
+        // not fatal: a forward-compatible entry for a not-yet-built action is a
+        // legitimate (if rare) reason to keep loading.
+        let unknown_actions = base.unknown_allowed_actions();
+        if !unknown_actions.is_empty() {
+            warn!(
+                unknown_actions = ?unknown_actions,
+                available = ?base.action_names(),
+                "[responder].allowed_actions names match no registered action — \
+                 likely a typo; those entries are inert and the intended response will not fire"
+            );
+        }
         // F-2026-092: apply the optional autonomous-response severity floor.
         // `none`/`unknown`/empty means no floor (process every finding, the
         // default). A recognized grade raises the floor; an unrecognized token

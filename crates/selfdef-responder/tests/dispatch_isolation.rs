@@ -118,3 +118,30 @@ async fn fire_does_not_execute_a_disallowed_action() {
         "a disallowed action must never fire through the dispatcher"
     );
 }
+
+#[test]
+fn unknown_allowed_actions_flags_typos_not_real_names() {
+    let (a, _, _) = mock(); // registers "mock-action"
+    // allowlist mixes the real action with two names that match nothing — a
+    // typo and a plausible-but-unregistered action. Both are inert (the
+    // dispatch loop only runs registered+allowed actions), so they should be
+    // surfaced; the real "mock-action" must NOT be.
+    let r = Responder::new(
+        vec![a],
+        vec![
+            "mock-action".into(),
+            "kil_pid".into(), // typo of a real action elsewhere
+            "notify".into(),  // not registered in this responder
+        ],
+        false,
+    );
+    assert_eq!(
+        r.unknown_allowed_actions(),
+        vec!["kil_pid".to_string(), "notify".to_string()]
+    );
+
+    // an allowlist with only real names yields nothing.
+    let (a2, _, _) = mock();
+    let clean = Responder::new(vec![a2], vec!["mock-action".into()], false);
+    assert!(clean.unknown_allowed_actions().is_empty());
+}

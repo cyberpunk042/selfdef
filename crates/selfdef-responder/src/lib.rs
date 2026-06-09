@@ -145,6 +145,27 @@ impl Responder {
         self.actions.iter().map(|a| a.name()).collect()
     }
 
+    /// Allowlisted action names (`[responder].allowed_actions`) that match NO
+    /// registered action — sorted, de-duplicated. The dispatch loop only runs an
+    /// action whose name is in the allowlist, so such an entry is inert: almost
+    /// always an operator typo (e.g. `kil_pid`) that silently means the intended
+    /// response never fires on a real threat. A forward-compatible entry for an
+    /// action not yet built would also appear here, so callers surface this as a
+    /// warning rather than a hard error.
+    #[must_use]
+    pub fn unknown_allowed_actions(&self) -> Vec<String> {
+        let known: HashSet<&str> = self.actions.iter().map(|a| a.name()).collect();
+        let mut unknown: Vec<String> = self
+            .allowed_actions
+            .iter()
+            .filter(|n| !known.contains(n.as_str()))
+            .cloned()
+            .collect();
+        unknown.sort();
+        unknown.dedup();
+        unknown
+    }
+
     /// Run until `shutdown` is cancelled.
     pub async fn run(&self, mut sub: Subscriber, shutdown: CancellationToken) {
         info!(
