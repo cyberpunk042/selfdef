@@ -544,6 +544,39 @@ impl Config {
             )));
         }
 
+        // [notifier].panic_floor (SDD-008 D-7) is the audit-mode escape hatch: in
+        // audit mode (notifications suppressed) a finding AT OR ABOVE this grade
+        // still fires for real, so "operator misconfiguration cannot leave a
+        // blocker un-notified". The daemon parses it with parse_severity_floor
+        // and, on an unrecognized token, logs a warn and applies NO panic floor
+        // (fail-OPEN). So a typo ("hihg" for "high") silently voids the escape
+        // hatch — in audit mode even a critical finding is then suppressed. Catch
+        // the typo at load; an unset/empty panic_floor legitimately means "no
+        // floor". (parse_severity_floor accepts only grade tokens, so "none"/
+        // "unknown" are NOT valid here — leave it unset for no floor.)
+        const VALID_SEVERITY_GRADE: [&str; 9] = [
+            "info",
+            "informational",
+            "low",
+            "medium",
+            "med",
+            "high",
+            "critical",
+            "crit",
+            "fatal",
+        ];
+        if let Some(raw) = &self.notifier.panic_floor {
+            let pf = raw.trim().to_ascii_lowercase();
+            if !pf.is_empty() && !VALID_SEVERITY_GRADE.contains(&pf.as_str()) {
+                return Err(ConfigError::Invalid(format!(
+                    "[notifier] panic_floor = {raw:?} is not a recognized severity grade \
+                     (use one of informational/low/medium/high/critical/fatal, or leave it \
+                     unset for no floor) — an unrecognized token silently voids the audit-mode \
+                     panic escape hatch, suppressing even critical findings"
+                )));
+            }
+        }
+
         // The hardware-probe loop re-probes every interval_seconds, but only
         // when enabled. The loop floors the cadence at 30s
         // (`interval_seconds.max(30)`) as a runtime backstop — so a sub-30
@@ -1911,6 +1944,43 @@ mod tests {
         cfg.api.token_file = "/run/selfdef/token".into();
         cfg.api.unix_socket_mode = "garbage".into();
         cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_unknown_notifier_panic_floor() {
+        // A typo in the audit-mode panic escape hatch silently voids it (no
+        // floor → audit mode suppresses even critical findings). validate must
+        // reject an unrecognized grade. Unset/empty legitimately means no floor.
+        let mut cfg = Config::default();
+        for bad in ["hihg", "none", "unknown", "warn", "5", "high!"] {
+            cfg.notifier.panic_floor = Some(bad.into());
+            let err = cfg.validate().unwrap_err();
+            assert!(matches!(err, ConfigError::Invalid(_)), "{bad:?} → {err:?}");
+            assert!(
+                err.to_string().contains("panic_floor"),
+                "msg should name the field for {bad:?}: {err}"
+            );
+        }
+        // Unset and every recognized grade/alias (any case) and empty pass.
+        cfg.notifier.panic_floor = None;
+        cfg.validate().unwrap();
+        for good in [
+            "informational",
+            "info",
+            "low",
+            "medium",
+            "med",
+            "high",
+            "HIGH",
+            "critical",
+            "crit",
+            "fatal",
+            "",
+        ] {
+            cfg.notifier.panic_floor = Some(good.into());
+            cfg.validate()
+                .unwrap_or_else(|e| panic!("panic_floor {good:?} must be valid, got {e:?}"));
+        }
     }
 
     #[test]
