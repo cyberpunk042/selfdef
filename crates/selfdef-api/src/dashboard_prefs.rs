@@ -286,6 +286,7 @@ fn validate_custom_preset(cp: &CustomPreset) -> Result<(), String> {
 ///   builtin, duplicate name within request, bad refresh_rate / tab)
 /// - 200 OK + the new persisted body on success
 pub(crate) async fn put(
+    _cap: crate::control::RequireControl,
     ExtractJson(req): ExtractJson<DashboardPrefsPut>,
 ) -> Result<Json<DashboardPrefs>, (StatusCode, String)> {
     if req.schema_version != SCHEMA_VERSION {

@@ -199,6 +199,7 @@ fn map_flex_error(e: FlexProfileError) -> (StatusCode, String) {
 /// state. Creates the state file if absent (caller must supply
 /// `baseline`).
 pub(crate) async fn apply(
+    _cap: crate::control::RequireControl,
     Json(req): Json<ApplyRequest>,
 ) -> Result<Json<FlexProfile>, (StatusCode, String)> {
     let path = current_state_path();
@@ -213,6 +214,7 @@ pub(crate) async fn apply(
 /// `POST /v1/flex-profile/revert` — pop the most-recent delta off
 /// the stack + record the revert in history.
 pub(crate) async fn revert(
+    _cap: crate::control::RequireControl,
     Json(req): Json<RevertRequest>,
 ) -> Result<Json<FlexProfile>, (StatusCode, String)> {
     let path = current_state_path();

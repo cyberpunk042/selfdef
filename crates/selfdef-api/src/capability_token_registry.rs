@@ -74,6 +74,7 @@ pub(crate) async fn snapshot() -> Result<Json<CapabilityMirrorSnapshot>, (Status
 /// [`CapabilityRequest`]. The daemon mints `token_id`/`trace_id` + stamps
 /// now. Returns the issued (Pending) capability entry.
 pub(crate) async fn issue(
+    _cap: crate::control::RequireControl,
     Json(req): Json<CapabilityRequest>,
 ) -> Result<Json<CapabilityEntry>, (StatusCode, String)> {
     let path = state_path();
@@ -100,6 +101,7 @@ pub(crate) async fn issue(
 
 /// `POST /v1/capability-tokens/revoke` — revoke by id (404 if unknown).
 pub(crate) async fn revoke(
+    _cap: crate::control::RequireControl,
     Json(req): Json<RevokeRequest>,
 ) -> Result<Json<CapabilityMirrorSnapshot>, (StatusCode, String)> {
     let path = state_path();

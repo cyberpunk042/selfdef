@@ -2810,3 +2810,43 @@ async fn alerts_route_returns_200_with_nine_classified_rows() {
         );
     }
 }
+
+#[tokio::test]
+async fn registry_mutations_reject_read_capability_with_403() {
+    // Every privileged mutation surface — issuing grants / capability-tokens,
+    // releasing quarantine, admitting trust, applying a flex-profile delta,
+    // allocating a sandbox, writing dashboard prefs — must require the control
+    // token, exactly like /rules/reload and /panic. A read-only bearer token
+    // must be rejected with 403, NOT allowed to perform the mutation.
+    // RequireControl runs before the body extractor, so an empty body still 403s.
+    let app = read_only_app().await;
+    let mutations: &[(&str, &str)] = &[
+        ("POST", "/v1/grants/issue"),
+        ("POST", "/v1/grants/revoke"),
+        ("POST", "/v1/flex-profile/apply"),
+        ("POST", "/v1/flex-profile/revert"),
+        ("POST", "/v1/capability-tokens/issue"),
+        ("POST", "/v1/capability-tokens/revoke"),
+        ("POST", "/v1/sandboxes/allocate"),
+        ("POST", "/v1/sandboxes/release"),
+        ("POST", "/v1/quarantine/release"),
+        ("POST", "/v1/quarantine/forfeit"),
+        ("POST", "/v1/trust-scores/admit"),
+        ("POST", "/v1/trust-scores/operator-delta"),
+        ("PUT", "/v1/dashboard-prefs"),
+    ];
+    for (method, uri) in mutations {
+        let req = Request::builder()
+            .method(*method)
+            .uri(*uri)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from("{}"))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            res.status(),
+            StatusCode::FORBIDDEN,
+            "{method} {uri} must reject a read-only token with 403"
+        );
+    }
+}
