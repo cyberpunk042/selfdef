@@ -140,8 +140,20 @@ impl TrustScoreRegistry {
         Ok(Self { snapshot })
     }
 
-    /// Atomically persist.
+    /// Atomically and durably persist (tempfile + fsync + rename + dir fsync).
+    ///
+    /// Rename gives crash *consistency* (no torn read); the fsyncs give crash
+    /// *durability*. write+rename can both return Ok with the bytes still in
+    /// the page cache, so a power loss right after a trust-score update could
+    /// lose the mutation, resurrect a stale file, or leave a zero-length store
+    /// the daemon reloads as an empty/default trust set — silently resetting
+    /// accrued distrust. Fsync the tempfile contents before the rename, then
+    /// fsync the parent directory so the rename's new directory entry is
+    /// durable too. Directory fsync is best-effort. Matches the selfdef-cli
+    /// init / guardian fsync convention.
     pub fn save(&self, path: &Path) -> Result<(), RegistryError> {
+        use std::io::Write as _;
+
         let io_err = |e: std::io::Error| RegistryError::Io {
             path: path.display().to_string(),
             source: e,
@@ -157,8 +169,22 @@ impl TrustScoreRegistry {
                 source: e,
             })?;
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, body).map_err(io_err)?;
+        {
+            let mut f = std::fs::File::create(&tmp).map_err(io_err)?;
+            f.write_all(body.as_bytes()).map_err(io_err)?;
+            f.sync_all().map_err(io_err)?;
+        }
         std::fs::rename(&tmp, path).map_err(io_err)?;
+        if let Some(dir) = path.parent() {
+            let dir = if dir.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                dir
+            };
+            if let Ok(d) = std::fs::File::open(dir) {
+                let _ = d.sync_all();
+            }
+        }
         Ok(())
     }
 
@@ -465,6 +491,30 @@ mod tests {
         assert_eq!(back.tools().len(), 1);
         assert_eq!(back.tools()[0].tool, "rg");
         back.snapshot().validate_schema().unwrap();
+    }
+
+    #[test]
+    fn save_overwrites_existing_and_creates_missing_dirs() {
+        // Durable save must create absent parent dirs and truncate a longer
+        // prior file (File::create) so a shorter re-save leaves no stale tail.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/deeper/trust-scores.json");
+
+        let mut r = TrustScoreRegistry::new();
+        r.admit("rg", "op", 750, now()).unwrap();
+        r.admit("cargo", "op", 600, now()).unwrap();
+        r.save(&path).unwrap();
+        assert_eq!(TrustScoreRegistry::load(&path).unwrap().tools().len(), 2);
+
+        let mut r2 = TrustScoreRegistry::new();
+        r2.admit("rg", "op", 750, now()).unwrap();
+        r2.save(&path).unwrap();
+
+        let back = TrustScoreRegistry::load(&path).unwrap();
+        assert_eq!(back.tools().len(), 1);
+        assert_eq!(back.tools()[0].tool, "rg");
+        back.snapshot().validate_schema().unwrap();
+        assert!(!path.with_extension("json.tmp").exists());
     }
 
     #[test]
