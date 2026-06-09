@@ -4,9 +4,13 @@
 //! (kind)` returns:
 //!
 //!   * `Accepted{pending}` — pending < high_water.
-//!   * `HighWater{pending, high_water}` — high_water ≤ pending < cap.
-//!     The event is still accepted; back-pressure signaling.
-//!   * `Saturated{pending, cap}` — pending = cap; rejected.
+//!   * `HighWater{pending, high_water}` — high_water ≤ pending ≤ cap.
+//!     The event is still accepted; back-pressure signaling. This band runs up
+//!     to and INCLUDING the enqueue that fills the queue to `cap` (that accept
+//!     returns `HighWater{pending == cap}`, not `Saturated`).
+//!   * `Saturated{pending, cap}` — pending was already `cap`, so the new event
+//!     is rejected (pending unchanged). This is the enqueue *after* the queue
+//!     filled, distinguished from `HighWater{pending == cap}` by accept-vs-reject.
 //!   * `UnknownKind`.
 //!
 //! `dequeue(kind)` decrements; saturates at 0.
@@ -207,6 +211,30 @@ mod tests {
         b.enqueue("policy.update");
         let v = b.enqueue("policy.update");
         assert_eq!(v, EnqueueVerdict::Saturated { pending: 2, cap: 2 });
+    }
+
+    #[test]
+    fn high_water_band_includes_the_cap_filling_accept() {
+        // Contract: HighWater runs high_water ≤ pending ≤ cap. The accept that
+        // fills the queue to `cap` returns HighWater{pending == cap} (still
+        // accepted) — NOT Saturated. Saturated is the *next* enqueue, which is
+        // rejected because pending is already == cap.
+        let mut b = EventBusBackpressure::new();
+        b.register("policy.update", 1, 2).unwrap();
+        assert_eq!(
+            b.enqueue("policy.update"),
+            EnqueueVerdict::HighWater { pending: 1, high_water: 1 }
+        );
+        // Fills to cap=2 → HighWater{pending == cap}, accepted.
+        assert_eq!(
+            b.enqueue("policy.update"),
+            EnqueueVerdict::HighWater { pending: 2, high_water: 1 }
+        );
+        // Only now, with pending already == cap, is the enqueue rejected.
+        assert_eq!(
+            b.enqueue("policy.update"),
+            EnqueueVerdict::Saturated { pending: 2, cap: 2 }
+        );
     }
 
     #[test]
