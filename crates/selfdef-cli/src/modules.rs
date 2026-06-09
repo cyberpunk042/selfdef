@@ -1707,10 +1707,16 @@ pub(crate) fn resolve_active(
         let mut indeg: HashMap<&str, usize> = phase_slugs.iter().map(|s| (*s, 0)).collect();
         for slug in &phase_slugs {
             let m = &by_slug[*slug];
+            // Count DISTINCT in-phase dependencies. The Kahn decrement below
+            // fires once per distinct popped node (`any(|d| d == next)`), so a
+            // duplicated depends_on entry must not inflate the in-degree —
+            // otherwise the node could never reach 0 and a redundant (but
+            // acyclic) edge would be misreported as a "dependency cycle".
+            let mut counted: HashSet<&str> = HashSet::new();
             for d in &m.depends_on {
                 // Only count edges within the same phase — cross-phase
                 // deps go backward and are already implicitly ordered.
-                if phase_slugs.contains(d.as_str()) {
+                if phase_slugs.contains(d.as_str()) && counted.insert(d.as_str()) {
                     *indeg.get_mut(*slug).unwrap() += 1;
                 }
             }
@@ -4463,6 +4469,24 @@ mod tests {
         let active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
         let order: Vec<_> = active.iter().map(|a| a.slug.as_str()).collect();
         assert_eq!(order, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn resolver_tolerates_duplicate_depends_on() {
+        // A duplicated dependency is a redundant — but still ACYCLIC — edge.
+        // Kahn in-degree is decremented once per distinct popped node, so the
+        // in-degree count must also be per-distinct-dep; otherwise a dup
+        // inflates in-degree past what the decrement can undo, wedging the
+        // node so it never reaches 0 → a FALSE "dependency cycle" error.
+        let catalog = vec![
+            ("a".into(), make_manifest("a", &[], &[])),
+            ("b".into(), make_manifest("b", &["a", "a"], &[])), // dup dep on a
+        ];
+        let host = host_with(&["a", "b"]);
+        let active = resolve_active(&host, Path::new("/tmp"), catalog)
+            .expect("a duplicate (redundant) dependency must not read as a cycle");
+        let order: Vec<_> = active.iter().map(|a| a.slug.as_str()).collect();
+        assert_eq!(order, vec!["a", "b"]);
     }
 
     #[test]
