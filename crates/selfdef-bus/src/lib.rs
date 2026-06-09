@@ -106,6 +106,23 @@ impl Subscriber {
             Err(broadcast::error::RecvError::Closed) => Err(BusError::Closed),
         }
     }
+
+    /// Non-blocking receive: return the next already-buffered event without
+    /// waiting. `Ok(None)` means nothing is buffered right now (the ring is
+    /// empty); `Err(Closed)` means every [`Publisher`] *and* the owning [`Bus`]
+    /// have been dropped; `Err(Lagged)` reports skipped events.
+    ///
+    /// This exists so a consumer can drain its backlog on shutdown. The [`Bus`]
+    /// keeps its own sender alive, so a consumer can't wait for `Closed` to know
+    /// "no more events" — it must pull what's buffered without blocking.
+    pub fn try_recv(&mut self) -> Result<Option<Event>, BusError> {
+        match self.rx.try_recv() {
+            Ok(e) => Ok(Some(e)),
+            Err(broadcast::error::TryRecvError::Empty) => Ok(None),
+            Err(broadcast::error::TryRecvError::Lagged(n)) => Err(BusError::Lagged(n)),
+            Err(broadcast::error::TryRecvError::Closed) => Err(BusError::Closed),
+        }
+    }
 }
 
 // ---------------------------------------------------------------- tests
@@ -161,6 +178,22 @@ mod tests {
         assert_eq!(e2.metadata.sequence, 2);
         assert_eq!(f1.metadata.sequence, 1);
         assert_eq!(f2.metadata.sequence, 2);
+    }
+
+    #[tokio::test]
+    async fn try_recv_drains_buffer_then_reports_empty() {
+        let bus = Bus::new(16);
+        let pub_ = bus.publisher();
+        let mut sub = bus.subscribe();
+        pub_.publish(make_event(1)).unwrap();
+        pub_.publish(make_event(2)).unwrap();
+        // Drains the two buffered events without blocking, then Empty.
+        assert_eq!(sub.try_recv().unwrap().unwrap().metadata.sequence, 1);
+        assert_eq!(sub.try_recv().unwrap().unwrap().metadata.sequence, 2);
+        assert!(sub.try_recv().unwrap().is_none(), "ring now empty");
+        // Even with the Bus alive (it holds a sender), Empty — not Closed —
+        // is what a drained-but-open ring reports.
+        assert!(matches!(sub.try_recv(), Ok(None)));
     }
 
     #[tokio::test]

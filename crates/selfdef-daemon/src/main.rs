@@ -1060,7 +1060,34 @@ async fn run_store_sink(
     loop {
         tokio::select! {
             () = shutdown.cancelled() => {
-                info!(written, lagged, "store sink shutting down");
+                // Drain the backlog before exiting. The shutdown sequence
+                // cancels, then joins the producers, then drops the publisher
+                // and awaits THIS task last (with a timeout) — a choreography
+                // that only makes sense if the sink flushes what's already been
+                // published. But `Bus` keeps its own sender, so the channel
+                // never reports `Closed` while the daemon lives; we can't wait
+                // for it. Instead pull everything currently buffered in this
+                // subscriber's ring (non-blocking) and persist it, so events the
+                // producers emitted before we observed the cancel reach the hot
+                // store instead of being dropped on the floor.
+                loop {
+                    match sub.try_recv() {
+                        Ok(Some(event)) => {
+                            if let Err(e) = store.insert(&event).await {
+                                error!(error = %e, "store insert failed (shutdown drain)");
+                            } else {
+                                written += 1;
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(BusError::Lagged(n)) => {
+                            lagged = lagged.saturating_add(n);
+                            warn!(missed = n, "store sink lagged (shutdown drain)");
+                        }
+                        Err(_) => break,
+                    }
+                }
+                info!(written, lagged, "store sink shutting down (backlog drained)");
                 return (written, lagged);
             }
             res = sub.recv() => match res {
@@ -2342,7 +2369,56 @@ async fn run_heartbeat() {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_log_level;
+    use super::{resolve_log_level, run_store_sink};
+
+    // On graceful shutdown the store sink must DRAIN events already buffered in
+    // its subscriber, not abandon them. The Bus keeps its own sender so the
+    // channel never closes while the daemon lives; the old code returned the
+    // instant it saw the cancel, dropping the backlog. Publish a batch, cancel
+    // BEFORE running the sink, then assert every event was persisted.
+    #[tokio::test]
+    async fn store_sink_drains_buffered_events_on_shutdown() {
+        use selfdef_bus::Bus;
+        use selfdef_core::category::ClassUid;
+        use selfdef_core::prelude::*;
+        use selfdef_store::SqliteStore;
+        use std::sync::Arc;
+        use tokio_util::sync::CancellationToken;
+
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(SqliteStore::open(dir.path().join("hot.sqlite")).unwrap());
+
+        const N: u64 = 64;
+        let bus = Bus::new(256); // capacity > N so nothing is evicted
+        let sub = bus.subscribe();
+        let pub_ = bus.publisher();
+        for seq in 0..N {
+            pub_.publish(Event::new(
+                ClassUid::AUTHENTICATION,
+                1,
+                SeverityId::Informational,
+                "test-host",
+                "test",
+                seq,
+            ))
+            .unwrap();
+        }
+
+        // Cancel first: the sink must still flush the buffered backlog.
+        let shutdown = CancellationToken::new();
+        shutdown.cancel();
+        let (written, _lagged) = run_store_sink(store.clone(), sub, shutdown).await;
+
+        assert_eq!(
+            written, N,
+            "sink must persist every buffered event on drain"
+        );
+        assert_eq!(
+            store.count().await.unwrap(),
+            N,
+            "all events must be in the store, not dropped on shutdown"
+        );
+    }
 
     // `--log-level` / $SELFDEF_LOG wins over the config field.
     #[test]
