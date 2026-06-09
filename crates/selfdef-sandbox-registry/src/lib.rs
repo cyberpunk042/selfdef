@@ -162,8 +162,19 @@ impl SandboxRegistry {
         Ok(Self { snapshot })
     }
 
-    /// Atomically persist (sibling tempfile + rename).
+    /// Atomically and durably persist (tempfile + fsync + rename + dir fsync).
+    ///
+    /// Rename gives crash *consistency* (no torn read), the fsyncs give crash
+    /// *durability*: write+rename can both return Ok with the bytes still in
+    /// the page cache, so a power loss right after allocating or releasing a
+    /// sandbox could lose the mutation, resurrect a stale file, or leave a
+    /// zero-length store the daemon reloads as an empty sandbox set. Fsync the
+    /// tempfile contents before the rename, then fsync the parent directory so
+    /// the rename's new directory entry is durable too. Directory fsync is
+    /// best-effort. Matches the selfdef-cli init / guardian fsync convention.
     pub fn save(&self, path: &Path) -> Result<(), RegistryError> {
+        use std::io::Write as _;
+
         let io_err = |e: std::io::Error| RegistryError::Io {
             path: path.display().to_string(),
             source: e,
@@ -179,8 +190,22 @@ impl SandboxRegistry {
                 source: e,
             })?;
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, body).map_err(io_err)?;
+        {
+            let mut f = std::fs::File::create(&tmp).map_err(io_err)?;
+            f.write_all(body.as_bytes()).map_err(io_err)?;
+            f.sync_all().map_err(io_err)?;
+        }
         std::fs::rename(&tmp, path).map_err(io_err)?;
+        if let Some(dir) = path.parent() {
+            let dir = if dir.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                dir
+            };
+            if let Ok(d) = std::fs::File::open(dir) {
+                let _ = d.sync_all();
+            }
+        }
         Ok(())
     }
 
@@ -489,6 +514,34 @@ mod tests {
         assert_eq!(back.allocations().len(), 1);
         assert_eq!(back.allocations()[0].tier, SandboxTier::TierD);
         back.snapshot().validate_schema().unwrap();
+    }
+
+    #[test]
+    fn save_overwrites_existing_and_creates_missing_dirs() {
+        // Durable save must create absent parent dirs and truncate a longer
+        // prior file (File::create) so a shorter re-save leaves no stale tail.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/deeper/sandboxes.json");
+        let (lo, _) = ms032_range_for(SandboxTier::TierD);
+
+        let mut r = SandboxRegistry::new();
+        r.allocate(&req(SandboxTier::TierD, lo), "alloc-1", "t1", now())
+            .unwrap();
+        r.allocate(&req(SandboxTier::TierD, lo), "alloc-2", "t2", now())
+            .unwrap();
+        r.save(&path).unwrap();
+        assert_eq!(SandboxRegistry::load(&path).unwrap().allocations().len(), 2);
+
+        let mut r2 = SandboxRegistry::new();
+        r2.allocate(&req(SandboxTier::TierD, lo), "alloc-9", "t9", now())
+            .unwrap();
+        r2.save(&path).unwrap();
+
+        let back = SandboxRegistry::load(&path).unwrap();
+        assert_eq!(back.allocations().len(), 1);
+        assert_eq!(back.allocations()[0].allocation_id, "alloc-9");
+        back.snapshot().validate_schema().unwrap();
+        assert!(!path.with_extension("json.tmp").exists());
     }
 
     #[test]
