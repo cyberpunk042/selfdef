@@ -424,6 +424,25 @@ impl Config {
                  (an unrecognized value silently falls back to journalctl mode, ignoring input_path)"
             )));
         }
+
+        // The hardware-probe loop re-probes every interval_seconds, but only
+        // when enabled. The loop floors the cadence at 30s
+        // (`interval_seconds.max(30)`) as a runtime backstop — so a sub-30
+        // value is silently clamped, not honored: the operator asks for 5s,
+        // gets 30s with no signal, and the loop even logs the raw 5s while
+        // ticking at 30. The field's own contract says "Below 30 is rejected
+        // at validation time — sub-30s cadence yields no operator value", so
+        // honor that here and fail fast with an actionable error instead of a
+        // silent clamp. Only meaningful when the loop actually runs (enabled);
+        // a leftover low value in a disabled block keeps loading.
+        if self.hardware_probe.enabled && self.hardware_probe.interval_seconds < 30 {
+            return Err(ConfigError::Invalid(format!(
+                "[hardware_probe] interval_seconds = {} is below the 30s minimum — \
+                 sub-30s probe cadence yields no operator value (probe I/O is cheap \
+                 but not free); raise it to >= 30 (default 300) or disable the probe",
+                self.hardware_probe.interval_seconds
+            )));
+        }
         Ok(())
     }
 }
@@ -1723,6 +1742,36 @@ mod tests {
         // Any positive value is fine (default is 4096).
         cfg.bus.inproc_capacity = 1;
         cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_subthreshold_hardware_probe_interval() {
+        // The loop clamps interval_seconds to >= 30 at runtime, so a sub-30
+        // value is silently honored as 30 — validate must reject it (when the
+        // probe is enabled) so the operator gets an actionable error instead.
+        let mut cfg = Config::default();
+        cfg.hardware_probe.enabled = true;
+        for bad in [0_u64, 1, 5, 29] {
+            cfg.hardware_probe.interval_seconds = bad;
+            let err = cfg.validate().unwrap_err();
+            assert!(matches!(err, ConfigError::Invalid(_)), "got {err:?}");
+            assert!(
+                err.to_string().contains("interval_seconds"),
+                "msg should name the field: {err}"
+            );
+        }
+        // >= 30 is accepted; the default (300) is accepted.
+        for good in [30_u64, 60, 300] {
+            cfg.hardware_probe.interval_seconds = good;
+            cfg.validate()
+                .unwrap_or_else(|e| panic!("interval {good} must be valid, got {e:?}"));
+        }
+        // A sub-30 value in a DISABLED probe block keeps loading — the loop
+        // never runs, so the cadence is irrelevant.
+        cfg.hardware_probe.enabled = false;
+        cfg.hardware_probe.interval_seconds = 1;
+        cfg.validate()
+            .expect("disabled probe with low interval must still load");
     }
 
     #[test]
