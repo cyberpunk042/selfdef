@@ -460,20 +460,36 @@ fn compile_value(v: &serde_yaml_ng::Value, op: FieldOp) -> Result<MatchValue, St
 
 /// Parse a duration string like `60s`, `5m`, `1h`, `1d`.
 pub fn parse_duration(s: &str) -> Result<Duration, SigmaError> {
-    if s.len() < 2 {
+    let s = s.trim();
+    // Split off the trailing unit by *character*, not by byte: `s.split_at(
+    // s.len() - 1)` panics when the last char is multibyte (e.g. a stray
+    // non-ASCII unit), because byte `len - 1` is not a char boundary. Rule
+    // files are operator-authored input on the load/SIGHUP path, so a
+    // malformed timeframe must surface as InvalidTimeframe, never a panic that
+    // aborts a rule reload.
+    let unit = s
+        .chars()
+        .next_back()
+        .ok_or_else(|| SigmaError::InvalidTimeframe(s.into()))?;
+    let num_part = &s[..s.len() - unit.len_utf8()];
+    if num_part.is_empty() {
         return Err(SigmaError::InvalidTimeframe(s.into()));
     }
-    let (num_part, unit) = s.split_at(s.len() - 1);
     let n: u64 = num_part
         .parse()
         .map_err(|_| SigmaError::InvalidTimeframe(s.into()))?;
-    let secs = match unit {
-        "s" => n,
-        "m" => n * 60,
-        "h" => n * 3600,
-        "d" => n * 86_400,
+    let mult: u64 = match unit {
+        's' => 1,
+        'm' => 60,
+        'h' => 3600,
+        'd' => 86_400,
         _ => return Err(SigmaError::InvalidTimeframe(s.into())),
     };
+    // checked_mul: a large `n` (e.g. a huge day count) would otherwise overflow
+    // u64 — a debug panic / silent release wrap. Treat overflow as malformed.
+    let secs = n
+        .checked_mul(mult)
+        .ok_or_else(|| SigmaError::InvalidTimeframe(s.into()))?;
     Ok(Duration::from_secs(secs))
 }
 
@@ -912,6 +928,16 @@ mod tests {
         assert_eq!(parse_duration("1d").unwrap(), Duration::from_secs(86_400));
         assert!(parse_duration("60").is_err());
         assert!(parse_duration("60z").is_err());
+        // Robustness: malformed timeframes must error, never panic.
+        assert!(parse_duration("").is_err());
+        assert!(parse_duration("s").is_err());
+        // Multibyte trailing char must not panic on a non-char-boundary split.
+        assert!(parse_duration("5é").is_err());
+        assert!(parse_duration("héh").is_err());
+        // Overflowing day count must error via checked_mul, not wrap/panic.
+        assert!(parse_duration("100000000000000000d").is_err());
+        // Whitespace is tolerated (trimmed).
+        assert_eq!(parse_duration("  30s ").unwrap(), Duration::from_secs(30));
     }
 
     #[test]
