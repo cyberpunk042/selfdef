@@ -61,6 +61,11 @@ dashboard_title = "selfdef test dashboard"
         **os.environ,
         "SELFDEF_DRY_RUN": "0",
         "SELFDEF_OBSERVABILITY_CONFIG": str(config_path),
+        # Isolate the install manifest into the test tmp — otherwise apply.sh
+        # writes /var/lib/selfdef/installed/observability.manifest, which the
+        # non-root CI runner cannot create (root-only path) → mkdir fails →
+        # set -e → apply.sh exits 1. Passed as root locally, failed in CI.
+        "MODULE_INSTALLED_MANIFEST": str(tmp / "observability.manifest"),
     }
     result = subprocess.run(
         ["bash", str(APPLY_PATH)],
@@ -210,6 +215,11 @@ dashboard_title = "selfdef test dashboard"
         **os.environ,
         "SELFDEF_DRY_RUN": "0",
         "SELFDEF_OBSERVABILITY_CONFIG": str(config_path),
+        # Isolate the install manifest into the test tmp — otherwise apply.sh
+        # writes /var/lib/selfdef/installed/observability.manifest, which the
+        # non-root CI runner cannot create (root-only path) → mkdir fails →
+        # set -e → apply.sh exits 1. Passed as root locally, failed in CI.
+        "MODULE_INSTALLED_MANIFEST": str(tmp / "observability.manifest"),
     }
     # First apply: writes files (≥ 3 changes).
     first = subprocess.run(
