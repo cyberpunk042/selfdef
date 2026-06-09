@@ -185,6 +185,16 @@ observability module ships a Grafana dashboard + Prometheus alert
 rules that consume these. No authentication is performed on
 `/metrics` over the UNIX socket; on TCP, the read token is required.
 
+Watch `selfdef_responder_lag_events_total` and
+`selfdef_correlator_lag_events_total`: each broadcast-bus consumer
+has its own ring buffer, so a non-zero responder series means
+findings were dropped before any action fired, and a non-zero
+correlator series means raw events were dropped before any rule
+saw them — both distinct from (and more serious than)
+`selfdef_ingest_lag_events_total` (the metrics consumer). Any
+sustained increase means the bus is over-subscribed; raise the
+bus capacity.
+
 If you set a `responder.min_severity` floor (see
 [config](config.md)), watch `selfdef_responder_min_severity_floor`
 (the active floor as an OCSF `severity_id`, `0` = no floor)

@@ -427,6 +427,15 @@ async fn main() -> Result<()> {
         tokio::spawn(async move { run_store_sink(s, store_sub, sd).await })
     };
 
+    // F-2026-094: shared bus-lag counters for the two consequential consumers.
+    // The same Arc is handed to each consumer (which bumps it on a broadcast
+    // lag) and to the Metrics handle (which renders it live), so dropped-before-
+    // action findings / missed detections become observable instead of living
+    // only in a warn log. Created here so both the metrics wiring below and the
+    // correlator + responder constructions further down can clone them.
+    let responder_lag = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let correlator_lag = Arc::new(std::sync::atomic::AtomicU64::new(0));
+
     // The shared Metrics handle. Constructed here (before the retention +
     // mirror loops) so every producer records into the SAME Arc that the
     // API /metrics surface renders. Cheap + Arc'd; only the /metrics scrape
@@ -449,6 +458,8 @@ async fn main() -> Result<()> {
             other => parse_severity_floor(other).map_or(0, |s| s as u32),
         };
         m.set_responder_min_severity_floor(floor_repr);
+        // F-2026-094: hand the consumers' live lag counters to /metrics.
+        m.set_lag_sources(Arc::clone(&responder_lag), Arc::clone(&correlator_lag));
     }
 
     // SD-R retention sweep (SDD-081): enforce StoreConfig::hot_retention_days.
@@ -591,7 +602,8 @@ async fn main() -> Result<()> {
             publisher.clone(),
             host_tag.clone(),
             cfg.correlator.rules_dir.clone(),
-        );
+        )
+        .with_lag_counter(Arc::clone(&correlator_lag));
         if cfg.security.require_signed_rules {
             let key_path = cfg.security.signing_public_key_file.as_ref().context(
                 "[security].require_signed_rules = true but \
@@ -657,7 +669,8 @@ async fn main() -> Result<()> {
             actions,
             cfg.responder.allowed_actions.clone(),
             cfg.responder.dry_run,
-        );
+        )
+        .with_lag_counter(Arc::clone(&responder_lag));
         // F-2026-092: apply the optional autonomous-response severity floor.
         // `none`/`unknown`/empty means no floor (process every finding, the
         // default). A recognized grade raises the floor; an unrecognized token

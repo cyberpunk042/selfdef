@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 use std::fmt::Write;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
@@ -67,6 +67,16 @@ pub struct Metrics {
     /// many findings the floor is suppressing — a too-high floor silently
     /// swallowing real detections becomes visible rather than invisible.
     responder_min_severity_floor: AtomicU64,
+    /// Live cumulative bus-lag counters for the two consequential consumers,
+    /// shared (`Arc`) with the consumers themselves so the gauge reads their
+    /// real count with no copy. The broadcast bus gives each subscriber its own
+    /// ring buffer, so the responder and correlator lag independently of the
+    /// metrics ingest task (`ingest_lag_events`). A lagging *responder* dropped
+    /// findings before any action fired; a lagging *correlator* dropped raw
+    /// events before any rule saw them — both far more consequential than the
+    /// metrics task under-counting. Unset until the daemon wires them.
+    responder_lag: OnceLock<Arc<AtomicU64>>,
+    correlator_lag: OnceLock<Arc<AtomicU64>>,
 
     /// M060 mirror-export per-artifact publish counters. Keys are the
     /// canonical artifact filename (e.g. `"grants.json"`); values are
@@ -100,6 +110,8 @@ impl Metrics {
             retention_pruned_total: AtomicU64::new(0),
             retention_enabled: AtomicU64::new(0),
             responder_min_severity_floor: AtomicU64::new(0),
+            responder_lag: OnceLock::new(),
+            correlator_lag: OnceLock::new(),
             m060_publish_counts: Mutex::new(HashMap::new()),
             m060_last_publish_unix: Mutex::new(HashMap::new()),
         }
@@ -195,6 +207,18 @@ impl Metrics {
     pub fn set_responder_min_severity_floor(&self, floor_repr: u32) {
         self.responder_min_severity_floor
             .store(u64::from(floor_repr), Ordering::Relaxed);
+    }
+
+    /// Wire the live bus-lag counters shared with the responder and correlator.
+    /// Take an `Arc<AtomicU64>` each; the same `Arc` is handed to
+    /// `Responder::with_lag_counter` / `Correlator::with_lag_counter` so the
+    /// rendered counters read the consumers' real lag with no copy. Call once at
+    /// daemon startup. When unset, the two `*_lag_events_total` series are not
+    /// emitted (so a deployment without the wiring shows no misleading zeros).
+    /// Idempotent: only the first call per source takes effect (`OnceLock`).
+    pub fn set_lag_sources(&self, responder: Arc<AtomicU64>, correlator: Arc<AtomicU64>) {
+        let _ = self.responder_lag.set(responder);
+        let _ = self.correlator_lag.set(correlator);
     }
 
     /// Render the current counters as a Prometheus exposition-format
@@ -364,6 +388,27 @@ impl Metrics {
             self.responder_min_severity_floor.load(Ordering::Relaxed),
         )
         .unwrap();
+
+        // Consequential-consumer bus lag. Emitted only when the daemon wired the
+        // shared counters; each reads the consumer's live count. A non-zero
+        // responder series means findings were dropped before any action fired;
+        // a non-zero correlator series means raw events were dropped before any
+        // rule saw them. Distinct from `selfdef_ingest_lag_events_total` (the
+        // metrics task), which only under-counts stats.
+        if let Some(c) = self.responder_lag.get() {
+            out.push_str(
+                "# HELP selfdef_responder_lag_events_total Findings dropped because the responder lagged the bus (no action fired).\n",
+            );
+            out.push_str("# TYPE selfdef_responder_lag_events_total counter\n");
+            writeln!(out, "selfdef_responder_lag_events_total {}", c.load(Ordering::Relaxed)).unwrap();
+        }
+        if let Some(c) = self.correlator_lag.get() {
+            out.push_str(
+                "# HELP selfdef_correlator_lag_events_total Raw events dropped because the correlator lagged the bus (missed detections).\n",
+            );
+            out.push_str("# TYPE selfdef_correlator_lag_events_total counter\n");
+            writeln!(out, "selfdef_correlator_lag_events_total {}", c.load(Ordering::Relaxed)).unwrap();
+        }
 
         // M060 mirror-export per-artifact publish counters. Two series
         // sharing the `artifact` label: ok + failed. Operators alert on
@@ -682,6 +727,32 @@ mod tests {
             set_body.contains("selfdef_responder_min_severity_floor 4"),
             "floor set to High(4):\n{set_body}"
         );
+    }
+
+    #[test]
+    fn consumer_lag_series_appear_only_when_wired_and_read_live() {
+        // F-2026-094: the responder/correlator lag counters are NOT emitted
+        // until the daemon wires the shared Arcs (so an un-wired deployment
+        // shows no misleading zeros), and once wired they read the Arc live.
+        let m = Metrics::new("h");
+        let unwired = m.render(0);
+        assert!(
+            !unwired.contains("selfdef_responder_lag_events_total"),
+            "lag series must be absent until wired:\n{unwired}"
+        );
+        assert!(!unwired.contains("selfdef_correlator_lag_events_total"), "{unwired}");
+
+        let responder_lag = Arc::new(AtomicU64::new(0));
+        let correlator_lag = Arc::new(AtomicU64::new(0));
+        m.set_lag_sources(Arc::clone(&responder_lag), Arc::clone(&correlator_lag));
+
+        // Live: bumping the shared Arc is reflected in the next render.
+        responder_lag.fetch_add(7, Ordering::Relaxed);
+        correlator_lag.fetch_add(2, Ordering::Relaxed);
+        let wired = m.render(0);
+        assert!(wired.contains("# TYPE selfdef_responder_lag_events_total counter"), "{wired}");
+        assert!(wired.contains("selfdef_responder_lag_events_total 7"), "{wired}");
+        assert!(wired.contains("selfdef_correlator_lag_events_total 2"), "{wired}");
     }
 
     #[test]

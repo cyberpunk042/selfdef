@@ -57,6 +57,13 @@ pub struct Responder {
     /// only the autonomous bus path; [`Responder::dispatch_single`] (explicit,
     /// operator-authenticated) and [`Responder::fire`] are unaffected.
     min_severity: SeverityId,
+    /// Optional cumulative counter of findings this responder missed because it
+    /// lagged the broadcast bus. A lagging responder means findings were
+    /// dropped before *any* action ran — a silent security-relevant failure (no
+    /// notify / kill / quarantine fired) distinct from the metrics ingest task's
+    /// lag. The daemon wires this to `selfdef_responder_lag_events_total` via
+    /// [`Responder::with_lag_counter`]. `None` ⇒ not metered (e.g. in tests).
+    lag_counter: Option<Arc<std::sync::atomic::AtomicU64>>,
 }
 
 impl std::fmt::Debug for Responder {
@@ -82,7 +89,18 @@ impl Responder {
             // Lowest grade: every finding is processed, preserving the
             // pre-floor behavior for callers that don't opt in.
             min_severity: SeverityId::Unknown,
+            lag_counter: None,
         }
+    }
+
+    /// Attach a cumulative lag counter (bumped by the missed-finding count each
+    /// time the responder lags the bus). Chainable. The daemon wires this to
+    /// `selfdef_responder_lag_events_total` so dropped-before-action findings
+    /// become visible instead of living only in a warn log.
+    #[must_use]
+    pub fn with_lag_counter(mut self, counter: Arc<std::sync::atomic::AtomicU64>) -> Self {
+        self.lag_counter = Some(counter);
+        self
     }
 
     /// Set the autonomous-response severity floor (F-2026-092). Findings below
@@ -164,7 +182,12 @@ impl Responder {
                             }
                         }
                         Ok(_) => {}
-                        Err(BusError::Lagged(n)) => warn!(missed = n, "responder lagged"),
+                        Err(BusError::Lagged(n)) => {
+                            if let Some(c) = &self.lag_counter {
+                                c.fetch_add(n, std::sync::atomic::Ordering::Relaxed);
+                            }
+                            warn!(missed = n, "responder lagged");
+                        }
                         Err(BusError::Closed) => {
                             info!("responder: bus closed");
                             return;
