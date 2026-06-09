@@ -224,11 +224,18 @@ impl GrantRegistry {
         let mut changed = 0usize;
         for g in &mut self.snapshot.grants {
             if matches!(g.state, GrantState::Active | GrantState::Pending) {
-                if let Ok(exp) = OffsetDateTime::parse(&g.expires_at, &Rfc3339) {
-                    if exp <= now {
-                        g.state = GrantState::Expired;
-                        changed += 1;
-                    }
+                let expire = match OffsetDateTime::parse(&g.expires_at, &Rfc3339) {
+                    Ok(exp) => exp <= now,
+                    // Unparseable expiry: `issue()` always writes RFC3339, so a
+                    // malformed value means the persisted store was corrupted or
+                    // tampered. Fail safe — expire a grant whose validity window
+                    // we cannot read, rather than leaving a grant of unknown
+                    // expiry presented as Active (fail-open).
+                    Err(_) => true,
+                };
+                if expire {
+                    g.state = GrantState::Expired;
+                    changed += 1;
                 }
             }
         }
@@ -381,6 +388,20 @@ mod tests {
         assert_eq!(r.grants()[0].state, GrantState::Expired);
         // idempotent
         assert_eq!(r.expire_due(later).unwrap(), 0);
+    }
+
+    #[test]
+    fn expire_due_fails_safe_on_unparseable_expiry() {
+        let mut r = GrantRegistry::new();
+        r.issue(&req(GrantKind::Sandbox, 3600), "gr-1", "t1", now())
+            .unwrap();
+        r.activate("gr-1", now()).unwrap();
+        // Tamper/corrupt the persisted expiry to a non-RFC3339 value.
+        r.snapshot.grants[0].expires_at = "not-a-timestamp".into();
+        // `now` is well within the original 3600s TTL, yet a grant whose expiry
+        // can't be parsed must be expired (fail-safe), never left Active.
+        assert_eq!(r.expire_due(now()).unwrap(), 1);
+        assert_eq!(r.grants()[0].state, GrantState::Expired);
     }
 
     #[test]

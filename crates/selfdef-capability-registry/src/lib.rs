@@ -382,11 +382,18 @@ impl CapabilityRegistry {
         let mut changed = 0usize;
         for t in &mut self.snapshot.tokens {
             if matches!(t.state, TokenState::Active | TokenState::Pending) {
-                if let Ok(exp) = OffsetDateTime::parse(&t.expires_at, &Rfc3339) {
-                    if exp <= now {
-                        t.state = TokenState::Expired;
-                        changed += 1;
-                    }
+                let expire = match OffsetDateTime::parse(&t.expires_at, &Rfc3339) {
+                    Ok(exp) => exp <= now,
+                    // Unparseable expiry: `issue()` always writes RFC3339, so a
+                    // malformed value means the persisted store was corrupted or
+                    // tampered. Fail safe — expire a token whose validity window
+                    // we cannot read, rather than leaving a capability token of
+                    // unknown expiry presented as Active (fail-open).
+                    Err(_) => true,
+                };
+                if expire {
+                    t.state = TokenState::Expired;
+                    changed += 1;
                 }
             }
         }
@@ -602,6 +609,21 @@ mod tests {
         assert_eq!(r.expire_due(later).unwrap(), 1);
         assert_eq!(r.tokens()[0].state, TokenState::Expired);
         assert_eq!(r.expire_due(later).unwrap(), 0); // idempotent
+    }
+
+    #[test]
+    fn expire_due_fails_safe_on_unparseable_expiry() {
+        let mut r = CapabilityRegistry::new();
+        let mut q = req(&["tests"], TrustRing::Ring0);
+        q.ttl_seconds = 3600;
+        r.issue(&q, "tok-1", "t1", now()).unwrap();
+        r.activate("tok-1", now()).unwrap();
+        // Tamper/corrupt the persisted expiry to a non-RFC3339 value.
+        r.snapshot.tokens[0].expires_at = "not-a-timestamp".into();
+        // `now` is well within the original 3600s TTL, yet a token whose expiry
+        // can't be parsed must be expired (fail-safe), never left Active.
+        assert_eq!(r.expire_due(now()).unwrap(), 1);
+        assert_eq!(r.tokens()[0].state, TokenState::Expired);
     }
 
     #[test]
