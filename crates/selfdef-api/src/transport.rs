@@ -326,11 +326,28 @@ fn read_token(path: &std::path::Path) -> Result<String, ServerError> {
     Ok(token)
 }
 
-/// Constant-time-ish compare. The token is high-entropy and the API is
-/// local/LAN-scope, so we don't need a cryptographic CT comparator, but
-/// matching length first avoids the easy length oracle.
+/// Constant-time byte comparison of the bearer token.
+///
+/// The previous impl used `bytes().eq(...)`, which SHORT-CIRCUITS on the
+/// first differing byte — that leaks the token byte-by-byte to an attacker
+/// who can time many requests, and high token entropy does NOT help (a
+/// timing oracle reads the bytes directly; it doesn't have to brute-force
+/// them). The API exposes a TCP transport with bearer auth, so the compare
+/// must not be timing-attackable. Equal-length inputs are folded with an
+/// XOR accumulator and NO early return, so the compare time is independent
+/// of WHERE the first mismatch is. Length is checked first — a
+/// low-sensitivity length oracle, acceptable for a high-entropy token.
 fn token_eq(presented: &str, expected: &str) -> bool {
-    presented.len() == expected.len() && presented.bytes().eq(expected.bytes())
+    let p = presented.as_bytes();
+    let e = expected.as_bytes();
+    if p.len() != e.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (a, b) in p.iter().zip(e.iter()) {
+        diff |= a ^ b;
+    }
+    diff == 0
 }
 
 /// SDD-007 D-1: stable 32-byte handle for a bearer token. Computed in
