@@ -100,6 +100,12 @@ pub enum QuarantineError {
     BackendUnreachable(String),
     #[error("pid {pid} not found (process exited?)")]
     PidNotFound { pid: i32 },
+    /// pid 1 (init) is sacrosanct — freezing init via the cgroup freezer hangs
+    /// the whole system (init stops reaping children and handling signals).
+    /// The sibling process-tree-freeze / capability-drop / process-env-scrub /
+    /// netns-isolation backends already refuse pid 1; quarantine must too.
+    #[error("pid {pid} refused: {reason}")]
+    PidRefused { pid: i32, reason: String },
 }
 
 #[async_trait]
@@ -159,6 +165,12 @@ fn validate(req: &FreezeRequest) -> Result<(), QuarantineError> {
             "pid must be positive, got {}",
             req.pid
         )));
+    }
+    if req.pid == 1 {
+        return Err(QuarantineError::PidRefused {
+            pid: req.pid,
+            reason: "pid 1 (init) is never freezable; freezing init hangs the host".into(),
+        });
     }
     let max = req.authority.max_duration();
     if req.duration > max {
@@ -478,5 +490,41 @@ impl ProcessQuarantineBackend for FsBackend {
             let _ = self.persist(&snapshot);
         }
         removed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn req(pid: i32) -> FreezeRequest {
+        FreezeRequest {
+            pid,
+            reason: "containment".into(),
+            duration: Duration::from_secs(60),
+            authority: AuthorityTier::Operator,
+            scope: FreezeScope::Process,
+            idempotency_key: "k1".into(),
+        }
+    }
+
+    #[test]
+    fn pid_1_freeze_refused() {
+        // SAFETY: pid 1 (init) is sacrosanct — freezing init via the cgroup
+        // freezer hangs the whole host. The sibling process-tree-freeze and
+        // other enforcement backends refuse pid 1; quarantine must too.
+        assert!(matches!(
+            validate(&req(1)).unwrap_err(),
+            QuarantineError::PidRefused { pid: 1, .. }
+        ));
+    }
+
+    #[test]
+    fn nonpositive_rejected_normal_ok() {
+        assert!(matches!(
+            validate(&req(0)).unwrap_err(),
+            QuarantineError::InvalidRequest(_)
+        ));
+        validate(&req(4242)).unwrap();
     }
 }
