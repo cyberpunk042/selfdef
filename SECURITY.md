@@ -100,9 +100,15 @@ surfaces the shipped modules introduce.
   > 60s is itself logged to journal and (via fallback path) attempts to
   notify.
 - AIDE baseline includes the daemon binary, config, and rules.
-- Tetragon TracingPolicy specifically watches `/usr/bin/selfdefd`,
-  `/etc/selfdef/`, `/var/lib/selfdef/` for modification by anything that
-  is not the daemon's own update path.
+- Tetragon credential-access policy (`rules/tetragon/observe-sensitive-files.yaml`)
+  observes file *opens* under `/etc/selfdef/secrets/` (action `Post`/observe,
+  T1552), and the optional agent-guard `etc-write-guard` observes `/etc/`
+  writes broadly (T1565, `Post`). NOTE: a dedicated Tetragon policy watching
+  the daemon binary `/usr/bin/selfdefd` + full `/etc/selfdef/` +
+  `/var/lib/selfdef/` for *modification* with a daemon-update-path exclusion
+  is **not** shipped (see Known gap F-2026-099) — real-time daemon-binary/state
+  tamper detection relies on the periodic AIDE baseline (above), not an
+  in-kernel Tetragon policy.
 
 ### Four-watchdog set (IPS spine, MS046+MS047+MS044+MS048)
 
@@ -401,6 +407,24 @@ This block is intentionally short — copy it into your deployment runbook.
   (and whether hard-fail-at-boot is even desirable vs. audit-only,
   given it could brick a host on a false-positive hardware
   reading) is a PO decision.
+- **No real-time Tetragon self-protection policy for the daemon
+  (F-2026-099).** The Tamper-detection section claimed a Tetragon
+  TracingPolicy watches `/usr/bin/selfdefd` + `/etc/selfdef/` +
+  `/var/lib/selfdef/` for modification (with a daemon-update-path
+  exclusion). Verified against the shipped policies: no such
+  policy exists — `observe-sensitive-files.yaml` watches
+  `/etc/selfdef/secrets/` for file *open* (observe-only, no
+  daemon-exclusion); the daemon binary and `/var/lib/selfdef/`
+  state are not watched by any Tetragon policy. So a root attacker
+  modifying `/usr/bin/selfdefd` or the state dir is **not** caught
+  in real time by a kernel policy — only by the periodic AIDE
+  baseline scan (`integrity-sentinel`, which covers config + rules
+  explicitly and the binary via AIDE's standard `/usr/bin`
+  coverage). Section corrected to state this. Shipping a real
+  `security_path_*`/`security_file_open(write)` Tetragon policy on
+  those paths with a `matchBinaries` exclusion for the updater is a
+  tracked enhancement (and the daemon-exclusion design — how the
+  legitimate update path is identified — is the non-trivial part).
 
 ## Reporting
 
