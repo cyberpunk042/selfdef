@@ -246,6 +246,16 @@ fn ipv4_in_cidr(ip: [u8; 4], cidr: &str) -> Option<bool> {
         return None;
     }
     let prefix_len: u32 = parts[1].parse().ok()?;
+    // Defend against an unvalidated CIDR (serde bypasses validate_cidr): a
+    // prefix_len > 32 makes `32 - prefix_len` underflow — a panic in debug, and
+    // in release Rust masks the shift amount to 5 bits so `/40` silently
+    // becomes a `/24` mask, matching a 256-address range the rule never named
+    // (a fail-OPEN egress allow). Reject out-of-range prefixes here so this
+    // pub-reachable matcher is fail-closed on its own, not only when the caller
+    // happened to run validate() first.
+    if prefix_len > 32 {
+        return None;
+    }
     let cidr_ip_parts: Vec<&str> = parts[0].split('.').collect();
     if cidr_ip_parts.len() != 4 {
         return None;
@@ -397,6 +407,30 @@ mod tests {
             g.validate().unwrap_err(),
             NetworkError::InvalidCidr(_)
         ));
+    }
+
+    #[test]
+    fn out_of_range_cidr_prefix_does_not_permit() {
+        // A grant that bypassed validate() (e.g. deserialized) carrying a CIDR
+        // with prefix_len > 32 must NOT permit egress. Before the guard,
+        // `32 - prefix_len` underflowed: a debug panic, and in release Rust
+        // masked the shift so /40 silently became a /24 mask — a fail-OPEN
+        // match against a 256-address range. permits_ipv4 must be fail-closed
+        // (deny) on the unvalidated out-of-range prefix instead.
+        let g = ok_grant(
+            NetworkProfile::ArbitraryWeb,
+            vec![AllowEntry::Cidr {
+                cidr: "10.0.0.0/40".into(),
+            }],
+        );
+        // 10.0.0.5 would be inside a (wrongly-masked) /24 of 10.0.0.0 — it must
+        // still be denied because the prefix is invalid.
+        assert!(
+            !g.permits_ipv4([10, 0, 0, 5]),
+            "out-of-range CIDR prefix must not permit egress"
+        );
+        // And a normal address is likewise not permitted.
+        assert!(!g.permits_ipv4([203, 0, 113, 1]));
     }
 
     #[test]
