@@ -84,6 +84,48 @@ pub fn classify(args: &[String]) -> Vec<Token<'_>> {
     out
 }
 
+/// Index in `args` of the target spec — the first non-option word.
+///
+/// ssh stops option parsing at the target: everything from the target onward
+/// (the `[user@]host` spec **and** the remote command) is handed to the server
+/// verbatim and MUST NOT be reinterpreted as ssh options. `classify` has no
+/// notion of "the target ends the options", so feeding it the whole argv turns
+/// a remote command like `mytool --recursive` into ssh-flag tokens
+/// (`--recursive` → `-- -r -e -c …`) and, worse, drops a remote flag that
+/// happens to collide with a denied ssh flag. We therefore locate the target
+/// up front and only ever classify/filter the slice *before* it.
+///
+/// Walks the same single-letter grammar as `classify`: a bare value-option
+/// (`-o`, `-p`, …) consumes the next argv element; `--` ends options so the
+/// target is the element after it. Returns `None` when argv is all options
+/// (no host) — the caller passes those through to real ssh for its usage error.
+pub fn target_index(args: &[String]) -> Option<usize> {
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+        if arg == "--" {
+            return if i + 1 < args.len() {
+                Some(i + 1)
+            } else {
+                None
+            };
+        }
+        if !arg.starts_with('-') || arg == "-" {
+            return Some(i);
+        }
+        // Option cluster. `-o`/`-p`/… in their bare two-char form swallow the
+        // next argv element as their value; everything else (attached value,
+        // combined flags) is self-contained.
+        let c = arg.as_bytes()[1] as char;
+        if arg.len() == 2 && VALUE_OPTIONS.contains(&c) {
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    None
+}
+
 /// First positional after any options is the target spec.
 pub fn extract_target<'a>(tokens: &[Token<'a>]) -> Option<&'a str> {
     let mut seen_marker = false;
@@ -281,6 +323,55 @@ mod tests {
         assert_eq!(
             parse_target("host:notaport"),
             (None, "host:notaport".into(), None)
+        );
+    }
+
+    #[test]
+    fn target_index_walks_option_grammar() {
+        // Bare value-options consume the next argv slot.
+        assert_eq!(target_index(&s(&["-p", "22", "host"])), Some(2));
+        assert_eq!(
+            target_index(&s(&["-A", "-i", "/k", "host", "cmd"])),
+            Some(3)
+        );
+        // Attached value (`-pq`) and combined flags are self-contained.
+        assert_eq!(target_index(&s(&["-pq", "host"])), Some(1));
+        assert_eq!(target_index(&s(&["-Aq", "host"])), Some(1));
+        // `--` ends options; the target is the next element (even if dashy).
+        assert_eq!(target_index(&s(&["--", "-weirdhost"])), Some(1));
+        // Bare `-` is stdin, a positional.
+        assert_eq!(target_index(&s(&["-"])), Some(0));
+        assert_eq!(target_index(&s(&["host"])), Some(0));
+        // All options, no host.
+        assert_eq!(target_index(&s(&["-A", "-q"])), None);
+        // A trailing bare value-option with no value still "consumes" past the
+        // end and yields no target (real ssh would error on the missing value).
+        assert_eq!(target_index(&s(&["-o"])), None);
+    }
+
+    #[test]
+    fn remote_command_passes_through_verbatim() {
+        // ssh stops option parsing at the target; the remote command must reach
+        // the server byte-for-byte. The pre-fix wrapper classified the WHOLE
+        // argv and rebuilt it, so `--recursive` decomposed into `-- -r -e -c …`
+        // and a remote flag colliding with a denied ssh flag was silently
+        // dropped. Reconstruct the way run() now does — filter only the
+        // pre-target options, then append `raw_args[target_idx..]` untouched.
+        let argv = s(&["-A", "host", "mytool", "--recursive", "-A", "subcmd"]);
+        let idx = target_index(&argv).expect("target present");
+        assert_eq!(idx, 1, "target `host` is at index 1");
+
+        let opts = classify(&argv[..idx]);
+        let mut out = filter(&opts, &['A'], &[]); // -A denied for ssh
+        out.extend(argv[idx..].iter().cloned());
+
+        // The pre-target ssh -A is stripped; the remote command — including its
+        // OWN -A and its --recursive — is byte-for-byte intact.
+        assert_eq!(out, vec!["host", "mytool", "--recursive", "-A", "subcmd"]);
+        assert_eq!(
+            out.iter().filter(|x| x.as_str() == "-A").count(),
+            1,
+            "only the remote-command -A survives, got {out:?}"
         );
     }
 
