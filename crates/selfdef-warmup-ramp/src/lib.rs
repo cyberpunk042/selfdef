@@ -76,7 +76,13 @@ impl WarmupRamp {
         if elapsed >= self.warmup_ms {
             return self.target;
         }
-        let span = self.target - self.floor;
+        // saturating: new() enforces target >= floor, but serde deserialization
+        // can violate it; `self.target - self.floor` would otherwise underflow
+        // — a debug panic and, in release, a wrap to a huge bogus span. Saturate
+        // to 0 so an inverted ramp degrades to a flat floor rather than crashing.
+        // (The div-by-zero on warmup_ms==0 is already avoided by the early
+        // return above: elapsed >= 0 == warmup_ms is always true.)
+        let span = self.target.saturating_sub(self.floor);
         // floor + span * elapsed / warmup_ms, integer math.
         let bump = (span as u128 * elapsed as u128 / self.warmup_ms as u128) as u64;
         self.floor + bump
@@ -105,6 +111,21 @@ impl WarmupRamp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inverted_ramp_serde_bypass_does_not_underflow() {
+        // new() enforces target >= floor, but serde can invert them. During the
+        // ramp (0 < elapsed < warmup_ms) `target - floor` would underflow — a
+        // debug panic / release wrap. Guard saturates span to 0 → flat floor.
+        let r = WarmupRamp {
+            schema_version: SCHEMA_VERSION.into(),
+            start_ms: 0,
+            warmup_ms: 1000,
+            floor: 500,
+            target: 100, // inverted: target < floor
+        };
+        assert_eq!(r.cap(500), 500); // mid-ramp: must not panic; degrades to floor
+    }
 
     #[test]
     fn cap_starts_at_floor() {

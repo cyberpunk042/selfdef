@@ -58,6 +58,13 @@ impl RingBuffer {
 
     /// Push a sample.
     pub fn push(&mut self, x: u64) {
+        // new()/validate() reject capacity==0, but serde deserialization can
+        // set it directly; the wrap branch's `% self.capacity` would then panic
+        // in every build (integer mod-by-zero is never masked). A zero-capacity
+        // buffer can store nothing — no-op rather than crash.
+        if self.capacity == 0 {
+            return;
+        }
         if (self.buf.len() as u32) < self.capacity {
             self.buf.push(x);
         } else {
@@ -141,6 +148,21 @@ impl RingBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_capacity_serde_bypass_does_not_panic() {
+        // new()/validate() reject capacity==0, but serde can construct it. The
+        // wrap branch's `% self.capacity` would panic in every build. Guard
+        // makes push a no-op instead of crashing.
+        let mut b = RingBuffer {
+            schema_version: SCHEMA_VERSION.into(),
+            capacity: 0,
+            buf: vec![1, 2, 3], // non-empty to force the wrap branch
+            head: 0,
+            pushes: 0,
+        };
+        b.push(9); // must not panic
+    }
 
     #[test]
     fn under_capacity() {
