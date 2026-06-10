@@ -306,3 +306,24 @@ groups:
           summary: "selfdef responder bus lag on {{ $labels.instance }} ({{ $value }} findings dropped before any action in 10m)"
           description: "The selfdef responder subscriber missed {{ $value }} findings in the last 10m (selfdef_responder_lag_events_total rising) — the in-process bus broadcast over-subscribed and for those findings NO autonomous response fired (no block/quarantine/notify). Detection happened; the gap is between detecting and acting. An attacker flooding low-value findings to bury a high-value one under responder lag is a plausible evasion. Make the action path faster/async, raise [bus] inproc_capacity, or resolve responder CPU starvation. See runbook."
           runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/metrics-responder-lag.md"
+
+      # The KERNEL detection source degrading — the external analog of the bus
+      # lag above. Tetragon BPF map errors (`tetragon_map_errors_total`, the
+      # contract-pinned metric, dashboarded but previously unalerted) rise when
+      # the in-kernel detection layer is under pressure (process-cache map full,
+      # map update/read failures). Under that pressure Tetragon silently drops
+      # or mishandles events BEFORE selfdef ever receives them — the
+      # "Tetragon-socket-dropout gotcha": unlike a vanished socket
+      # (SelfdefGuardianTetragonSocketMissing, which we already alert), the
+      # collector stays connected while the kernel source quietly loses fidelity,
+      # so detection degrades with zero signal on selfdef's own bus. Proactive
+      # warn so a degrading kernel source can't go unnoticed.
+      - alert: SelfdefTetragonMapErrors
+        expr: increase(tetragon_map_errors_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tetragon BPF map errors on {{ $labels.instance }} ({{ $value }} in 10m) — kernel detection source degrading"
+          description: "Tetragon reported {{ $value }} BPF map errors in the last 10m (tetragon_map_errors_total rising) — the in-kernel detection layer is under pressure (process-cache map full / map op failures). Under this pressure Tetragon can silently DROP or mishandle exec/file/socket events before selfdef's collector receives them (the Tetragon-socket-dropout gotcha), so detection degrades with no signal on selfdef's own event bus. This is the external analog of the bus-lag alerts: the source itself is lossy. Investigate Tetragon resource limits (process-cache size, ringbuf/map sizing) and event volume; correlate with tetragon_events_total flattening. See runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/tetragon-map-errors.md"

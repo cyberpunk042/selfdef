@@ -159,7 +159,7 @@ checked-in template propagate.
 
 ## Alert rules
 
-`assets/alerts/selfdef.yml.template` ships 18 Prometheus alert rules
+`assets/alerts/selfdef.yml.template` ships 19 Prometheus alert rules
 across 4 groups: the MS027 four-watchdog set, the M060 cross-repo
 mirror-export loop, the SDD-062 detection-watchdog finding stream, and
 the meta-observability warnings (metrics-ingest lag + correlator bus lag
