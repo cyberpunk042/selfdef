@@ -3014,6 +3014,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "selfdef-bus",
+ "selfdef-collector-util",
  "selfdef-core",
  "serde_json",
  "tempfile",
