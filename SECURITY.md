@@ -96,9 +96,15 @@ surfaces the shipped modules introduce.
 - Notification *failures* themselves are events — silent silence is suspicious.
 
 ### Tamper detection
-- Self-watchdog: daemon publishes a heartbeat; absence of heartbeat for
-  > 60s is itself logged to journal and (via fallback path) attempts to
-  notify.
+- Self-watchdog: the daemon emits the systemd watchdog heartbeat
+  (`sd_notify WATCHDOG=1` every 30s, `run_heartbeat`). NOTE: the shipped
+  `selfdefd.service` is `Type=notify` but sets **no `WatchdogSec=`** (so
+  systemd ignores the heartbeat — a *hung* daemon is not detected, restarted,
+  or journal-logged via the watchdog) and **no `OnFailure=`** (no fallback
+  notify). As shipped, only a clean *exit* is handled (`Restart=on-failure`,
+  `RestartSec=5s`); hang detection + notify requires the operator to add
+  `WatchdogSec=60` and an `OnFailure=` notify unit via a drop-in. See Known
+  gap F-2026-100.
 - AIDE baseline includes the daemon binary, config, and rules.
 - Tetragon credential-access policy (`rules/tetragon/observe-sensitive-files.yaml`)
   observes file *opens* under `/etc/selfdef/secrets/` (action `Post`/observe,
@@ -425,6 +431,20 @@ This block is intentionally short — copy it into your deployment runbook.
   those paths with a `matchBinaries` exclusion for the updater is a
   tracked enhancement (and the daemon-exclusion design — how the
   legitimate update path is identified — is the non-trivial part).
+- **Self-watchdog hang-detection is not wired (F-2026-100).** The
+  daemon emits the systemd watchdog heartbeat (`WATCHDOG=1` every
+  30s), but `selfdefd.service` sets no `WatchdogSec=`, so systemd
+  ignores it — a *hung* daemon (alive but not heartbeating, e.g.
+  deadlocked) is not detected, restarted, or journal-logged via
+  the watchdog, and no `OnFailure=` fallback-notify is configured.
+  Only a clean *exit* is handled (`Restart=on-failure`). The
+  threat model claimed ">60s heartbeat absence is logged + notified";
+  corrected. Activating it is a one-line `WatchdogSec=60` (the
+  daemon already beats at 30s = 2 beats/window) + an `OnFailure=`
+  notify unit, shippable as a drop-in. Surfaced + made honest; the
+  reason it's not auto-flipped is the `OnFailure=` notify target
+  design (which channel, and avoiding a notify-storm on a
+  crash-loop) is a small PO decision.
 
 ## Reporting
 
