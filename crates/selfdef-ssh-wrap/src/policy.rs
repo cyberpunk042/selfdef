@@ -118,9 +118,24 @@ pub struct ResolvedPolicy {
 impl ResolvedPolicy {
     pub fn resolve(file: &PolicyFile, host: &str) -> Self {
         let mut merged = HostPolicy::secure_defaults().merge_over(&file.defaults);
-        for (pattern, host_policy) in &file.hosts {
-            if matches_pattern(pattern, host) {
-                merged = host_policy.merge_over(&merged);
+        // A legitimate hostname never contains '@'. If the parsed host does, the
+        // target was ambiguous (multi-'@', e.g. `user@trusted@evil.com`):
+        // ssh-wrap split the target on the FIRST '@' to pick this host for
+        // policy, but main.rs forwards the target BYTE-FOR-BYTE to the real ssh,
+        // which re-parses it with ITS OWN '@' rule and may connect to a
+        // different host. A host-specific override (which can RELAX a setting,
+        // e.g. `[hosts."trusted*"] forward_agent = true`) would then be applied
+        // for a host ssh isn't actually connecting to — a parser-differential
+        // that smuggles a relaxation (agent/X11/port forwarding) onto an
+        // untrusted connection. Refuse host-specific overrides for an ambiguous
+        // host; only the host-independent secure defaults (+ global defaults)
+        // stand. Legitimate single-'@'/no-'@' targets never reach this branch
+        // (their host carries no '@'), so their behaviour is unchanged.
+        if !host.contains('@') {
+            for (pattern, host_policy) in &file.hosts {
+                if matches_pattern(pattern, host) {
+                    merged = host_policy.merge_over(&merged);
+                }
             }
         }
         // Anywhere a value somehow still None, fall back to secure defaults.
@@ -302,6 +317,33 @@ mod tests {
         assert!(policy.forward_agent);
         let other = ResolvedPolicy::resolve(&file, "untrusted.example.com");
         assert!(!other.forward_agent);
+    }
+
+    #[test]
+    fn ambiguous_multi_at_host_ignores_overrides() {
+        // A `trusted*` override relaxes agent forwarding. An attacker crafts a
+        // multi-'@' target (`user@trusted@evil.com`); ssh-wrap's first-'@' parse
+        // yields host "trusted@evil.com", which a prefix override would match —
+        // but the real ssh re-parses the forwarded target and connects to
+        // evil.com. The override must NOT apply to a host containing '@'
+        // (fail-closed), so agent forwarding stays denied.
+        let toml_str = r#"
+            [hosts."trusted*"]
+            forward_agent = true
+            port_forwarding = true
+        "#;
+        let file: PolicyFile = toml::from_str(toml_str).unwrap();
+        // Ambiguous host (still carries the '@') — override refused.
+        let amb = ResolvedPolicy::resolve(&file, "trusted@evil.com");
+        assert!(
+            !amb.forward_agent,
+            "override must not relax an ambiguous host"
+        );
+        assert!(!amb.port_forwarding);
+        // Legitimate host with the same prefix — override still applies.
+        let ok = ResolvedPolicy::resolve(&file, "trusted.example.com");
+        assert!(ok.forward_agent);
+        assert!(ok.port_forwarding);
     }
 
     #[test]
