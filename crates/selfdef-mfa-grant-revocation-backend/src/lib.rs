@@ -5,6 +5,8 @@
 //! with SDD-067 (shell-session) for incident-response gold:
 //! kills sessions AND forces fresh MFA on next auth.
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;

@@ -7,6 +7,8 @@
 //! **least-privilege graduation** — operator can dial back a
 //! specific capability rather than the whole process.
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;

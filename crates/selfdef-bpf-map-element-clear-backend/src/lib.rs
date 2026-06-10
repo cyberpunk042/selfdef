@@ -8,6 +8,8 @@
 //! the bpf() syscall. Different syscall surface, different
 //! state-store semantics, different attacker-leverage models.
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;

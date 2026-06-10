@@ -4,6 +4,8 @@
 //! → dectet at the in-memory secret-residency axis. Pairs with
 //! SDD-068 (token-revocation) at the credential-axis family.
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;

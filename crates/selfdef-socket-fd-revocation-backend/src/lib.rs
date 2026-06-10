@@ -5,6 +5,8 @@
 //! SDD-065 (perimeter-block) + SDD-070 (netns-isolation) at the
 //! network-containment family.
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;

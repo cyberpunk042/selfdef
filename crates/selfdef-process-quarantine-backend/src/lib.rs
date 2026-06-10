@@ -12,6 +12,8 @@
 //! the trait + `InMemoryBackend` only (hermetic; used by
 //! selfdef-responder unit tests + integration substrate).
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;

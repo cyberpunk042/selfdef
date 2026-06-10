@@ -10,6 +10,8 @@
 //! ships the trait + `InMemoryBackend` (hermetic, used by
 //! selfdef-responder unit tests).
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr};
 use std::sync::Mutex;

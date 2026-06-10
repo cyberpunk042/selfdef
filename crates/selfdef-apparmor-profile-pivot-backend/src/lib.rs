@@ -8,6 +8,8 @@
 //! that gates path/network/cap usage within the remaining
 //! capability set.
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;

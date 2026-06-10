@@ -5,6 +5,8 @@
 //! (process-quarantine) and SDD-065 (block-ip) to offer operator
 //! a graduated containment-choice menu.
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;

@@ -5,6 +5,8 @@
 //! SDD-066 (single-pid freeze) + SDD-070 (netns-isolation) at the
 //! kernel-containment family.
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;

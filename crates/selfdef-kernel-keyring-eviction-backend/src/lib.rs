@@ -6,6 +6,8 @@
 //! grant) + SDD-074 (in-memory env scrub) + SDD-075 (POSIX
 //! caps) at the credential-axis family.
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;

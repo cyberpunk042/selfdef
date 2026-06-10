@@ -10,6 +10,8 @@
 //! InMemoryBackend per the MS1-substrate decision recorded at
 //! `wiki/decisions/01_drafts/in-memory-backend-as-ms1-substrate.md`.
 
+#![forbid(unsafe_code)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
