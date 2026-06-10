@@ -97,14 +97,13 @@ surfaces the shipped modules introduce.
 
 ### Tamper detection
 - Self-watchdog: the daemon emits the systemd watchdog heartbeat
-  (`sd_notify WATCHDOG=1` every 30s, `run_heartbeat`). NOTE: the shipped
-  `selfdefd.service` is `Type=notify` but sets **no `WatchdogSec=`** (so
-  systemd ignores the heartbeat — a *hung* daemon is not detected, restarted,
-  or journal-logged via the watchdog) and **no `OnFailure=`** (no fallback
-  notify). As shipped, only a clean *exit* is handled (`Restart=on-failure`,
-  `RestartSec=5s`); hang detection + notify requires the operator to add
-  `WatchdogSec=60` and an `OnFailure=` notify unit via a drop-in. See Known
-  gap F-2026-100.
+  (`sd_notify WATCHDOG=1` every 30s, `run_heartbeat`) and `selfdefd.service`
+  sets `WatchdogSec=60` (a 2-beat window), so a **hung** daemon (deadlocked /
+  runtime-wedged — alive but not beating, which `Restart=on-failure` can't
+  catch) is killed + restarted by systemd at the deadline, with the watchdog
+  timeout logged to the journal. Optional add-on (operator drop-in, not shipped
+  by default to avoid a notify-storm on a crash-loop): an `OnFailure=` notify
+  unit for an out-of-band alert on watchdog restart. See F-2026-100.
 - AIDE baseline includes the daemon binary, config, and rules.
 - Tetragon credential-access policy (`rules/tetragon/observe-sensitive-files.yaml`)
   observes file *opens* under `/etc/selfdef/secrets/` (action `Post`/observe,
@@ -431,20 +430,14 @@ This block is intentionally short — copy it into your deployment runbook.
   those paths with a `matchBinaries` exclusion for the updater is a
   tracked enhancement (and the daemon-exclusion design — how the
   legitimate update path is identified — is the non-trivial part).
-- **Self-watchdog hang-detection is not wired (F-2026-100).** The
-  daemon emits the systemd watchdog heartbeat (`WATCHDOG=1` every
-  30s), but `selfdefd.service` sets no `WatchdogSec=`, so systemd
-  ignores it — a *hung* daemon (alive but not heartbeating, e.g.
-  deadlocked) is not detected, restarted, or journal-logged via
-  the watchdog, and no `OnFailure=` fallback-notify is configured.
-  Only a clean *exit* is handled (`Restart=on-failure`). The
-  threat model claimed ">60s heartbeat absence is logged + notified";
-  corrected. Activating it is a one-line `WatchdogSec=60` (the
-  daemon already beats at 30s = 2 beats/window) + an `OnFailure=`
-  notify unit, shippable as a drop-in. Surfaced + made honest; the
-  reason it's not auto-flipped is the `OnFailure=` notify target
-  design (which channel, and avoiding a notify-storm on a
-  crash-loop) is a small PO decision.
+- **Self-watchdog hang-detection — FIXED (F-2026-100).** The
+  daemon emits `WATCHDOG=1` every 30s but `selfdefd.service` had no
+  `WatchdogSec=`, so systemd ignored it and a *hung* daemon went
+  undetected. Now `WatchdogSec=60` is set (2-beat window): a hung
+  daemon is killed + restarted by systemd, watchdog timeout logged.
+  Remaining optional add-on (not shipped by default to avoid a
+  notify-storm on a crash-loop): an `OnFailure=` notify unit for an
+  out-of-band alert — a small PO drop-in.
 
 ## Reporting
 

@@ -51,6 +51,22 @@ fn unit_sets_owner_only_umask() {
 }
 
 #[test]
+fn unit_enables_liveness_watchdog() {
+    // The daemon emits sd_notify WATCHDOG=1 every 30s (run_heartbeat), but that
+    // is INERT unless the unit sets WatchdogSec. WatchdogSec=60 (a 2-beat
+    // window) makes systemd restart a HUNG daemon (deadlocked/runtime-wedged —
+    // alive but not beating, which Restart=on-failure can't catch). Lock it so
+    // a future unit edit can't silently disable hang-detection. (F-2026-100.)
+    // Line-precise (not substring): the directive must be its own line, so a
+    // mention in a comment doesn't satisfy the assertion.
+    assert!(
+        UNIT.lines().any(|l| l.trim() == "WatchdogSec=60"),
+        "selfdefd.service must set WatchdogSec=60 to enforce the WATCHDOG=1 \
+         heartbeat (else a hung daemon is undetected):\n{UNIT}"
+    );
+}
+
+#[test]
 fn preflight_targets_the_same_config_as_execstart() {
     // Both lines must reference /etc/selfdef/selfdef.toml — validating a
     // different file than the one ExecStart loads would defeat the guard.
