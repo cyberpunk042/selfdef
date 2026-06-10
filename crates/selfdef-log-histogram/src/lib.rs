@@ -38,6 +38,9 @@ pub enum HistError {
     /// Bad p.
     #[error("p_bp must be 0..=10000")]
     BadPercentile,
+    /// Bucket vector is not exactly N_BUCKETS long (corrupt/forged state).
+    #[error("buckets must have exactly 64 entries")]
+    BadBucketCount,
 }
 
 /// Bucket index for a value.
@@ -53,7 +56,12 @@ pub fn bucket_lower_bound(i: usize) -> u64 {
     if i == 0 {
         0
     } else {
-        (1u64 << i).saturating_sub(1)
+        // Clamp the shift exponent: a valid bucket index is 0..N_BUCKETS (< 64),
+        // but this is a `pub fn` and quantile() walks a public, Deserialize-fed
+        // `buckets` Vec whose length serde can forge past 64. A raw `1u64 << i`
+        // with i >= 64 overflows — debug-panics (DoS) and in release masks to
+        // `1u64 << (i % 64)` (silently wrong bound). Clamp to the top bucket.
+        (1u64 << i.min(N_BUCKETS - 1)).saturating_sub(1)
     }
 }
 
@@ -103,6 +111,13 @@ impl LogHistogram {
         if self.schema_version != SCHEMA_VERSION {
             return Err(HistError::SchemaMismatch);
         }
+        // new() establishes exactly N_BUCKETS buckets, but serde bypasses the
+        // constructor — a restored or forged state can carry any length. Catch
+        // the malformed count at the gate (quantile() also self-defends the
+        // shift independently, in case validate() is never called).
+        if self.buckets.len() != N_BUCKETS {
+            return Err(HistError::BadBucketCount);
+        }
         Ok(())
     }
 }
@@ -121,6 +136,46 @@ mod tests {
     fn empty_quantile_is_zero() {
         let h = LogHistogram::new();
         assert_eq!(h.quantile(5000).unwrap(), 0);
+    }
+
+    #[test]
+    fn quantile_self_defends_against_deserialized_oversized_bucket_vec() {
+        // serde-bypass-defense: new() builds exactly N_BUCKETS (64) buckets, but
+        // `buckets` is a public field on a Deserialize struct, so a restored or
+        // crafted state can carry MORE than 64 buckets. quantile() walks them and
+        // calls bucket_lower_bound(i); for i >= 64 the `1u64 << i` shift overflows
+        // — debug-panics (DoS on the quantile path) and in release silently
+        // masks the shift (`1u64 << (i % 64)`), returning a wrong quantile. And
+        // validate() must catch the malformed bucket count at the gate.
+        let mut buckets = vec![0u64; 100];
+        buckets[70] = 5; // mass lives past index 64
+        let h = LogHistogram {
+            schema_version: SCHEMA_VERSION.into(),
+            buckets,
+            count: 5,
+        };
+        let j = serde_json::to_string(&h).unwrap();
+        let restored: LogHistogram = serde_json::from_str(&j).unwrap();
+
+        // Must not panic and must return a sane (clamped) bound.
+        let q = restored.quantile(5000).expect("quantile ok");
+        assert_eq!(
+            q,
+            (1u64 << 63) - 1,
+            "out-of-range bucket index must clamp to the top bound, not overflow-shift"
+        );
+
+        // validate() must reject the malformed bucket count at the gate.
+        assert!(matches!(
+            restored.validate().unwrap_err(),
+            HistError::BadBucketCount
+        ));
+
+        // A well-formed histogram still validates and quantiles correctly.
+        let mut ok = LogHistogram::new();
+        ok.observe(8);
+        assert!(ok.validate().is_ok());
+        assert_eq!(ok.quantile(10000).unwrap(), bucket_lower_bound(bucket_for(8)));
     }
 
     #[test]
