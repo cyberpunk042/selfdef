@@ -132,7 +132,11 @@ impl GeoRegionPolicy {
             Some(a) => (a.mode, &a.regions),
             None => (self.default_mode, &self.default_regions),
         };
-        let in_set = regions.contains(region);
+        // ISO country codes are case-insensitive (canonically uppercase). Match
+        // case-insensitively so a resolver/config emitting a different case
+        // cannot bypass a DenyList block (`cn` vs `CN`) or be wrongly denied by
+        // an AllowList.
+        let in_set = regions.iter().any(|r| r.eq_ignore_ascii_case(region));
         let v = match (mode, in_set) {
             (Mode::AllowList, true) => GeoVerdict::Allow,
             (Mode::AllowList, false) => GeoVerdict::Deny,
@@ -210,6 +214,24 @@ mod tests {
         p.remove_actor("a");
         // After: falls back to default AllowList[US].
         assert_eq!(p.decide("a", "US").unwrap(), GeoVerdict::Allow);
+    }
+
+    #[test]
+    fn region_matching_is_case_insensitive_iso() {
+        // Regions are ISO country codes — case-insensitive (canonically
+        // uppercase). A geo-resolver or config emitting a different case must
+        // NOT bypass a DenyList block: `cn` is the same country as `CN`.
+        let mut p = GeoRegionPolicy::new(Mode::AllowList);
+        p.set_actor("a", Mode::DenyList, &["CN"]).unwrap();
+        assert_eq!(p.decide("a", "cn").unwrap(), GeoVerdict::Deny);
+        assert_eq!(p.decide("a", "Cn").unwrap(), GeoVerdict::Deny);
+        assert_eq!(p.decide("a", "CN").unwrap(), GeoVerdict::Deny);
+        assert_eq!(p.decide("a", "US").unwrap(), GeoVerdict::Allow);
+        // AllowList: a case-varied allowed region is admitted, not wrongly denied.
+        let mut p = GeoRegionPolicy::new(Mode::AllowList);
+        p.set_actor("b", Mode::AllowList, &["US"]).unwrap();
+        assert_eq!(p.decide("b", "us").unwrap(), GeoVerdict::Allow);
+        assert_eq!(p.decide("b", "FR").unwrap(), GeoVerdict::Deny);
     }
 
     #[test]
