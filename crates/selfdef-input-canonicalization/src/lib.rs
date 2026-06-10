@@ -69,7 +69,13 @@ impl InputCanonicalizer {
         let no_zw: String = after_bom
             .chars()
             .filter(|c| {
-                let is_zw = matches!(*c, '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}');
+                // U+FEFF is included here too: step 1 only strips it as a
+                // LEADING BOM, so a mid-string U+FEFF (zero-width no-break
+                // space) would otherwise survive as an invisible-char evasion.
+                let is_zw = matches!(
+                    *c,
+                    '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}' | '\u{FEFF}'
+                );
                 if is_zw {
                     zw_seen = true;
                     false
@@ -159,6 +165,24 @@ mod tests {
         let r = InputCanonicalizer::canonicalize("hel\u{200B}lo");
         assert_eq!(r.canonical, "hello");
         assert!(r.transforms.contains(&Transform::ZeroWidthDropped));
+    }
+
+    #[test]
+    fn zero_width_no_break_space_dropped_midstring() {
+        // U+FEFF is a zero-width code point; the canonicalizer already strips it
+        // as a BOM at the START, yet a U+FEFF in the MIDDLE survived the
+        // zero-width pass — an invisible-character evasion gap. `ad\u{FEFF}min`
+        // reads as "admin" but slipped through, defeating downstream keyword /
+        // identity matching that runs on the canonical text.
+        let r = InputCanonicalizer::canonicalize("ad\u{FEFF}min");
+        assert_eq!(r.canonical, "admin");
+        assert!(r.transforms.contains(&Transform::ZeroWidthDropped));
+        // A leading BOM is still attributed to BomStripped (the dedicated step),
+        // not ZeroWidthDropped.
+        let r = InputCanonicalizer::canonicalize("\u{FEFF}admin");
+        assert_eq!(r.canonical, "admin");
+        assert!(r.transforms.contains(&Transform::BomStripped));
+        assert!(!r.transforms.contains(&Transform::ZeroWidthDropped));
     }
 
     #[test]
