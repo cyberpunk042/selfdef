@@ -102,7 +102,18 @@ impl TextAnonymizer {
     pub fn anonymize(&self, text: &str) -> (String, BTreeMap<String, u64>) {
         let mut out = text.to_string();
         let mut hits = BTreeMap::new();
-        for p in self.patterns.values() {
+        // Longest needle first so a substring pattern can't consume part of a
+        // longer match and leave the rest of the PII exposed (e.g. a `.com`
+        // domain pattern firing before the full-email pattern, leaving
+        // `alice@[DOM]`). Mirrors the sister `text-redactor`'s ordering.
+        let mut ordered: Vec<&Pattern> = self.patterns.values().collect();
+        ordered.sort_by(|a, b| {
+            b.needle
+                .len()
+                .cmp(&a.needle.len())
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        for p in ordered {
             let count = out.matches(p.needle.as_str()).count() as u64;
             if count > 0 {
                 out = out.replace(p.needle.as_str(), &p.placeholder);
@@ -177,6 +188,27 @@ mod tests {
         let (out, hits) = t.anonymize("FOO and FOO and FOO");
         assert_eq!(out, "X and X and X");
         assert_eq!(hits["foo"], 3);
+    }
+
+    #[test]
+    fn longer_pattern_not_shadowed_by_substring() {
+        // PII LEAK: a shorter needle that is a substring of a longer one must
+        // not be applied first and consume part of the longer match, leaving
+        // the rest of the PII exposed. Patterns were applied in id order, so
+        // registering both an email and its domain (with the domain's id
+        // sorting first) replaced the domain first and left `alice@[DOM]`,
+        // leaking the local-part. Apply longest-needle-first, matching the
+        // sister `text-redactor`.
+        let mut t = TextAnonymizer::new();
+        // id "a" sorts before "b"; "example.com" is a substring of the email.
+        t.register("a", "example.com", "[DOM]").unwrap();
+        t.register("b", "alice@example.com", "[EMAIL]").unwrap();
+        let (out, hits) = t.anonymize("contact alice@example.com today");
+        assert_eq!(out, "contact [EMAIL] today");
+        // The whole email is attributed to the email pattern; the domain
+        // pattern does not also fire on the (now-replaced) text.
+        assert_eq!(hits.get("b"), Some(&1));
+        assert!(!hits.contains_key("a"));
     }
 
     #[test]
