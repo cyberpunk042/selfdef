@@ -113,7 +113,7 @@ move (see Adversaries above):
 | Watchdog | Layer | Adversary it counters |
 | --- | --- | --- |
 | friction-audit (MS046) | hardware frame | PCIe / ZFS / memory tamper before kernel even boots; refuses to start container runtimes until the hardware-integrity gates pass. Boot-ordered Before=podman/docker/containerd. |
-| perimeter (MS047) | kernel syscall | Arbitrary-binary execution under any user; in-kernel `Sigkill` on `sys_execve` outside the verbatim sain-01 §6 allowlist `{python3, nvidia-smi, vllm, podman}`. Extensions require MS003 multi-sig + TTL ≤ 30 days. |
+| perimeter (MS047) | kernel syscall | Arbitrary-binary execution under any user; in-kernel `Sigkill` on `sys_execve` outside the verbatim sain-01 §6 allowlist `{python3, nvidia-smi, vllm, podman}`. Extensions require an MS003-signed manifest + TTL ≤ 30 days (one detached signature is cryptographically verified; the manifest's two distinct kids are attestation metadata, **not** a second verified co-signature — see Known gap F-2026-095). |
 | guardian (MS044) | supervisor tier | Tetragon-policy violations the kernel-fence catches; fans out the verbatim 3-step response (`podman kill` / atomic ZFS audit append / `/dev/console` BEL alert). Circuit breaker prevents same-target flood (5 SIGKILLs / 60s). |
 | scheduler (MS048) | routing layer | Resource-pressure-induced shortcuts: never let expensive cognition wait on cheap preparation; never let cheap speculation commit without expensive verification when risk demands it. 7-axis objective + 5 backpressure surfaces (Blackwell VRAM / RTX 3090 / CPU PSI / RAM PSI / IO PSI / human-gate queue). |
 
@@ -350,6 +350,39 @@ This block is intentionally short — copy it into your deployment runbook.
   runbook. The check is documentation + spot-checking on a
   fixed subject set, not a cluster-wide enumeration — use
   `rbac-tool` or `kubectl-who-can` for that.
+- **Extension dual-control is single-sig (F-2026-095).** The
+  perimeter watchdog row claims extension manifests "require
+  multi-sig", but `ExtensionStore::load_signed` verifies exactly
+  **one** detached signature (`<manifest>.json.minisig`) against
+  any trust-root `.pub`; `validate()` requires `signer_kid` and
+  `auditor_kid` to be present and distinct, but those are metadata
+  covered by the single signature, not an independently-verified
+  second co-signature. So a holder of **one** trust-root signing
+  key can forge a manifest with any two kids — two-person control
+  degrades to single-control (gated behind operator-key compromise,
+  not a file-drop bypass: the single signature *is* enforced).
+  Closing it is a PO decision (A: add a second distinct-signer
+  signature via the `selfdef-threshold-sig-store` pattern + a
+  `kid`→trust-root-key mapping; B: accept attested single-sig and
+  correct the "multi-sig" wording). Tracked in the findings ledger.
+- **kill_pid PID-reuse TOCTOU (F-2026-090).** `KillPidAction`
+  sends `kill -TERM` to the raw actor pid with no re-verification
+  that the pid still refers to the detected process; if the
+  offending process exits and the kernel reassigns its pid between
+  detection and response, SIGTERM can hit an innocent process.
+  Doubly opt-in (responder defaults `dry_run = true` +
+  `allowed_actions = ["notify"]`, so live kill needs both flipped).
+  Re-verification design (start-time vs exe-identity; fail-open vs
+  fail-closed when `/proc` is unreadable) is a PO decision — a naive
+  exe-check would skip self-deleting malware (`/proc/<pid>/exe →
+  …(deleted)`), so it's surfaced, not auto-fixed.
+- **Collector death is not live-supervised (F-2026-089).** A
+  collector task that panics mid-run isn't watched by the daemon's
+  main `select!` — it's only detected (and warned) at shutdown, so
+  a security source can go blind for a full run before the operator
+  sees it. The shutdown path now reports the abnormal termination
+  truthfully (no more false "stopped"); live supervision + the
+  warn-vs-restart-vs-exit policy is a tracked PO decision.
 
 ## Reporting
 
