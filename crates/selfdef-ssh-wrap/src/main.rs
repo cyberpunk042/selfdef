@@ -167,8 +167,69 @@ fn compute_stripped(
                     out.push(format!("-o {v}"));
                 }
             }
+            // A denied VALUE-option (e.g. L/R/D/W when port-forwarding is off)
+            // is stripped by argv::filter; record it too so the policy_strip
+            // event mirrors the action. Without this a BLOCKED tunnel attempt
+            // produces no audit event — the filter prevents it but the operator
+            // never sees it. ('o' is handled by the key-denylist arm above and
+            // matches earlier, so it never reaches here.)
+            argv::Token::Option(c, v) | argv::Token::AttachedOption(c, v)
+                if denied_flags.contains(c) =>
+            {
+                out.push(format!("-{c} {v}"));
+            }
             _ => {}
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(v: &[&str]) -> Vec<String> {
+        v.iter().map(|x| (*x).to_string()).collect()
+    }
+
+    #[test]
+    fn compute_stripped_logs_denied_value_option_for_audit() {
+        // Lock-step with argv::filter (its own comment demands it): filter
+        // strips a denied value-option (e.g. -L/-R/-D/-W when port-forwarding
+        // is off), so compute_stripped must record it too — else a BLOCKED
+        // tunnel attempt produces no policy_strip event and the operator never
+        // sees the attempt. Enforcement is unaffected; this closes the
+        // audit-visibility gap.
+        let argv = args(&["-L", "8080:internal-db:5432", "user@host"]);
+        let idx = argv::target_index(&argv).unwrap();
+        let stripped = compute_stripped(&argv::classify(&argv[..idx]), &['L'], &[]);
+        assert!(
+            stripped.iter().any(|x| x.contains("-L") && x.contains("8080")),
+            "denied port-forward must be recorded for the audit event, got {stripped:?}"
+        );
+
+        // Attached form too (`-L8080:...`).
+        let argv = args(&["-L8080:internal-db:5432", "user@host"]);
+        let idx = argv::target_index(&argv).unwrap();
+        let stripped = compute_stripped(&argv::classify(&argv[..idx]), &['L'], &[]);
+        assert!(
+            stripped.iter().any(|x| x.contains("8080")),
+            "attached denied port-forward must be recorded, got {stripped:?}"
+        );
+
+        // The existing -o key strip is still recorded (no regression).
+        let argv = args(&["-o", "ProxyCommand=/x", "user@host"]);
+        let idx = argv::target_index(&argv).unwrap();
+        let stripped = compute_stripped(&argv::classify(&argv[..idx]), &[], &["ProxyCommand"]);
+        assert!(
+            stripped.iter().any(|x| x.contains("ProxyCommand")),
+            "got {stripped:?}"
+        );
+
+        // A denied bare flag is still recorded (no regression).
+        let argv = args(&["-A", "user@host"]);
+        let idx = argv::target_index(&argv).unwrap();
+        let stripped = compute_stripped(&argv::classify(&argv[..idx]), &['A'], &[]);
+        assert!(stripped.iter().any(|x| x == "-A"), "got {stripped:?}");
+    }
 }
