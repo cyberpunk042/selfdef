@@ -66,8 +66,10 @@ pub const OCSF_SCHEMA_VERSION: &str = "1.1.0";
 ///
 /// The `binary_paths` field carries the extension entries; each path is
 /// appended to the in-kernel allowlist for the duration of the manifest
-/// TTL. Per MS047 R11079, this requires multi-sig + bounded TTL ≤ 30
-/// days + an incident URL for audit anchoring.
+/// TTL. Per MS047 R11079, the spec calls for multi-sig + bounded TTL ≤ 30
+/// days + an incident URL for audit anchoring. NOTE: `load_signed` currently
+/// verifies a SINGLE signature; `signer_kid`/`auditor_kid` are attestation
+/// metadata, not a second verified co-signature (gap tracked as F-2026-095).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExtensionManifest {
     /// Schema version — MUST match [`SCHEMA_VERSION`].
@@ -194,7 +196,7 @@ impl ExtensionManifest {
         }
         if self.auditor_kid.is_empty() {
             return Err(PerimeterError::ExtensionInvalid(
-                "auditor_kid is empty (production profile requires multi-sig)".into(),
+                "auditor_kid is empty (production manifest must declare a distinct auditor kid)".into(),
             ));
         }
         if self.signer_kid == self.auditor_kid {
