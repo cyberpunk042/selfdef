@@ -810,14 +810,58 @@ async fn main() -> Result<()> {
                 max_msgs: cfg.bus.nats.jetstream.max_msgs,
             },
         };
-        let sub = bus.subscribe();
+        let bus_for_nats = Arc::clone(&bus);
         let pub_ = publisher.clone();
         let ht = host_tag.clone();
         let sd = shutdown.clone();
         info!(url = %nats_cfg.url, "nats bridge: starting");
         Some(tokio::spawn(async move {
-            if let Err(e) = selfdef_nats::run_bridge(nats_cfg, ht, pub_, sub, sd).await {
-                error!(error = %e, "nats bridge failed");
+            // Supervised retry loop. A single failed run previously killed the
+            // multi-host fan-out for the daemon's whole lifetime — most
+            // commonly when selfdefd boots BEFORE the NATS server (the initial
+            // `connect` errors once, the task logs and ends, and the operator
+            // believes they have fan-out but don't). Same respawn-with-backoff
+            // doctrine as the journalctl follower (selfdef-collector-journald).
+            // async-nats reconnects by itself AFTER a successful connect; this
+            // loop covers the initial-connect / setup window it does not.
+            let mut backoff = NATS_MIN_RETRY_BACKOFF;
+            loop {
+                if sd.is_cancelled() {
+                    return;
+                }
+                // Fresh bus subscription per attempt — the previous one was
+                // consumed (moved) by the failed bridge run.
+                let sub = bus_for_nats.subscribe();
+                let started = std::time::Instant::now();
+                match selfdef_nats::run_bridge(
+                    nats_cfg.clone(),
+                    ht.clone(),
+                    pub_.clone(),
+                    sub,
+                    sd.clone(),
+                )
+                .await
+                {
+                    // run_bridge returns Ok only on shutdown-driven exit.
+                    Ok(()) => return,
+                    Err(e) => {
+                        if sd.is_cancelled() {
+                            return;
+                        }
+                        let healthy_run = started.elapsed() >= NATS_HEALTHY_RUN_RESET_THRESHOLD;
+                        let (sleep_for, next) = nats_bridge_backoff(backoff, healthy_run);
+                        error!(
+                            error = %e,
+                            backoff_ms = sleep_for.as_millis() as u64,
+                            "nats bridge failed; retrying after backoff"
+                        );
+                        tokio::select! {
+                            () = sd.cancelled() => return,
+                            () = tokio::time::sleep(sleep_for) => {}
+                        }
+                        backoff = next;
+                    }
+                }
             }
         }))
     } else {
@@ -1110,6 +1154,30 @@ async fn run_store_sink(
             }
         }
     }
+}
+
+/// NATS bridge retry cadence (supervised loop in the spawn site above).
+/// Slightly slower floor than the journald follower's 100ms — each retry is
+/// a remote TCP connect, not a local exec — same 30s ceiling.
+const NATS_MIN_RETRY_BACKOFF: Duration = Duration::from_millis(500);
+const NATS_MAX_RETRY_BACKOFF: Duration = Duration::from_secs(30);
+/// An attempt that stayed up at least this long connected and bridged
+/// healthily; the NEXT failure starts back at the floor so a flapping NATS
+/// server still recovers quickly after a good run (journald-follower
+/// doctrine).
+const NATS_HEALTHY_RUN_RESET_THRESHOLD: Duration = Duration::from_secs(60);
+
+/// Backoff step for the supervised NATS bridge: returns
+/// `(sleep_for_now, next_backoff)`. A healthy prior run resets to the
+/// floor; otherwise the current backoff is slept and doubled, capped at
+/// [`NATS_MAX_RETRY_BACKOFF`].
+fn nats_bridge_backoff(prev: Duration, healthy_run: bool) -> (Duration, Duration) {
+    let current = if healthy_run {
+        NATS_MIN_RETRY_BACKOFF
+    } else {
+        prev
+    };
+    (current, (current * 2).min(NATS_MAX_RETRY_BACKOFF))
 }
 
 /// Translate the string-shaped `[api]` config into the typed `ApiConfig`
@@ -2369,7 +2437,39 @@ async fn run_heartbeat() {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_log_level, run_store_sink};
+    use super::{
+        NATS_MAX_RETRY_BACKOFF, NATS_MIN_RETRY_BACKOFF, nats_bridge_backoff, resolve_log_level,
+        run_store_sink,
+    };
+
+    // Supervised NATS bridge backoff: doubles per consecutive failure, caps at
+    // the ceiling, and a healthy run resets to the floor. The loop exists so a
+    // NATS server that comes up AFTER selfdefd (or restarts) doesn't silently
+    // kill multi-host fan-out for the daemon's lifetime.
+    #[test]
+    fn nats_backoff_doubles_and_caps() {
+        let mut b = NATS_MIN_RETRY_BACKOFF;
+        let mut slept = Vec::new();
+        for _ in 0..10 {
+            let (sleep_for, next) = nats_bridge_backoff(b, false);
+            slept.push(sleep_for);
+            b = next;
+        }
+        // First sleep is the floor; sleeps are non-decreasing; ceiling holds.
+        assert_eq!(slept[0], NATS_MIN_RETRY_BACKOFF);
+        assert!(slept.windows(2).all(|w| w[0] <= w[1]));
+        assert_eq!(*slept.last().unwrap(), NATS_MAX_RETRY_BACKOFF);
+        assert_eq!(b, NATS_MAX_RETRY_BACKOFF, "next stays capped");
+    }
+
+    #[test]
+    fn nats_backoff_resets_after_healthy_run() {
+        // Saturate to the ceiling, then a healthy run resets to the floor —
+        // a flapping NATS still recovers quickly after a good stretch.
+        let (sleep_for, next) = nats_bridge_backoff(NATS_MAX_RETRY_BACKOFF, true);
+        assert_eq!(sleep_for, NATS_MIN_RETRY_BACKOFF);
+        assert_eq!(next, NATS_MIN_RETRY_BACKOFF * 2);
+    }
 
     // On graceful shutdown the store sink must DRAIN events already buffered in
     // its subscriber, not abandon them. The Bus keeps its own sender so the
