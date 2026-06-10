@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use selfdef_core::{Event, SCHEMA_VERSION};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::StoreError;
@@ -43,6 +43,24 @@ impl SqliteStore {
         conn.pragma_update(None, "busy_timeout", 5_000_i64)?;
         conn.pragma_update(None, "temp_store", "MEMORY")?;
 
+        // SDD: integrity check on startup — a silently-corrupt forensic store is
+        // a security problem (recent events may be unrecoverable and the
+        // operator wouldn't know). `quick_check` (fast structural check; the
+        // full `integrity_check` can be very slow on a large hot store) runs on
+        // open. On failure we alert LOUDLY to the journal but CONTINUE: bricking
+        // the whole IPS daemon over a degraded forensic DB would be a worse
+        // failure than running with a flagged store (availability > a degraded
+        // store; the operator now knows to investigate).
+        if let Err(detail) = Self::integrity_check(&conn) {
+            error!(
+                path = %path.display(),
+                detail = %detail,
+                "store DB integrity check FAILED on open — the forensic event \
+                 record may be corrupt; recent events may be unrecoverable. \
+                 Investigate / restore from cold archive."
+            );
+        }
+
         Self::migrate(&conn)?;
 
         info!(path = %path.display(), schema = SCHEMA_VERSION, "store opened");
@@ -51,6 +69,19 @@ impl SqliteStore {
             conn: Arc::new(Mutex::new(conn)),
             path,
         })
+    }
+
+    /// SQLite `quick_check` structural integrity probe. Returns `Err(detail)`
+    /// when the DB reports anything other than `"ok"` — i.e. the forensic store
+    /// is structurally corrupt. Used at [`SqliteStore::open`] and exposed for
+    /// tests. `quick_check` is preferred over `integrity_check` at startup
+    /// because it is dramatically faster on a large hot store while still
+    /// catching the page/structure corruption that matters.
+    pub(crate) fn integrity_check(conn: &Connection) -> Result<(), String> {
+        let result: String = conn
+            .pragma_query_value(None, "quick_check", |row| row.get(0))
+            .map_err(|e| format!("quick_check query failed: {e}"))?;
+        if result == "ok" { Ok(()) } else { Err(result) }
     }
 
     fn migrate(conn: &Connection) -> Result<(), StoreError> {
@@ -235,6 +266,58 @@ mod tests {
         let path = dir.path().join("state.sqlite");
         let store = SqliteStore::open(&path).unwrap();
         assert_eq!(store.count().await.unwrap(), 0);
+    }
+
+    #[test]
+    fn integrity_check_passes_on_valid_db() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("ok.sqlite");
+        let store = SqliteStore::open(&path).unwrap();
+        drop(store);
+        let conn = Connection::open(&path).unwrap();
+        assert!(SqliteStore::integrity_check(&conn).is_ok());
+    }
+
+    #[tokio::test]
+    async fn integrity_check_detects_corrupt_page() {
+        // The store claims "DB integrity checked on startup; corruption alerts
+        // loudly". This locks the integrity_check that backs it: a structurally
+        // corrupt forensic DB must be detected (not silently opened).
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("corrupt.sqlite");
+        {
+            let store = SqliteStore::open(&path).unwrap();
+            for i in 0..400 {
+                store
+                    .insert(&make_event(i, SeverityId::Medium))
+                    .await
+                    .unwrap();
+            }
+            // Flush WAL into the main db file so corrupting it is detectable.
+            {
+                let c = store.conn.lock().unwrap();
+                c.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+            }
+        }
+        // Mangle a data page header (page 3 starts at offset 8192 with the
+        // default 4096-byte page size) — well past the 100-byte file header +
+        // schema page 1, so `open` still succeeds but the structure is broken.
+        let mut bytes = std::fs::read(&path).unwrap();
+        assert!(
+            bytes.len() > 8448,
+            "expected a multi-page db, got {} bytes",
+            bytes.len()
+        );
+        for b in bytes.iter_mut().skip(8192).take(256) {
+            *b = 0xFF;
+        }
+        std::fs::write(&path, &bytes).unwrap();
+        // A fresh open must detect the corruption via quick_check.
+        let conn = Connection::open(&path).unwrap();
+        assert!(
+            SqliteStore::integrity_check(&conn).is_err(),
+            "quick_check should report corruption on a mangled data page"
+        );
     }
 
     #[tokio::test]
