@@ -144,11 +144,19 @@ impl AutonomousGatesConfig {
     }
 
     /// Check whether a given path is in the union of allow-lists across all gates.
+    ///
+    /// The path is canonicalized first — `.`/`..`/`//` resolved — so a glob
+    /// like `/workspace/**` cannot be bypassed by a textual `/workspace/../etc`
+    /// that climbs out of the allowed subtree. An absolute path that escapes
+    /// root fails closed.
     pub fn path_allowed(&self, path: &str) -> bool {
+        let Some(norm) = canonicalize_path(path) else {
+            return false;
+        };
         self.gates.iter().any(|g| {
             g.allowed_paths
                 .iter()
-                .any(|allowed| matches_glob(allowed, path))
+                .any(|allowed| matches_glob(allowed, &norm))
         })
     }
 
@@ -202,6 +210,37 @@ impl AutonomousGatesConfig {
 
 /// Trivial glob matcher — supports `**` prefix and exact match.
 /// Avoids pulling a regex/glob crate for this leaf check.
+/// Resolve `.`, `..`, and repeated `/` so a path is matched by where it points,
+/// not how it is spelled. Returns `None` when an absolute path uses `..` to
+/// climb above root (it cannot lie under any allowed prefix — fail closed).
+fn canonicalize_path(path: &str) -> Option<String> {
+    let absolute = path.starts_with('/');
+    let mut segs: Vec<&str> = Vec::new();
+    for s in path.split('/') {
+        match s {
+            "" | "." => continue,
+            ".." => {
+                if segs.last().is_some_and(|&t| t != "..") {
+                    segs.pop();
+                } else if absolute {
+                    return None;
+                } else {
+                    segs.push("..");
+                }
+            }
+            other => segs.push(other),
+        }
+    }
+    let joined = segs.join("/");
+    Some(if absolute {
+        format!("/{joined}")
+    } else if joined.is_empty() {
+        ".".to_string()
+    } else {
+        joined
+    })
+}
+
 fn matches_glob(pattern: &str, path: &str) -> bool {
     if pattern == path {
         return true;
@@ -322,6 +361,22 @@ mod tests {
         assert!(c.path_allowed("/tmp/scratch/build.log"));
         assert!(!c.path_allowed("/etc/passwd"));
         assert!(!c.path_allowed("/workspace2/foo"));
+    }
+
+    #[test]
+    fn path_allowed_rejects_dotdot_traversal() {
+        // SECURITY: a `/workspace/**` gate must not authorize a path that only
+        // textually starts with `/workspace/` but climbs out via `..`. The path
+        // is canonicalized before the glob match, so a traversal resolves to
+        // its real (out-of-scope) target and is denied.
+        let c = mk_config(vec![mk_gate("primary")]);
+        assert!(!c.path_allowed("/workspace/../etc/shadow"));
+        assert!(!c.path_allowed("/workspace/../../etc/shadow"));
+        assert!(!c.path_allowed("/workspace/a/../../etc/shadow"));
+        // A `..` that stays inside the gate still resolves and is allowed.
+        assert!(c.path_allowed("/workspace/a/../b"));
+        // `.` and `//` are collapsed, not treated as an escape.
+        assert!(c.path_allowed("/workspace/./src//main.rs"));
     }
 
     #[test]
