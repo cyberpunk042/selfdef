@@ -23,6 +23,14 @@ TimeoutStopSec=30s
 # --- identity ---
 User=selfdef
 Group=selfdef
+# Owner-only default for everything the daemon creates (hot store
+# `/var/lib/selfdef/state.sqlite` + its `-wal`/`-shm` siblings, escalations db,
+# any state file written without an explicit mode). Without this the file mode
+# is the inherited umask — typically 0022 → 0644 = a WORLD-READABLE forensic
+# store. The /metrics + /v1 unix socket is unaffected: its mode is set
+# explicitly via `set_unix_socket_mode` (set_permissions) after bind, which
+# overrides the umask, so `[api].unix_socket_mode` (default 0660) still holds.
+UMask=0077
 
 # --- capabilities ---
 # Minimal default set. Individual collectors may need elevations granted
