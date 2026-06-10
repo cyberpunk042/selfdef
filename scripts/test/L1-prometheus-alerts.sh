@@ -82,12 +82,14 @@ if [[ -d "${INFOHUB_RUNBOOKS}" ]]; then
     # in either repo in isolation).
     #
     # Format: <runbook-filename>|<reason>
-    ADVISORY_RUNBOOKS=(
-        "m060-mirror-export-publish-anomalies.md|on info-hub PR #17 (branch claude/recover-projects-b0oT6) awaiting operator merge"
-        "selfdef-watchdog-alert-finding.md|on info-hub PR #17 (branch claude/recover-projects-b0oT6) awaiting operator merge"
-        "metrics-correlator-lag.md|on info-hub branch claude/clever-cerf-WPcVs awaiting operator merge (F-2026-094 correlator bus-lag alert)"
-        "metrics-responder-lag.md|on info-hub branch claude/clever-cerf-WPcVs awaiting operator merge (F-2026-094 responder bus-lag alert)"
-    )
+    # (Empty: all former entries have since merged to info-hub main and are now
+    # verified DIRECTLY by the file-existence check below:
+    #   - m060-mirror-export-publish-anomalies.md   (info-hub PR #17)
+    #   - selfdef-watchdog-alert-finding.md         (info-hub PR #17)
+    #   - metrics-correlator-lag.md                 (info-hub PR #18)
+    #   - metrics-responder-lag.md                  (info-hub PR #18)
+    # The dispensation mechanism is retained for any future known-pending merge.)
+    ADVISORY_RUNBOOKS=()
     eval_result="$(python3 -c "
 import yaml, os
 d = yaml.safe_load(open('${ALERTS}'))
