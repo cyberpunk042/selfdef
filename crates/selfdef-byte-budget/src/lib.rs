@@ -64,14 +64,19 @@ impl ByteBudget {
 
     /// Reserve n bytes.
     pub fn reserve(&mut self, n: u64) -> Result<(), BudgetError> {
-        let avail = self.capacity - self.in_use;
+        // saturating: reserve() keeps in_use <= capacity, but a serde-bypassed
+        // state can violate it. A plain `capacity - in_use` would then underflow
+        // — a debug panic and, in release, a wrap to a huge bogus `avail` so the
+        // `n > avail` check passes and an OVER-budget reservation is allowed
+        // (fail-OPEN). Saturate to 0: an over-budget budget grants nothing.
+        let avail = self.capacity.saturating_sub(self.in_use);
         if n > avail {
             return Err(BudgetError::Exceeded {
                 requested: n,
                 available: avail,
             });
         }
-        self.in_use += n;
+        self.in_use = self.in_use.saturating_add(n);
         if self.in_use > self.high_watermark {
             self.high_watermark = self.in_use;
         }
@@ -146,6 +151,29 @@ mod tests {
         };
         assert_eq!(b.available(), 0); // saturating, no underflow
         assert_eq!(b.used_bp(), 10_000); // no div-by-zero
+    }
+
+    #[test]
+    fn over_budget_serde_bypass_reserve_fails_closed() {
+        // A serde-bypassed in_use > capacity must not let reserve() underflow
+        // `capacity - in_use` (debug panic / release wrap to a huge avail that
+        // would WRONGLY admit an over-budget reservation). saturating_sub makes
+        // avail 0 → any positive reservation is refused (fail-closed).
+        let mut b = ByteBudget {
+            schema_version: SCHEMA_VERSION.into(),
+            capacity: 100,
+            in_use: 500, // over budget
+            high_watermark: 500,
+        };
+        let e = b.reserve(1).unwrap_err(); // must not panic, must refuse
+        assert!(matches!(
+            e,
+            BudgetError::Exceeded {
+                requested: 1,
+                available: 0
+            }
+        ));
+        assert_eq!(b.in_use, 500); // unchanged — nothing granted
     }
 
     #[test]
