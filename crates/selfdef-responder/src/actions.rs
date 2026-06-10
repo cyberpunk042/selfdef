@@ -217,6 +217,7 @@ impl Action for KillPidAction {
         let output = Command::new("kill")
             .arg("-TERM")
             .arg(pid.to_string())
+            .kill_on_drop(true)
             .output()
             .await?;
         if output.status.success() {
@@ -257,7 +258,11 @@ impl Action for LockdownEgressAction {
             )));
         }
         debug!(event_id = %event.id, script = %self.script.display(), "activating egress lockdown");
-        let output = Command::new(&self.script).arg("activate").output().await?;
+        let output = Command::new(&self.script)
+            .arg("activate")
+            .kill_on_drop(true)
+            .output()
+            .await?;
         if output.status.success() {
             Ok(ActionOutcome::ok("egress locked down"))
         } else {
@@ -305,7 +310,11 @@ impl Action for RevokeSessionAction {
             )));
         }
 
-        let output = Command::new(&self.script).arg(&user).output().await?;
+        let output = Command::new(&self.script)
+            .arg(&user)
+            .kill_on_drop(true)
+            .output()
+            .await?;
         if output.status.success() {
             Ok(ActionOutcome::ok(format!("revoked sessions for {user}")))
         } else {
@@ -407,7 +416,12 @@ impl Action for ForensicsBundleAction {
             ("uname", "uname", vec!["-a"]),
             ("ss-tnap", "ss", vec!["-tnap"]),
         ] {
-            match Command::new(prog).args(&args).output().await {
+            match Command::new(prog)
+                .args(&args)
+                .kill_on_drop(true)
+                .output()
+                .await
+            {
                 Ok(output) => {
                     let _ = tokio::fs::write(dir.join(dest), &output.stdout).await;
                     manifest.push(format!(
@@ -421,7 +435,12 @@ impl Action for ForensicsBundleAction {
         }
 
         // dmesg — kernel ring buffer tail.
-        match Command::new("dmesg").arg("--ctime").output().await {
+        match Command::new("dmesg")
+            .arg("--ctime")
+            .kill_on_drop(true)
+            .output()
+            .await
+        {
             Ok(output) => {
                 let tail = tail_lines(&output.stdout, DMESG_TAIL_LINES);
                 let _ = tokio::fs::write(dir.join("dmesg"), &tail).await;
@@ -433,6 +452,7 @@ impl Action for ForensicsBundleAction {
         // journalctl — recent system journal.
         match Command::new("journalctl")
             .args(["-n", &JOURNAL_TAIL_LINES.to_string(), "--no-pager"])
+            .kill_on_drop(true)
             .output()
             .await
         {
@@ -572,7 +592,11 @@ impl Action for VelociraptorEscalateAction {
             argc = rendered.len(),
             "escalating to Velociraptor"
         );
-        let output = Command::new(&self.binary).args(&rendered).output().await?;
+        let output = Command::new(&self.binary)
+            .args(&rendered)
+            .kill_on_drop(true)
+            .output()
+            .await?;
         if output.status.success() {
             Ok(ActionOutcome::ok(format!(
                 "velociraptor escalation dispatched ({} args)",

@@ -28,6 +28,7 @@ pub mod actions;
 
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 
 use selfdef_bus::{BusError, Subscriber};
 use selfdef_core::category::CategoryUid;
@@ -64,7 +65,24 @@ pub struct Responder {
     /// lag. The daemon wires this to `selfdef_responder_lag_events_total` via
     /// [`Responder::with_lag_counter`]. `None` ⇒ not metered (e.g. in tests).
     lag_counter: Option<Arc<std::sync::atomic::AtomicU64>>,
+    /// Hard ceiling on ONE action execution. Actions shell out to operator
+    /// scripts (lockdown), `loginctl` wrappers, `journalctl`/`dmesg`
+    /// (forensics) and the Velociraptor CLI (network) — any of which can
+    /// wedge — and the dispatch loop awaits actions SEQUENTIALLY before the
+    /// bus loop receives the next finding. Without a deadline, one hung
+    /// subprocess stalls the ENTIRE autonomous-response engine while
+    /// findings pile up (and eventually drop as bus lag). On expiry the
+    /// action is logged as failed and dispatch continues; the action
+    /// subprocesses are spawned `kill_on_drop`, so a timed-out future takes
+    /// its child with it.
+    action_deadline: Duration,
 }
+
+/// Default per-action execution ceiling. Generous — a forensics bundle
+/// legitimately takes seconds and a Velociraptor escalation tens of
+/// seconds — while still bounding a wedged script to one minute instead of
+/// forever.
+pub const DEFAULT_ACTION_DEADLINE: Duration = Duration::from_secs(60);
 
 impl std::fmt::Debug for Responder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -90,7 +108,17 @@ impl Responder {
             // pre-floor behavior for callers that don't opt in.
             min_severity: SeverityId::Unknown,
             lag_counter: None,
+            action_deadline: DEFAULT_ACTION_DEADLINE,
         }
+    }
+
+    /// Set the per-action execution ceiling ([`DEFAULT_ACTION_DEADLINE`]).
+    /// Builder-style. Tests use a short value with a stalling stub action to
+    /// lock the engine's no-hang contract.
+    #[must_use]
+    pub fn with_action_deadline(mut self, deadline: Duration) -> Self {
+        self.action_deadline = deadline;
+        self
     }
 
     /// Attach a cumulative lag counter (bumped by the missed-finding count each
@@ -132,7 +160,16 @@ impl Responder {
     ) -> Option<Result<actions::ActionOutcome, actions::ActionError>> {
         for action in &self.actions {
             if action.name() == name {
-                return Some(action.execute(event, self.dry_run).await);
+                let run = action.execute(event, self.dry_run);
+                return Some(
+                    match tokio::time::timeout(self.action_deadline, run).await {
+                        Ok(result) => result,
+                        Err(_) => Err(actions::ActionError::Exec(format!(
+                            "action {name:?} timed out after {}s (deadline; child killed via kill_on_drop)",
+                            self.action_deadline.as_secs_f64()
+                        ))),
+                    },
+                );
             }
         }
         None
@@ -228,8 +265,15 @@ impl Responder {
             if !self.allowed_actions.contains(name) {
                 continue;
             }
-            match action.execute(event, self.dry_run).await {
-                Ok(outcome) => match outcome.status {
+            // Per-action deadline: actions run SEQUENTIALLY and this loop
+            // sits between the bus and the next finding — one wedged
+            // subprocess (operator lockdown script, loginctl, journalctl,
+            // Velociraptor CLI) would otherwise stall the entire
+            // autonomous-response engine forever. On expiry: log, move to
+            // the NEXT action (same posture as an action error).
+            let run = action.execute(event, self.dry_run);
+            match tokio::time::timeout(self.action_deadline, run).await {
+                Ok(Ok(outcome)) => match outcome.status {
                     actions::Status::Success => {
                         info!(action = name, notes = outcome.notes, "action ran")
                     }
@@ -240,7 +284,12 @@ impl Responder {
                         debug!(action = name, notes = outcome.notes, "action skipped")
                     }
                 },
-                Err(e) => warn!(action = name, error = %e, "action failed"),
+                Ok(Err(e)) => warn!(action = name, error = %e, "action failed"),
+                Err(_) => error!(
+                    action = name,
+                    deadline_secs = self.action_deadline.as_secs_f64(),
+                    "action timed out (deadline); continuing with remaining actions"
+                ),
             }
         }
     }

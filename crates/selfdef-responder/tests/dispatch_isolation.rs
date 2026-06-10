@@ -119,6 +119,74 @@ async fn fire_does_not_execute_a_disallowed_action() {
     );
 }
 
+/// Stalls far past any test deadline — a stand-in for a wedged operator
+/// script / loginctl / journalctl / Velociraptor CLI.
+struct StallAction;
+
+#[async_trait]
+impl Action for StallAction {
+    fn name(&self) -> &'static str {
+        "stall-action"
+    }
+    async fn execute(&self, _event: &Event, _dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+        Ok(ActionOutcome::ok("never reached"))
+    }
+}
+
+/// The engine's no-hang contract: actions run sequentially, so a wedged
+/// action must be cut at the deadline and the REMAINING actions must still
+/// run — one hung subprocess must not stall the whole autonomous-response
+/// engine.
+#[tokio::test]
+async fn hung_action_is_cut_at_deadline_and_remaining_actions_still_run() {
+    let (after, called_after, _dry) = mock();
+    let r = Responder::new(
+        vec![Arc::new(StallAction), after],
+        vec!["stall-action".into(), "mock-action".into()],
+        false,
+    )
+    .with_action_deadline(std::time::Duration::from_millis(100));
+
+    let start = std::time::Instant::now();
+    r.fire(&finding()).await;
+    let elapsed = start.elapsed();
+
+    assert!(
+        called_after.load(Ordering::SeqCst),
+        "the action AFTER the hung one must still run — the engine must not stall"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_secs(5),
+        "dispatch must return promptly after the deadline, took {elapsed:?}"
+    );
+}
+
+/// dispatch_single (the operator-authenticated API path) honors the same
+/// deadline, surfacing a timed-out action as an error rather than hanging
+/// the API request forever.
+#[tokio::test]
+async fn dispatch_single_times_out_a_hung_action() {
+    let r = Responder::new(vec![Arc::new(StallAction)], vec![], false)
+        .with_action_deadline(std::time::Duration::from_millis(100));
+
+    let start = std::time::Instant::now();
+    let out = r.dispatch_single("stall-action", &finding()).await;
+    let elapsed = start.elapsed();
+
+    match out {
+        Some(Err(e)) => {
+            let msg = e.to_string();
+            assert!(msg.contains("timed out"), "expected timeout error: {msg}");
+        }
+        other => panic!("expected Some(Err(timeout)), got {other:?}"),
+    }
+    assert!(
+        elapsed < std::time::Duration::from_secs(5),
+        "must return promptly after the deadline, took {elapsed:?}"
+    );
+}
+
 #[test]
 fn unknown_allowed_actions_flags_typos_not_real_names() {
     let (a, _, _) = mock(); // registers "mock-action"
