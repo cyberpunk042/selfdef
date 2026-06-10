@@ -1,9 +1,10 @@
 //! `selfdef-url-parts` — minimal URL split.
 //!
-//! parse("scheme://host[:port]/path[?query]") → UrlParts.
+//! parse("scheme://[userinfo@]host[:port]/path[?query]") → UrlParts.
 //! Validates scheme/host non-empty and port (if present)
-//! 1..=65535. No url-encoding handling — caller-provided
-//! raw fields.
+//! 1..=65535. Optional userinfo is stripped so `host` is the real
+//! connect target (the part after the last `@`). No url-encoding
+//! handling — caller-provided raw fields.
 //!
 //! Standing rule: We do not minimize anything.
 
@@ -66,6 +67,15 @@ impl UrlParts {
         if authority.is_empty() {
             return Err(UrlError::BadUrl(input.into()));
         }
+        // Strip optional userinfo: in `[userinfo@]host[:port]` the host is the
+        // part after the LAST '@'. Done BEFORE the host:port split because a
+        // `user:pass@host` userinfo carries a colon that would otherwise be
+        // mistaken for the port delimiter. Without this, `host` retained the
+        // `@` and any host-keyed allow/deny policy could be bypassed.
+        let authority = match authority.rsplit_once('@') {
+            Some((_userinfo, host_port)) => host_port,
+            None => authority,
+        };
         // Optional :port.
         let (host, port) = match authority.rsplit_once(':') {
             Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => {
@@ -165,6 +175,28 @@ mod tests {
         let s = "https://example.com:443/a/b?x=1";
         let u = UrlParts::parse(s).unwrap();
         assert_eq!(u.to_string(), s);
+    }
+
+    #[test]
+    fn userinfo_is_stripped_from_host() {
+        // SECURITY: authority is `[userinfo@]host[:port]`; the host is the part
+        // after the LAST '@'. Leaving userinfo in `host` lets a URL like
+        // `https://good.com@evil.com/` masquerade — a host-based allow/deny
+        // policy keyed on the parsed host sees `good.com@evil.com` rather than
+        // the real connect target `evil.com`, so a deny rule for `evil.com`
+        // never fires while the client still reaches it.
+        let u = UrlParts::parse("https://good.com@evil.com/path").unwrap();
+        assert_eq!(u.host, "evil.com");
+        assert_eq!(u.port, None);
+        // A password (colon in userinfo) must not be mistaken for host:port.
+        let u = UrlParts::parse("https://user:pass@evil.com:8443/x").unwrap();
+        assert_eq!(u.host, "evil.com");
+        assert_eq!(u.port, Some(8443));
+        // The LAST '@' delimits the host (matches browser/WHATWG behavior).
+        let u = UrlParts::parse("https://a@b@real.host/").unwrap();
+        assert_eq!(u.host, "real.host");
+        // Empty host after userinfo is rejected.
+        assert!(UrlParts::parse("https://user@/path").is_err());
     }
 
     #[test]
