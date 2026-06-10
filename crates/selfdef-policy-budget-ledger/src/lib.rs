@@ -164,11 +164,16 @@ impl BudgetLedger {
 
     /// Total millicents spent by subject (sum across all providers).
     pub fn subject_total_millicents(&self, subject: &str) -> u64 {
+        // Saturating fold, not Iterator::sum: with per-bucket millicents now
+        // saturating at u64::MAX, two large provider buckets would overflow a
+        // plain `.sum()` (panic in debug, wrap in release) — wrapping `spent`
+        // below the cap so `evaluate` reports Within for a blown budget
+        // (fail-OPEN). Cap the cross-bucket total at u64::MAX too.
         self.buckets
             .iter()
             .filter(|(k, _)| k.starts_with(&format!("{subject}|")))
             .map(|(_, b)| b.millicents)
-            .sum()
+            .fold(0u64, |a, b| a.saturating_add(b))
     }
 
     /// Evaluate verdict against a specific cap (subject, window).
@@ -313,6 +318,27 @@ mod tests {
         let b = l.buckets.get("alice|p").unwrap();
         assert_eq!(b.millicents, u64::MAX, "must saturate, not wrap");
         // And the breach is still detected (not wrapped to Within).
+        assert_eq!(l.evaluate("alice", Window::Daily), BudgetVerdict::Breach);
+    }
+
+    #[test]
+    fn cross_bucket_total_saturates_instead_of_wrapping() {
+        // subject_total_millicents sums a subject's per-provider buckets. With
+        // per-bucket millicents saturating at u64::MAX, two large provider
+        // buckets must not overflow the cross-bucket sum and wrap `spent` below
+        // the cap (which would report Within for a blown budget — fail-OPEN).
+        let mut l = BudgetLedger::new();
+        l.set_cap(Cap {
+            subject: "alice".into(),
+            window: Window::Daily,
+            millicents_cap: 1000,
+        })
+        .unwrap();
+        l.charge("alice", "p1", 0, 0, u64::MAX).unwrap();
+        l.charge("alice", "p2", 0, 0, u64::MAX).unwrap();
+        // Cross-bucket total overflows u64; must saturate, not wrap to a small
+        // value, and the breach must still be detected.
+        assert_eq!(l.subject_total_millicents("alice"), u64::MAX);
         assert_eq!(l.evaluate("alice", Window::Daily), BudgetVerdict::Breach);
     }
 
