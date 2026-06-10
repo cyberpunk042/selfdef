@@ -143,7 +143,10 @@ fn compute_stripped(
                 out.push(format!("-{c}"));
             }
             argv::Token::Option('o', v) | argv::Token::AttachedOption('o', v) => {
-                let key = v.split('=').next().unwrap_or("").trim();
+                // Same key extraction as argv::filter — must stay in lock-step
+                // or the event log would under-report a strip the filter made
+                // (or vice-versa). Handles both `Key=Val` and `Key Val`.
+                let key = argv::o_option_key(v);
                 if denied_o.iter().any(|k| key.eq_ignore_ascii_case(k)) {
                     out.push(format!("-o {v}"));
                 }
