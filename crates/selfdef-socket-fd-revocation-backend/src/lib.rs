@@ -104,6 +104,14 @@ pub enum SocketFdRevocationError {
     /// Kernel < 5.10 lacks pidfd_getfd(); operator must use SDD-070.
     #[error("pidfd_getfd unsupported on this kernel — use SDD-070 netns isolation instead")]
     PidfdGetfdUnsupported,
+    /// pid 1 (init) is sacrosanct — forcibly revoking init's socket fds can
+    /// tear down systemd's load-bearing sockets (journal, sd_notify, socket-
+    /// activation listeners), breaking host services. The sibling IPS
+    /// enforcement backends (process-tree-freeze, capability-drop,
+    /// process-env-scrub, netns-isolation, process-quarantine) all refuse
+    /// pid 1; fd revocation must too.
+    #[error("pid {pid} refused: {reason}")]
+    PidRefused { pid: i32, reason: String },
 }
 
 #[async_trait]
@@ -171,6 +179,14 @@ fn validate(req: &RevokeFdRequest) -> Result<(), SocketFdRevocationError> {
             "pid must be positive, got {}",
             req.pid
         )));
+    }
+    if req.pid == 1 {
+        return Err(SocketFdRevocationError::PidRefused {
+            pid: req.pid,
+            reason: "pid 1 (init) sockets are never revocable; tearing down init's \
+                     fds can break host services"
+                .into(),
+        });
     }
     if req.fd < 0 {
         return Err(SocketFdRevocationError::InvalidRequest(format!(
@@ -406,9 +422,29 @@ impl FsBackend {
                 .and_then(|n| n.to_str())
                 .unwrap_or("state")
         ));
-        fs::write(&tmp, bytes).map_err(|e| {
-            SocketFdRevocationError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
-        })?;
+        // fsync the tempfile contents before the rename publishes them. This
+        // is a durable SDD-066 state-journal: fs::write + fs::rename gives
+        // crash consistency (no torn read) but not durability — both can
+        // return Ok with the bytes still only in the page cache, so a power
+        // loss right after an enforcement action could lose the journal entry,
+        // resurrect a stale journal, or leave a zero-length file the backend
+        // reloads as an empty set on reboot, silently undoing a containment /
+        // revocation (fail-open). Matches the registry / quarantine-backend fix.
+        {
+            use std::io::Write as _;
+            let mut f = fs::File::create(&tmp).map_err(|e| {
+                SocketFdRevocationError::BackendUnreachable(format!(
+                    "create {}: {e}",
+                    tmp.display()
+                ))
+            })?;
+            f.write_all(bytes).map_err(|e| {
+                SocketFdRevocationError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
+            })?;
+            f.sync_all().map_err(|e| {
+                SocketFdRevocationError::BackendUnreachable(format!("fsync {}: {e}", tmp.display()))
+            })?;
+        }
         fs::rename(&tmp, target).map_err(|e| {
             let _ = fs::remove_file(&tmp);
             SocketFdRevocationError::BackendUnreachable(format!(
@@ -417,6 +453,11 @@ impl FsBackend {
                 target.display()
             ))
         })?;
+        // fsync the parent directory so the rename (the new dir entry) is
+        // durable too. Best-effort.
+        if let Ok(d) = fs::File::open(parent) {
+            let _ = d.sync_all();
+        }
         Ok(())
     }
 
@@ -548,5 +589,49 @@ impl SocketFdRevocationBackend for FsBackend {
             let _ = self.persist(&snapshot);
         }
         removed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn req(pid: i32) -> RevokeFdRequest {
+        RevokeFdRequest {
+            pid,
+            fd: 7,
+            reason: "containment".into(),
+            duration: Duration::from_secs(60),
+            authority: AuthorityTier::Operator,
+            protocol: SocketProtocol::Tcp,
+            expected_inode: None,
+            idempotency_key: "k1".into(),
+        }
+    }
+
+    #[test]
+    fn pid_1_fd_revocation_refused() {
+        // SAFETY: pid 1 (init) is sacrosanct — tearing down init's sockets can
+        // break systemd's journal / sd_notify / socket-activation listeners.
+        // The sibling enforcement backends all refuse pid 1; fd revocation too.
+        assert!(matches!(
+            validate(&req(1)).unwrap_err(),
+            SocketFdRevocationError::PidRefused { pid: 1, .. }
+        ));
+    }
+
+    #[test]
+    fn nonpositive_and_bad_fd_rejected_normal_ok() {
+        assert!(matches!(
+            validate(&req(0)).unwrap_err(),
+            SocketFdRevocationError::InvalidRequest(_)
+        ));
+        let mut bad_fd = req(4242);
+        bad_fd.fd = -1;
+        assert!(matches!(
+            validate(&bad_fd).unwrap_err(),
+            SocketFdRevocationError::InvalidRequest(_)
+        ));
+        validate(&req(4242)).unwrap();
     }
 }

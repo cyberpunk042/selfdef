@@ -105,6 +105,14 @@ impl BurnRateAlert {
         if w.total == 0 {
             return 0;
         }
+        // new()/validate() reject slo_bad_rate_bp==0, but serde deserialization
+        // can set it directly; the `/ self.slo_bad_rate_bp` below would then
+        // panic in every build (integer div-by-zero is never masked). A zero
+        // SLO bad-rate tolerates no errors, so any observed bad is infinite
+        // burn — report max (fail-CLOSED: trips the alert) rather than crash.
+        if self.slo_bad_rate_bp == 0 {
+            return u64::MAX;
+        }
         // observed_bad_rate_bp = bad * 10000 / total
         let observed_bp = (w.bad as u128 * 10_000) / w.total as u128;
         // burn = observed / slo  → in tenths
@@ -144,6 +152,24 @@ impl BurnRateAlert {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_slo_serde_bypass_does_not_panic() {
+        // new()/validate() reject slo_bad_rate_bp==0, but serde can construct
+        // it. `/ self.slo_bad_rate_bp` would panic in every build. Guard reports
+        // max burn (fail-closed: trips the alert) instead of crashing.
+        let a = BurnRateAlert {
+            schema_version: SCHEMA_VERSION.into(),
+            slo_bad_rate_bp: 0,
+            fast_factor_tenths: 10,
+            slow_factor_tenths: 10,
+            fast: Window { total: 100, bad: 1 },
+            slow: Window { total: 100, bad: 1 },
+        };
+        assert_eq!(a.burn_tenths(Window { total: 100, bad: 1 }), u64::MAX); // no panic
+        // No-data window still returns 0 (no false alarm) even with zero SLO.
+        assert_eq!(a.burn_tenths(Window { total: 0, bad: 0 }), 0);
+    }
 
     #[test]
     fn no_traffic_is_none() {

@@ -297,7 +297,14 @@ pub fn append_ocsf_jsonl(path: &Path, event_line: &str) -> std::io::Result<()> {
     }
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
     file.write_all(event_line.as_bytes())?;
-    file.flush()?;
+    // Durability, not just a userspace flush: `File::flush` is a no-op (a File
+    // has no userspace buffer), so the previous `flush()` left this stream
+    // crash-non-durable despite the module's "ZFS remembers / durable +
+    // auditable" contract. fdatasync the appended bytes so a Detection-Finding
+    // emitted just before a crash survives for the SIEM, matching the
+    // append-log durability the sibling sinks use (history-sink,
+    // shared-audit-summary) and the chained audit emitter (emit_audit_entry).
+    file.sync_data()?;
     Ok(())
 }
 

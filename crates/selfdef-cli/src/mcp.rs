@@ -440,17 +440,47 @@ pub(crate) fn serve_stdio(exit_after: Option<u32>, framing: &str) -> anyhow::Res
     }
 }
 
-fn serve_stdio_line<R, W>(exit_after: Option<u32>, reader: R, mut writer: W) -> anyhow::Result<i32>
+fn serve_stdio_line<R, W>(
+    exit_after: Option<u32>,
+    mut reader: R,
+    mut writer: W,
+) -> anyhow::Result<i32>
 where
     R: std::io::BufRead,
     W: std::io::Write,
 {
+    use std::io::{BufRead as _, Read as _};
     let mut handled: u32 = 0;
-    for line in reader.lines() {
-        let line = match line {
-            Ok(l) => l,
+    loop {
+        // Read one line bounded to MAX_CONTENT_LENGTH bytes. `BufRead::lines()`
+        // grows its String without limit until a newline, so a peer (the MCP
+        // server is reachable over TCP) that never sends `\n` could drive
+        // unbounded memory growth — a DoS. `take()` caps each line read.
+        let mut buf: Vec<u8> = Vec::new();
+        let n = match reader
+            .by_ref()
+            .take(MAX_CONTENT_LENGTH as u64 + 1)
+            .read_until(b'\n', &mut buf)
+        {
+            Ok(n) => n,
             Err(_) => break,
         };
+        if n == 0 {
+            break; // EOF
+        }
+        if buf.len() > MAX_CONTENT_LENGTH && buf.last() != Some(&b'\n') {
+            // Over-long line with no terminator within the cap — refuse and
+            // close; we can't resync past the unread remainder of the line.
+            let resp = error_response(
+                serde_json::Value::Null,
+                -32700,
+                "Parse error: line exceeds maximum",
+            );
+            writeln!(writer, "{resp}")?;
+            let _ = writer.flush();
+            break;
+        }
+        let line = String::from_utf8_lossy(&buf);
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
@@ -467,6 +497,13 @@ where
     }
     Ok(0)
 }
+
+/// Upper bound on a single LSP-framed JSON-RPC message body. The
+/// `Content-Length` header is attacker-controlled (the MCP server is reachable
+/// over TCP), so it must not be allowed to drive an unbounded `vec![0u8; len]`
+/// allocation — an over-large value would OOM/abort the process. 16 MiB is far
+/// larger than any real MCP request yet bounds the worst-case allocation.
+const MAX_CONTENT_LENGTH: usize = 16 * 1024 * 1024;
 
 /// SD-R92 — LSP-style Content-Length framing (real MCP wire format).
 ///
@@ -515,7 +552,20 @@ where
             // emit application/vscode-jsonrpc; charset=utf-8.
         }
         let len = match content_length {
-            Some(v) => v,
+            Some(v) if v <= MAX_CONTENT_LENGTH => v,
+            Some(_) => {
+                // An attacker-controlled Content-Length must not drive an
+                // unbounded `vec![0u8; len]` allocation (OOM DoS). Reject the
+                // over-large frame and close the stream — we cannot safely
+                // resync past a body we refuse to read.
+                let resp = error_response(
+                    serde_json::Value::Null,
+                    -32700,
+                    "Parse error: Content-Length exceeds maximum",
+                );
+                write_lsp_message(&mut writer, &resp)?;
+                break;
+            }
             None => {
                 // Bad framing — emit a parse-error response per LSP.
                 let resp = error_response(
@@ -569,7 +619,7 @@ pub(crate) fn serve_tcp(
     token_env: Option<&str>,
     exit_after: Option<u32>,
 ) -> anyhow::Result<i32> {
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
 
     if framing != "line" && framing != "lsp" {
@@ -618,8 +668,17 @@ pub(crate) fn serve_tcp(
 
         // Per-connection auth preamble.
         if let Some(ref want) = expected_token {
-            let mut header = String::new();
-            if reader.read_line(&mut header).is_err() {
+            // Bound the preamble read: `read_line` grows without limit on a peer
+            // that never sends a newline — an unbounded, PRE-auth allocation
+            // over TCP (DoS). An Authorization line is tiny; cap it at 8 KiB and
+            // drop the connection if it (or a missing newline) blows the cap.
+            const MAX_AUTH_PREAMBLE: usize = 8 * 1024;
+            let mut header_buf: Vec<u8> = Vec::new();
+            let read_bounded = reader
+                .by_ref()
+                .take(MAX_AUTH_PREAMBLE as u64 + 1)
+                .read_until(b'\n', &mut header_buf);
+            if read_bounded.is_err() || header_buf.len() > MAX_AUTH_PREAMBLE {
                 handled += 1;
                 if let Some(n) = exit_after {
                     if handled >= n {
@@ -628,6 +687,7 @@ pub(crate) fn serve_tcp(
                 }
                 continue;
             }
+            let header = String::from_utf8_lossy(&header_buf);
             let trimmed = header.trim_end_matches(['\r', '\n']);
             let ok = trimmed
                 .strip_prefix("Authorization: Bearer ")
@@ -927,6 +987,69 @@ fn scalar_to_string(v: &serde_json::Value) -> Result<String, (i64, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lsp_oversized_content_length_is_rejected_not_allocated() {
+        use std::io::Cursor;
+        // A malicious Content-Length far above the cap must NOT drive a
+        // `vec![0u8; len]` allocation; it must be rejected with a parse error
+        // and the stream closed. If the bound regressed, this test would
+        // OOM/abort the test process instead of returning.
+        let reader = Cursor::new(b"Content-Length: 999999999999999\r\n\r\n".to_vec());
+        let mut out: Vec<u8> = Vec::new();
+        let rc = serve_stdio_lsp(None, reader, &mut out).expect("serves without OOM");
+        assert_eq!(rc, 0);
+        let s = String::from_utf8_lossy(&out);
+        assert!(
+            s.contains("Content-Length exceeds maximum"),
+            "expected over-large rejection, got: {s}"
+        );
+        assert!(
+            s.contains("-32700"),
+            "expected JSON-RPC parse-error code: {s}"
+        );
+    }
+
+    #[test]
+    fn line_framing_over_long_line_is_rejected_not_unbounded() {
+        use std::io::Cursor;
+        // A line-framed peer that never sends a newline must not grow memory
+        // without limit. Feed MAX+10 bytes with no '\n' and assert the server
+        // rejects + closes rather than buffering unboundedly.
+        let mut data = vec![b'x'; MAX_CONTENT_LENGTH + 10];
+        // (no trailing newline on purpose)
+        let reader = Cursor::new(std::mem::take(&mut data));
+        let mut out: Vec<u8> = Vec::new();
+        let rc = serve_stdio_line(None, reader, &mut out).expect("serves without OOM");
+        assert_eq!(rc, 0);
+        let s = String::from_utf8_lossy(&out);
+        assert!(
+            s.contains("line exceeds maximum"),
+            "expected over-long-line rejection, got: {s}"
+        );
+    }
+
+    #[test]
+    fn line_framing_normal_request_still_answered() {
+        use std::io::Cursor;
+        // Guard the bounded-read rewrite: a normal newline-terminated JSON-RPC
+        // line must still get a real response.
+        let req = br#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
+        let mut framed = req.to_vec();
+        framed.push(b'\n');
+        let reader = Cursor::new(framed);
+        let mut out: Vec<u8> = Vec::new();
+        serve_stdio_line(Some(1), reader, &mut out).expect("serves");
+        let s = String::from_utf8_lossy(&out);
+        assert!(
+            s.contains("\"id\":1"),
+            "expected a JSON-RPC response, got: {s}"
+        );
+        assert!(
+            !s.contains("line exceeds maximum"),
+            "must not false-reject: {s}"
+        );
+    }
 
     #[test]
     fn sdr84_json_manifest_round_trips() {

@@ -122,6 +122,51 @@ async fn fs_backend_release_removes() {
 }
 
 #[tokio::test]
+async fn fs_backend_shrink_rewrite_truncates_and_survives_reopen() {
+    // The durable write switched from fs::write to File::create + fsync.
+    // File::create truncates, so a shorter rewrite (after a release) must leave
+    // no stale tail and must reload correctly — a regression here would
+    // resurrect a freed process as still-quarantined on the next boot.
+    let tmp = tempdir().unwrap();
+    {
+        let b = FsBackend::open(tmp.path()).unwrap();
+        b.freeze_process(req(
+            10,
+            60,
+            AuthorityTier::Operator,
+            FreezeScope::Process,
+            "keep",
+        ))
+        .await
+        .unwrap();
+        let r = b
+            .freeze_process(req(
+                20,
+                60,
+                AuthorityTier::Operator,
+                FreezeScope::Process,
+                "drop",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(b.active_count().await, 2);
+        // Release one → active.json rewritten SHORTER over the longer file.
+        b.release_process(r.handle).await.unwrap();
+        assert_eq!(b.active_count().await, 1);
+    }
+
+    // Reopen: the persisted (shorter) journal must parse cleanly to exactly the
+    // surviving entry — no stale tail, no resurrected pid.
+    let b2 = FsBackend::open(tmp.path()).unwrap();
+    assert_eq!(b2.active_count().await, 1);
+    let bytes = std::fs::read(tmp.path().join("active.json")).unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let arr = v.as_array().expect("active.json must be an ARRAY");
+    assert_eq!(arr.len(), 1);
+    assert_eq!(arr[0]["pid"].as_i64().unwrap(), 10);
+}
+
+#[tokio::test]
 async fn fs_backend_atomic_no_tmpfiles() {
     let tmp = tempdir().unwrap();
     let b = FsBackend::open(tmp.path()).unwrap();

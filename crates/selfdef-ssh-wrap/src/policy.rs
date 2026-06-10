@@ -255,10 +255,19 @@ fn matches_pattern(pattern: &str, host: &str) -> bool {
         return true;
     }
     if let Some(suffix) = pattern.strip_prefix("*.") {
-        return host.ends_with(suffix) && host != suffix;
+        // `*.internal` matches a SUBDOMAIN of `internal` — the `.` is a label
+        // boundary. Requiring only `ends_with("internal")` (the pre-fix
+        // behaviour, which dropped the dot) also matched `eviltinternal`,
+        // letting an unrelated external host borrow a trusted-subdomain
+        // override (e.g. forward_agent) — a policy-scoping bypass. Match the
+        // literal `.suffix` with at least one label in front.
+        let dotted = format!(".{suffix}");
+        return host.len() > dotted.len() && host.ends_with(&dotted);
     }
     if let Some(prefix) = pattern.strip_suffix(".*") {
-        return host.starts_with(prefix);
+        // Symmetric: `foo.*` matches `foo.bar`, not `foobar`.
+        let dotted = format!("{prefix}.");
+        return host.len() > dotted.len() && host.starts_with(&dotted);
     }
     if let Some(suffix) = pattern.strip_prefix('*') {
         return host.ends_with(suffix);
@@ -357,6 +366,48 @@ mod tests {
         assert!(policy.port_forwarding);
         let policy = ResolvedPolicy::resolve(&file, "db.external");
         assert!(!policy.port_forwarding);
+    }
+
+    #[test]
+    fn wildcard_suffix_requires_label_boundary() {
+        // SCOPING BYPASS regression: `*.internal` is a trusted-subdomain
+        // override; it must NOT leak onto an external host that merely ENDS in
+        // "internal" with no dot (the pre-fix `ends_with("internal")` matched
+        // `eviltinternal` → it would have borrowed port_forwarding=true).
+        let file: PolicyFile = toml::from_str(
+            r#"
+            [hosts."*.internal"]
+            port_forwarding = true
+        "#,
+        )
+        .unwrap();
+        for legit in ["db.internal", "a.b.internal"] {
+            assert!(
+                ResolvedPolicy::resolve(&file, legit).port_forwarding,
+                "{legit} is a real subdomain and must match"
+            );
+        }
+        for evil in ["eviltinternal", "internal", "xinternal"] {
+            assert!(
+                !ResolvedPolicy::resolve(&file, evil).port_forwarding,
+                "{evil} must NOT borrow the *.internal override"
+            );
+        }
+    }
+
+    #[test]
+    fn wildcard_prefix_dot_requires_label_boundary() {
+        // Symmetric `prefix.*`: `foo.*` matches `foo.bar`, not `foobar`.
+        let file: PolicyFile = toml::from_str(
+            r#"
+            [hosts."foo.*"]
+            port_forwarding = true
+        "#,
+        )
+        .unwrap();
+        assert!(ResolvedPolicy::resolve(&file, "foo.bar").port_forwarding);
+        assert!(!ResolvedPolicy::resolve(&file, "foobar").port_forwarding);
+        assert!(!ResolvedPolicy::resolve(&file, "foo").port_forwarding);
     }
 
     #[test]

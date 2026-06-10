@@ -745,6 +745,20 @@ pub fn audit_chain_check(audit_log: &Path) -> Result<usize, SchedulerError> {
                     detail: "prev_event_sha256 missing from non-first event".into(),
                 });
             }
+            (None, Some(got)) => {
+                // First event of the file. `emit_audit_entry` always writes a
+                // null prev for the opening entry (last_line_sha256 returns
+                // None on an empty file), so a first line that claims a
+                // predecessor means the genuine opening entries were deleted —
+                // prefix/head truncation. A pure forward walk would accept it;
+                // flag it as a chain break per R11367.
+                return Err(SchedulerError::AuditChainBreak {
+                    line: idx + 1,
+                    detail: format!(
+                        "first event claims predecessor prev_event_sha256={got} (head truncated)"
+                    ),
+                });
+            }
             _ => {}
         }
         let mut h = Sha256::new();
@@ -1280,6 +1294,31 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let n = audit_chain_check(&dir.path().join("nope")).unwrap();
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn audit_chain_check_detects_head_truncation() {
+        // A legitimate chain's first entry carries a null prev. If the genuine
+        // opening entries are deleted, the new first line still claims a real
+        // predecessor hash referencing a now-absent line. A forward-only walk
+        // would accept it; the chain check must flag a first entry that claims
+        // a predecessor as a break (prefix-deletion tamper).
+        let dir = TempDir::new().unwrap();
+        let log = dir.path().join("audit.log");
+        for i in 0..3u64 {
+            emit_audit_entry(&log, &sample_decision(1_000_000_000_000 + i)).unwrap();
+        }
+        assert_eq!(audit_chain_check(&log).unwrap(), 3);
+        // Drop the genuine first entry; the orphaned tail now opens with a line
+        // that claims a predecessor.
+        let text = fs::read_to_string(&log).unwrap();
+        let tail: String = text.lines().skip(1).collect::<Vec<_>>().join("\n");
+        fs::write(&log, format!("{tail}\n")).unwrap();
+        let err = audit_chain_check(&log).unwrap_err();
+        assert!(
+            matches!(err, SchedulerError::AuditChainBreak { line: 1, .. }),
+            "head-truncated chain must break at line 1, got {err:?}"
+        );
     }
 
     // ------------------------- replay ---------------------------------------

@@ -39,7 +39,7 @@ pub use sigma::{AttackCoverage, CompiledRule, Engine, SigmaError, SigmaLevel};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use selfdef_bus::{BusError, Publisher, Subscriber};
 use selfdef_core::category::CategoryUid;
@@ -77,6 +77,13 @@ pub struct Correlator {
     /// back from `Verifier::source()` to reload from the same
     /// place.
     verifier: Arc<RwLock<Option<selfdef_signing::Verifier>>>,
+    /// Optional cumulative counter of bus events this correlator missed because
+    /// it lagged the broadcast (each consumer has its own ring buffer, so the
+    /// correlator can lag independently of the metrics ingest task). A lagging
+    /// correlator means *missed detections* — raw events dropped before any
+    /// rule saw them — so the daemon wires this to a `/metrics` counter via
+    /// [`Correlator::with_lag_counter`]. `None` ⇒ not metered (e.g. in tests).
+    lag_counter: Option<Arc<AtomicU64>>,
 }
 
 impl Correlator {
@@ -89,7 +96,18 @@ impl Correlator {
             rules_dir,
             sequence: AtomicU64::new(0),
             verifier: Arc::new(RwLock::new(None)),
+            lag_counter: None,
         }
+    }
+
+    /// Attach a cumulative lag counter (bumped by the missed-event count each
+    /// time the correlator lags the bus). Chainable. The daemon wires this to
+    /// the `selfdef_correlator_lag_events_total` metric so missed detections
+    /// become visible instead of living only in a warn log.
+    #[must_use]
+    pub fn with_lag_counter(mut self, counter: Arc<AtomicU64>) -> Self {
+        self.lag_counter = Some(counter);
+        self
     }
 
     /// Attach a minisign verifier — every subsequent `load_rules`
@@ -209,7 +227,12 @@ impl Correlator {
                 res = sub.recv() => {
                     match res {
                         Ok(event) => self.process(&event),
-                        Err(BusError::Lagged(n)) => warn!(missed = n, "correlator lagged"),
+                        Err(BusError::Lagged(n)) => {
+                            if let Some(c) = &self.lag_counter {
+                                c.fetch_add(n, Ordering::Relaxed);
+                            }
+                            warn!(missed = n, "correlator lagged");
+                        }
                         Err(BusError::Closed) => {
                             info!("correlator: bus closed");
                             return;

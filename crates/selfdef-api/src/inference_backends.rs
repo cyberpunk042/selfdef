@@ -121,13 +121,49 @@ fn worst_state(backends: &[InferenceBackend]) -> &'static str {
     }
 }
 
-pub(crate) async fn show() -> Json<InferenceBackendsResponse> {
+/// Sync probe across all four backends — extracted from `show` so it can
+/// run on the blocking pool (each probe shells `<bin> --version`, which
+/// can wedge on a broken interpreter shim or hung filesystem).
+pub(crate) fn probe() -> InferenceBackendsResponse {
     let backends: Vec<InferenceBackend> = BACKENDS
         .iter()
         .map(|(name, default_bin, env_var)| probe_one(name, default_bin, env_var))
         .collect();
     let worst = worst_state(&backends);
-    Json(InferenceBackendsResponse { worst, backends })
+    InferenceBackendsResponse { worst, backends }
+}
+
+/// Hard ceiling on what one `/v1/inference-backends` request waits for
+/// the probe; on expiry the request gets an honest `unknown` (reason
+/// logged) instead of hanging.
+const PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+
+async fn show_bounded(
+    deadline: std::time::Duration,
+    probe_fn: fn() -> InferenceBackendsResponse,
+) -> Json<InferenceBackendsResponse> {
+    let degraded = || InferenceBackendsResponse {
+        worst: "unknown",
+        backends: Vec::new(),
+    };
+    match tokio::time::timeout(deadline, tokio::task::spawn_blocking(probe_fn)).await {
+        Ok(Ok(resp)) => Json(resp),
+        Ok(Err(join_err)) => {
+            tracing::warn!(error = %join_err, "inference-backends probe task failed; reporting unknown");
+            Json(degraded())
+        }
+        Err(_) => {
+            tracing::warn!(
+                deadline_secs = deadline.as_secs(),
+                "inference-backends probe timed out; reporting unknown"
+            );
+            Json(degraded())
+        }
+    }
+}
+
+pub(crate) async fn show() -> Json<InferenceBackendsResponse> {
+    show_bounded(PROBE_DEADLINE, probe).await
 }
 
 #[cfg(test)]
@@ -174,5 +210,23 @@ mod tests {
             },
         ];
         assert_eq!(worst_state(&b), "unknown");
+    }
+    /// A zero deadline deterministically takes the timeout branch: the
+    /// request must get an honest degraded `unknown`, never hang on the probe.
+    #[tokio::test]
+    async fn show_bounded_returns_degraded_unknown_on_deadline() {
+        // Injected probe that wedges far past the deadline — deterministic.
+        fn stalled() -> InferenceBackendsResponse {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            probe()
+        }
+        let start = std::time::Instant::now();
+        let axum::Json(resp) = show_bounded(std::time::Duration::from_millis(50), stalled).await;
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(4),
+            "must not wait the probe out"
+        );
+        assert_eq!(resp.worst, "unknown");
+        assert!(resp.backends.is_empty());
     }
 }

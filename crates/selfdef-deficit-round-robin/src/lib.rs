@@ -64,6 +64,14 @@ pub enum DrrError {
     /// Unknown.
     #[error("unknown flow id: {0}")]
     Unknown(String),
+    /// Cursor outside the flows range (corrupt/serde-bypassed state).
+    #[error("cursor {cursor} out of range (flows len {len})")]
+    CursorOutOfRange {
+        /// Cursor value.
+        cursor: usize,
+        /// Number of flows.
+        len: usize,
+    },
 }
 
 impl DeficitRoundRobin {
@@ -116,6 +124,14 @@ impl DeficitRoundRobin {
             return None;
         }
         let n = self.flows.len();
+        // `cursor` is advanced only via `% n`, so it stays < flows.len() under
+        // normal use — but serde deserialization bypasses new()/the advance
+        // path and can persist a cursor >= len. The `self.flows[self.cursor]`
+        // index below would then panic (out-of-bounds, in every build).
+        // Normalize back into range rather than crash.
+        if self.cursor >= n {
+            self.cursor = 0;
+        }
         // Find a flow that can serve at least one packet within one
         // full sweep. Each sweep adds quantum to non-empty flows; if
         // none can serve, all are empty and we return None.
@@ -164,6 +180,12 @@ impl DeficitRoundRobin {
                 return Err(DrrError::ZeroQuantum);
             }
         }
+        if !self.flows.is_empty() && self.cursor >= self.flows.len() {
+            return Err(DrrError::CursorOutOfRange {
+                cursor: self.cursor,
+                len: self.flows.len(),
+            });
+        }
         Ok(())
     }
 }
@@ -177,6 +199,31 @@ impl Default for DeficitRoundRobin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn out_of_range_cursor_serde_bypass_does_not_panic() {
+        // cursor is advanced only via `% n`, so it stays in range under normal
+        // use; serde can persist a cursor >= flows.len(). service() indexes
+        // self.flows[self.cursor] after only an is_empty() guard — an OOB panic
+        // in every build. The normalize-to-0 guard must keep it serving.
+        let mut s = DeficitRoundRobin::new();
+        s.add_flow("a", 1000).unwrap();
+        s.enqueue("a", 100).unwrap();
+        s.cursor = 99; // serde-bypassed: way past flows.len() == 1
+        // Must not panic, and must still serve the queued packet.
+        assert_eq!(s.service(), Some(("a".to_string(), 100)));
+    }
+
+    #[test]
+    fn out_of_range_cursor_rejected_by_validate() {
+        let mut s = DeficitRoundRobin::new();
+        s.add_flow("a", 1000).unwrap();
+        s.cursor = 42;
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            DrrError::CursorOutOfRange { cursor: 42, len: 1 }
+        ));
+    }
 
     #[test]
     fn two_flows_quantum_ratio() {

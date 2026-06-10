@@ -298,6 +298,27 @@ impl Config {
     /// Load configuration from `path` (if it exists), overlaying environment
     /// variables on top of the file and built-in defaults.
     pub fn load(path: Option<&Path>) -> Result<Self, ConfigError> {
+        let cfg = Self::parse(path)?;
+        cfg.validate()?;
+        Ok(cfg)
+    }
+
+    /// Parse configuration like [`Config::load`] but WITHOUT the semantic
+    /// [`Config::validate`] gate. Intended for diagnostic tools (e.g.
+    /// `selfdefctl doctor`) that must be able to PARSE a semantically-broken
+    /// config in order to report precisely which invariant it violates — the
+    /// strict [`Config::load`] aborts at the validation gate before the
+    /// diagnostic can run, which would leave the operator with a bare load
+    /// error instead of the doctor's per-check report. The daemon and all
+    /// mutating commands keep using [`Config::load`] (fail-fast at startup).
+    pub fn load_unvalidated(path: Option<&Path>) -> Result<Self, ConfigError> {
+        Self::parse(path)
+    }
+
+    /// Build the config from defaults + optional TOML file + `SELFDEF_` env,
+    /// without semantic validation. Shared by [`Config::load`] (which then
+    /// validates) and [`Config::load_unvalidated`] (which does not).
+    fn parse(path: Option<&Path>) -> Result<Self, ConfigError> {
         let mut fig = Figment::from(Serialized::defaults(Self::default()));
 
         if let Some(p) = path {
@@ -307,7 +328,6 @@ impl Config {
         }
 
         let cfg: Self = fig.merge(Env::prefixed("SELFDEF_").split("__")).extract()?;
-        cfg.validate()?;
         Ok(cfg)
     }
 
@@ -385,6 +405,72 @@ impl Config {
                         .into(),
                 ));
             }
+            // tcp_addr must be a literal IP:port. The daemon parses it as a std
+            // `SocketAddr` (`cfg.tcp_addr.parse()`), which does NOT resolve
+            // hostnames; on failure it only logs "tcp transport disabled" and
+            // serves nothing while the daemon keeps running. So a hostname
+            // ("localhost:8443"), a missing port ("127.0.0.1"), or stray
+            // whitespace passes the non-empty check above yet leaves the operator
+            // with a TCP API that silently never listens. Mirror the daemon's
+            // exact (untrimmed) parse so validation and runtime agree.
+            if has_tcp && self.api.tcp_addr.parse::<std::net::SocketAddr>().is_err() {
+                return Err(ConfigError::Invalid(format!(
+                    "[api] tcp_addr = {:?} is not a valid IP:port socket address \
+                     (e.g. \"127.0.0.1:8443\"; hostnames are not resolved) — the daemon \
+                     cannot bind it and would silently serve no TCP API",
+                    self.api.tcp_addr
+                )));
+            }
+            // The UNIX socket is "trusted via filesystem permissions" — its mode
+            // IS the access-control boundary. The daemon parses unix_socket_mode
+            // as `from_str_radix(.., 8).unwrap_or(0o660)`, so ANY value it cannot
+            // parse (a typo, stray whitespace, a non-octal digit) silently
+            // becomes 0660 — group-readable — *widening* access to the control
+            // API instead of honoring the operator's intent. Reject exactly what
+            // the daemon could not parse, mirroring its parse so validation and
+            // runtime agree, and only when the unix transport is actually used.
+            if has_unix
+                && u32::from_str_radix(self.api.unix_socket_mode.trim_start_matches('0'), 8)
+                    .is_err()
+            {
+                return Err(ConfigError::Invalid(format!(
+                    "[api] unix_socket_mode = {:?} is not a valid octal file mode (e.g. \"0660\") — \
+                     an unparseable mode silently falls back to 0660 (group-readable), widening \
+                     permissions on the trusted control API socket",
+                    self.api.unix_socket_mode
+                )));
+            }
+            // TLS for the TCP transport. The daemon enables TLS only when BOTH
+            // cert_path and key_path are set, and requires client certs (mTLS)
+            // only when client_ca is *also* set — all inside that same TLS
+            // branch (`build_api_config`). So a half-configured TLS (exactly one
+            // of cert/key) or an mTLS-only block (client_ca without cert+key)
+            // silently DISABLES TLS and serves the TCP control API in PLAINTEXT,
+            // gated by the bearer token alone — the opposite of the operator's
+            // evident intent, since they supplied a cert / key / CA precisely to
+            // encrypt it. Fail fast instead of silently downgrading. Only the
+            // TCP transport uses TLS, so this is gated on `has_tcp`.
+            if has_tcp {
+                let cert = !self.api.tls.cert_path.trim().is_empty();
+                let key = !self.api.tls.key_path.trim().is_empty();
+                let client_ca = !self.api.tls.client_ca.trim().is_empty();
+                if cert != key {
+                    return Err(ConfigError::Invalid(
+                        "[api.tls] cert_path and key_path must BOTH be set (or both empty) — \
+                         exactly one is set, which silently disables TLS and serves the TCP \
+                         control API in plaintext (bearer token only)"
+                            .into(),
+                    ));
+                }
+                if client_ca && !(cert && key) {
+                    return Err(ConfigError::Invalid(
+                        "[api.tls] client_ca (mTLS) is set but cert_path/key_path are not — \
+                         mTLS requires TLS, so without a cert+key the TCP control API silently \
+                         serves plaintext with no client-certificate requirement"
+                            .into(),
+                    ));
+                }
+            }
         }
 
         // The NATS multi-host bridge only starts when it's enabled AND has a
@@ -425,6 +511,113 @@ impl Config {
             )));
         }
 
+        // responder.min_severity (F-2026-092) is the floor that stops aggressive
+        // autonomous actions (e.g. kill_pid) from firing on low-confidence
+        // findings. The daemon treats ANY unrecognized token as "no floor —
+        // every finding processed": it logs a warn and then runs fail-OPEN, so a
+        // typo ("hgih" for "high") silently DROPS the operator's opt-in safety
+        // floor and lets allow-listed aggressive actions fire on low findings.
+        // Catch the typo at load (and `--validate`) so the requested floor is
+        // actually applied; the runtime warn stays as a backstop for the
+        // unvalidated path. Empty/none/unknown legitimately mean "no floor".
+        const VALID_MIN_SEVERITY: [&str; 11] = [
+            "none",
+            "unknown",
+            "info",
+            "informational",
+            "low",
+            "medium",
+            "med",
+            "high",
+            "critical",
+            "crit",
+            "fatal",
+        ];
+        let min_sev = self.responder.min_severity.trim().to_ascii_lowercase();
+        if !min_sev.is_empty() && !VALID_MIN_SEVERITY.contains(&min_sev.as_str()) {
+            return Err(ConfigError::Invalid(format!(
+                "[responder] min_severity = {:?} is not a recognized severity floor \
+                 (use one of none/info/low/medium/high/critical/fatal) — an unrecognized \
+                 token silently applies NO floor, letting aggressive autonomous actions \
+                 fire on low-confidence findings",
+                self.responder.min_severity
+            )));
+        }
+
+        // [notifier].panic_floor (SDD-008 D-7) is the audit-mode escape hatch: in
+        // audit mode (notifications suppressed) a finding AT OR ABOVE this grade
+        // still fires for real, so "operator misconfiguration cannot leave a
+        // blocker un-notified". The daemon parses it with parse_severity_floor
+        // and, on an unrecognized token, logs a warn and applies NO panic floor
+        // (fail-OPEN). So a typo ("hihg" for "high") silently voids the escape
+        // hatch — in audit mode even a critical finding is then suppressed. Catch
+        // the typo at load; an unset/empty panic_floor legitimately means "no
+        // floor". (parse_severity_floor accepts only grade tokens, so "none"/
+        // "unknown" are NOT valid here — leave it unset for no floor.)
+        const VALID_SEVERITY_GRADE: [&str; 9] = [
+            "info",
+            "informational",
+            "low",
+            "medium",
+            "med",
+            "high",
+            "critical",
+            "crit",
+            "fatal",
+        ];
+        if let Some(raw) = &self.notifier.panic_floor {
+            let pf = raw.trim().to_ascii_lowercase();
+            if !pf.is_empty() && !VALID_SEVERITY_GRADE.contains(&pf.as_str()) {
+                return Err(ConfigError::Invalid(format!(
+                    "[notifier] panic_floor = {raw:?} is not a recognized severity grade \
+                     (use one of informational/low/medium/high/critical/fatal, or leave it \
+                     unset for no floor) — an unrecognized token silently voids the audit-mode \
+                     panic escape hatch, suppressing even critical findings"
+                )));
+            }
+        }
+
+        // Per-channel severity floors (wall / write / per-subscription). Each is
+        // parsed with the same grade vocabulary; an unrecognized token silently
+        // breaks the channel — the wall/write builder REFUSES the channel
+        // (fail-closed: no notifications), and a subscription floor falls open
+        // (the channel fires on EVERY finding instead of its intended gate, a
+        // paging storm). Catch the typo at load either way. Empty/unset is the
+        // documented "use the default / no floor" sentinel and is accepted.
+        let bad_grade = |value: &str| {
+            let v = value.trim().to_ascii_lowercase();
+            !v.is_empty() && !VALID_SEVERITY_GRADE.contains(&v.as_str())
+        };
+        if bad_grade(&self.notifier.wall.severity_floor) {
+            return Err(ConfigError::Invalid(format!(
+                "[notifier.wall] severity_floor = {:?} is not a recognized severity grade \
+                 (use one of informational/low/medium/high/critical/fatal, or leave it unset \
+                 for the default) — an unrecognized token makes the builder refuse the wall \
+                 channel, silently disabling its broadcasts",
+                self.notifier.wall.severity_floor
+            )));
+        }
+        if bad_grade(&self.notifier.write.severity_floor) {
+            return Err(ConfigError::Invalid(format!(
+                "[notifier.write] severity_floor = {:?} is not a recognized severity grade \
+                 (use one of informational/low/medium/high/critical/fatal, or leave it unset \
+                 for the default) — an unrecognized token silently disables the write channel",
+                self.notifier.write.severity_floor
+            )));
+        }
+        for (name, sub) in &self.notifier.subscriptions {
+            if let Some(raw) = &sub.severity_floor {
+                if bad_grade(raw) {
+                    return Err(ConfigError::Invalid(format!(
+                        "[notifier.subscriptions.{name}] severity_floor = {raw:?} is not a \
+                         recognized severity grade (use one of informational/low/medium/high/\
+                         critical/fatal, or leave it unset) — an unrecognized token is silently \
+                         dropped, so the channel fires on every finding instead of its intended gate"
+                    )));
+                }
+            }
+        }
+
         // The hardware-probe loop re-probes every interval_seconds, but only
         // when enabled. The loop floors the cadence at 30s
         // (`interval_seconds.max(30)`) as a runtime backstop — so a sub-30
@@ -453,6 +646,11 @@ impl Config {
 #[serde(default)]
 pub struct DaemonConfig {
     pub host_tag: Option<String>,
+    /// Tracing verbosity as an `EnvFilter` directive (`"info"` default; also
+    /// accepts per-target directives like `"info,selfdef_correlator=debug"`).
+    /// Consumed by `selfdef-daemon` main `init_tracing`. Precedence:
+    /// `--log-level` / `$SELFDEF_LOG` (explicit override) > this field >
+    /// `$RUST_LOG` / built-in default (set this to `""` to defer to `$RUST_LOG`).
     pub log_level: String,
     /// `"text"` (default) or `"json"`. Consumed by the daemon's tracing
     /// init (`selfdef-daemon` main `init_tracing`) for the stderr fallback
@@ -1555,6 +1753,15 @@ impl Default for TwilioConfig {
 pub struct ResponderConfig {
     pub dry_run: bool,
     pub allowed_actions: Vec<String>,
+    /// Autonomous-response severity floor (F-2026-092). Findings graded below
+    /// this are not auto-dispatched on the bus path — a guard against an
+    /// allow-listed aggressive action (e.g. `kill_pid`) firing on a
+    /// low-confidence finding. Accepts `none` / `unknown` (no floor — every
+    /// finding is processed, the default) or a grade token (`info`, `low`,
+    /// `medium`, `high`, `critical`, `fatal`). Operator-commanded paths
+    /// (`selfdefctl panic`, the authenticated `/actions/{name}/run` API) bypass
+    /// the floor by design.
+    pub min_severity: String,
     /// Directory under which `snapshot_proc` writes per-event dumps.
     pub snapshot_dir: PathBuf,
     /// Script invoked by `lockdown_egress` action.
@@ -1575,6 +1782,9 @@ impl Default for ResponderConfig {
         Self {
             dry_run: true,
             allowed_actions: vec!["notify".into()],
+            // No floor by default: matches the pre-F-2026-092 behavior where
+            // every finding is processed. Operators opt into a higher floor.
+            min_severity: "none".to_owned(),
             snapshot_dir: PathBuf::from("/var/lib/selfdef/snapshots"),
             lockdown_script: PathBuf::from("/usr/local/sbin/selfdef-lockdown.sh"),
             revoke_session_script: PathBuf::from("/usr/local/sbin/selfdef-revoke-session.sh"),
@@ -1742,6 +1952,250 @@ mod tests {
         // Any positive value is fine (default is 4096).
         cfg.bus.inproc_capacity = 1;
         cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_invalid_unix_socket_mode() {
+        // The daemon parses unix_socket_mode with `unwrap_or(0o660)`, so an
+        // unparseable mode silently widens the trusted control socket to
+        // group-readable. validate must reject it (when the unix transport is
+        // used) so the operator gets an actionable error, not a silent widening.
+        let mut cfg = Config::default();
+        cfg.api.enabled = true;
+        cfg.api.unix_socket = "/run/selfdef/api.sock".into();
+        for bad in ["xyz", "0o660", "rw-", "0660 ", "", "099", "0"] {
+            cfg.api.unix_socket_mode = bad.into();
+            let err = cfg.validate().unwrap_err();
+            assert!(matches!(err, ConfigError::Invalid(_)), "{bad:?} → {err:?}");
+            assert!(
+                err.to_string().contains("unix_socket_mode"),
+                "msg should name the field for {bad:?}: {err}"
+            );
+        }
+        // Valid octal modes pass (with or without the leading zero).
+        for good in ["0600", "0660", "0640", "660", "700", "0700"] {
+            cfg.api.unix_socket_mode = good.into();
+            cfg.validate()
+                .unwrap_or_else(|e| panic!("mode {good:?} must be valid, got {e:?}"));
+        }
+        // A bad mode in a config whose unix transport is unused does not block
+        // loading (only TCP enabled), matching the gating of the other checks.
+        cfg.api.unix_socket = String::new();
+        cfg.api.tcp_addr = "127.0.0.1:8443".into();
+        cfg.api.token_file = "/run/selfdef/token".into();
+        cfg.api.unix_socket_mode = "garbage".into();
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_unknown_channel_severity_floors() {
+        // wall / write / per-subscription severity floors are grade vocabularies;
+        // a typo silently breaks the channel (wall/write refuse → no
+        // notifications; subscription falls open → fires on everything).
+        let mut cfg = Config::default();
+        // wall typo.
+        cfg.notifier.wall.severity_floor = "hihg".into();
+        assert!(
+            cfg.validate()
+                .unwrap_err()
+                .to_string()
+                .contains("notifier.wall")
+        );
+        cfg.notifier.wall.severity_floor = "high".into();
+        // write typo.
+        cfg.notifier.write.severity_floor = "kritical".into();
+        assert!(
+            cfg.validate()
+                .unwrap_err()
+                .to_string()
+                .contains("notifier.write")
+        );
+        cfg.notifier.write.severity_floor = "critical".into();
+        cfg.validate().unwrap(); // wall+write now valid
+        // subscription typo names the channel.
+        let sub = SubscriptionConfig {
+            severity_floor: Some("hi".into()),
+            ..Default::default()
+        };
+        cfg.notifier.subscriptions.insert("ntfy".into(), sub);
+        assert!(
+            cfg.validate()
+                .unwrap_err()
+                .to_string()
+                .contains("notifier.subscriptions.ntfy")
+        );
+        // valid subscription floor + an unset one both pass.
+        let sub_ok = SubscriptionConfig {
+            severity_floor: Some("high".into()),
+            ..Default::default()
+        };
+        cfg.notifier.subscriptions.insert("ntfy".into(), sub_ok);
+        cfg.notifier
+            .subscriptions
+            .insert("signal".into(), SubscriptionConfig::default()); // floor None
+        cfg.validate().unwrap();
+        // empty wall floor (= default) is accepted.
+        cfg.notifier.wall.severity_floor = String::new();
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_unknown_notifier_panic_floor() {
+        // A typo in the audit-mode panic escape hatch silently voids it (no
+        // floor → audit mode suppresses even critical findings). validate must
+        // reject an unrecognized grade. Unset/empty legitimately means no floor.
+        let mut cfg = Config::default();
+        for bad in ["hihg", "none", "unknown", "warn", "5", "high!"] {
+            cfg.notifier.panic_floor = Some(bad.into());
+            let err = cfg.validate().unwrap_err();
+            assert!(matches!(err, ConfigError::Invalid(_)), "{bad:?} → {err:?}");
+            assert!(
+                err.to_string().contains("panic_floor"),
+                "msg should name the field for {bad:?}: {err}"
+            );
+        }
+        // Unset and every recognized grade/alias (any case) and empty pass.
+        cfg.notifier.panic_floor = None;
+        cfg.validate().unwrap();
+        for good in [
+            "informational",
+            "info",
+            "low",
+            "medium",
+            "med",
+            "high",
+            "HIGH",
+            "critical",
+            "crit",
+            "fatal",
+            "",
+        ] {
+            cfg.notifier.panic_floor = Some(good.into());
+            cfg.validate()
+                .unwrap_or_else(|e| panic!("panic_floor {good:?} must be valid, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_rejects_unknown_responder_min_severity() {
+        // A typo in the autonomous-response floor silently runs fail-open (no
+        // floor → every finding processed, aggressive actions can fire on low
+        // findings). validate must reject an unrecognized token.
+        let mut cfg = Config::default();
+        for bad in ["hgih", "severe", "warn", "9", "high!", "none "] {
+            // note: "none " has trailing space but trims to "none" — valid; keep
+            // it out of the bad set below by testing real typos only.
+            if bad.trim().eq_ignore_ascii_case("none") {
+                continue;
+            }
+            cfg.responder.min_severity = bad.into();
+            let err = cfg.validate().unwrap_err();
+            assert!(matches!(err, ConfigError::Invalid(_)), "{bad:?} → {err:?}");
+            assert!(
+                err.to_string().contains("min_severity"),
+                "msg should name the field for {bad:?}: {err}"
+            );
+        }
+        // Recognized tokens (any case), the aliases, empty, and the default all pass.
+        for good in [
+            "none",
+            "unknown",
+            "",
+            "info",
+            "informational",
+            "low",
+            "medium",
+            "med",
+            "high",
+            "HIGH",
+            "critical",
+            "crit",
+            "fatal",
+        ] {
+            cfg.responder.min_severity = good.into();
+            cfg.validate()
+                .unwrap_or_else(|e| panic!("min_severity {good:?} must be valid, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_rejects_half_configured_api_tls() {
+        // A cert without a key (or vice versa), or client_ca without cert+key,
+        // makes the daemon silently disable TLS and serve the TCP control API in
+        // plaintext. validate must reject these — but only when TCP is in use.
+        let base = || {
+            let mut c = Config::default();
+            c.api.enabled = true;
+            c.api.tcp_addr = "127.0.0.1:8443".into();
+            c.api.token_file = "/run/selfdef/token".into();
+            c
+        };
+        // cert without key → rejected.
+        let mut cfg = base();
+        cfg.api.tls.cert_path = "/etc/selfdef/api.crt".into();
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("cert_path and key_path"), "{err}");
+        // key without cert → rejected.
+        let mut cfg = base();
+        cfg.api.tls.key_path = "/etc/selfdef/api.key".into();
+        assert!(matches!(cfg.validate(), Err(ConfigError::Invalid(_))));
+        // client_ca (mTLS) without cert+key → rejected.
+        let mut cfg = base();
+        cfg.api.tls.client_ca = "/etc/selfdef/ca.crt".into();
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("client_ca"), "{err}");
+        // cert+key → valid TLS; adding client_ca → valid mTLS.
+        let mut cfg = base();
+        cfg.api.tls.cert_path = "/etc/selfdef/api.crt".into();
+        cfg.api.tls.key_path = "/etc/selfdef/api.key".into();
+        cfg.validate().unwrap();
+        cfg.api.tls.client_ca = "/etc/selfdef/ca.crt".into();
+        cfg.validate().unwrap();
+        // Neither set → TLS off, valid (plain HTTP + bearer, the documented default).
+        base().validate().unwrap();
+        // A half-TLS config with NO TCP transport (unix only) is not a plaintext
+        // hazard — there is no TCP listener — so it must still load.
+        let mut cfg = Config::default();
+        cfg.api.enabled = true;
+        cfg.api.unix_socket = "/run/selfdef/api.sock".into();
+        cfg.api.tcp_addr = String::new();
+        cfg.api.tls.cert_path = "/etc/selfdef/api.crt".into(); // key intentionally empty
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_unparseable_tcp_addr() {
+        // The daemon parses tcp_addr as a std SocketAddr (no hostname
+        // resolution) and silently disables the TCP transport on failure — so a
+        // hostname, a missing port, or stray whitespace passes the non-empty
+        // check yet never listens. validate must reject it. A unix socket +
+        // token are set so only tcp_addr validity is under test.
+        let mut cfg = Config::default();
+        cfg.api.enabled = true;
+        cfg.api.unix_socket = "/run/selfdef/api.sock".into();
+        cfg.api.token_file = "/run/selfdef/token".into();
+        for bad in [
+            "localhost:8443",
+            "127.0.0.1",
+            ":8443",
+            "127.0.0.1:8443 ",
+            "not-an-addr",
+            "256.0.0.1:1",
+        ] {
+            cfg.api.tcp_addr = bad.into();
+            let err = cfg.validate().unwrap_err();
+            assert!(matches!(err, ConfigError::Invalid(_)), "{bad:?} → {err:?}");
+            assert!(
+                err.to_string().contains("tcp_addr"),
+                "msg should name the field for {bad:?}: {err}"
+            );
+        }
+        // Valid IPv4 and IPv6 socket addresses pass.
+        for good in ["127.0.0.1:8443", "0.0.0.0:9000", "[::1]:8443"] {
+            cfg.api.tcp_addr = good.into();
+            cfg.validate()
+                .unwrap_or_else(|e| panic!("addr {good:?} must be valid, got {e:?}"));
+        }
     }
 
     #[test]
@@ -2659,6 +3113,34 @@ mod tests {
         assert_eq!(
             cfg.notifier.oracle_triage.filter.kinds,
             vec!["POLICY_VIOLATION".to_owned(), "CONN_ANOMALY".to_owned()]
+        );
+    }
+
+    /// F-2026-092: the responder autonomous-response severity floor defaults to
+    /// `none` (no floor) and is overridable from `[responder] min_severity`.
+    #[test]
+    fn responder_min_severity_defaults_none_and_parses_from_toml() {
+        // Default: no floor.
+        assert_eq!(ResponderConfig::default().min_severity, "none");
+
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [responder]
+            dry_run = false
+            allowed_actions = ["notify", "kill_pid"]
+            min_severity = "high"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.responder.min_severity, "high");
+        assert!(!cfg.responder.dry_run);
+        // Unset fields still fall back to the struct default (serde(default)).
+        assert_eq!(
+            cfg.responder.snapshot_dir,
+            ResponderConfig::default().snapshot_dir
         );
     }
 

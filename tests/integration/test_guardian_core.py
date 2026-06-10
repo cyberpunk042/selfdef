@@ -217,5 +217,94 @@ class TestProbeWrites(unittest.TestCase):
             self.assertEqual(f.read(), "ready\n")
 
 
+class TestSupervisedReconnectLoop(unittest.TestCase):
+    """Tetragon-socket-dropout gotcha (operator audit 2026-06-10).
+
+    The guardian must ride out an absent or dropped event pipe in-process
+    instead of exiting into systemd's start-limit. Before this fix, a
+    socket gap >~5s (firewall/VLAN reconfig, Tetragon restart) permanently
+    failed the unit — Ring 0 containment dead until manual reset-failed.
+    """
+
+    def setUp(self):
+        import logging
+        self.mod = _import_guardian()
+        # main_loop/run_supervised assert a configured logger.
+        self.mod._log = logging.getLogger("guardian-core-test")
+        self.mod._shutdown_requested.clear()
+        self.tmpdir = tempfile.mkdtemp(prefix="guardian-supervise-")
+        self.audit_log = os.path.join(self.tmpdir, "audit.log")
+        self.console = os.path.join(self.tmpdir, "console")  # plain file: bell is harmless
+
+    def tearDown(self):
+        import shutil
+        self.mod._shutdown_requested.clear()
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _shutdown_after(self, secs: float):
+        import threading
+        t = threading.Timer(secs, self.mod._shutdown_requested.set)
+        t.daemon = True
+        t.start()
+        return t
+
+    def test_missing_socket_waits_instead_of_dying(self):
+        # Socket absent: run_supervised must WAIT (not return) until shutdown.
+        import time
+        self._shutdown_after(0.4)
+        start = time.monotonic()
+        rc = self.mod.run_supervised(
+            os.path.join(self.tmpdir, "no-such-pipe"),
+            self.audit_log,
+            self.console,
+            reconnect_delay_secs=0.05,
+        )
+        elapsed = time.monotonic() - start
+        self.assertEqual(rc, self.mod.EXIT_OK)
+        # It actually rode out the gap rather than exiting immediately.
+        self.assertGreaterEqual(elapsed, 0.3)
+
+    def test_eof_without_shutdown_is_source_lost_not_clean_exit(self):
+        # A regular file EOFs immediately after its lines: with NO shutdown
+        # requested, main_loop must report source-lost (writer closed the
+        # pipe, e.g. a Tetragon restart) — the old exit-0 here let a routine
+        # Tetragon restart end the guardian pass as a "clean shutdown".
+        stream = os.path.join(self.tmpdir, "events")
+        with open(stream, "w") as f:
+            f.write('{"action": "noop"}\n{"action": "noop"}\n')
+        rc = self.mod.main_loop(stream, self.audit_log, self.console)
+        self.assertEqual(rc, self.mod._SOURCE_LOST)
+
+    def test_supervised_reconnects_after_eof_until_shutdown(self):
+        # End-to-end: the supervised loop re-opens after EOF (source lost)
+        # and only exits on the signal-driven shutdown — never dies into the
+        # restart cycle on its own.
+        import time
+        stream = os.path.join(self.tmpdir, "events")
+        with open(stream, "w") as f:
+            f.write('{"action": "noop"}\n')
+        self._shutdown_after(0.4)
+        start = time.monotonic()
+        rc = self.mod.run_supervised(
+            stream, self.audit_log, self.console, reconnect_delay_secs=0.05
+        )
+        elapsed = time.monotonic() - start
+        self.assertEqual(rc, self.mod.EXIT_OK)
+        # Survived multiple EOF→reopen cycles instead of returning at the first.
+        self.assertGreaterEqual(elapsed, 0.3)
+
+    def test_signal_shutdown_still_returns_exit_ok(self):
+        # A pre-set shutdown returns EXIT_OK immediately — graceful-shutdown
+        # semantics per MS044 R10545 are preserved by the supervised loop.
+        self.mod._shutdown_requested.set()
+        rc = self.mod.run_supervised(
+            os.path.join(self.tmpdir, "no-such-pipe"),
+            self.audit_log,
+            self.console,
+            reconnect_delay_secs=0.05,
+        )
+        self.assertEqual(rc, self.mod.EXIT_OK)
+
+
 if __name__ == "__main__":
     unittest.main()

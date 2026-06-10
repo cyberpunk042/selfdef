@@ -59,14 +59,14 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    // Honor [daemon].log_format for the stderr fallback logger. Best-effort
-    // peek: the authoritative config load + error handling happens below;
-    // default to "text" if the file is missing/invalid so logging still
-    // initialises (and the real load reports the error properly).
-    let log_format = Config::load(Some(&args.config))
-        .map(|c| c.daemon.log_format)
-        .unwrap_or_else(|_| "text".to_string());
-    init_tracing(args.log_level.as_deref(), &log_format)?;
+    // Honor [daemon].log_level + log_format for the stderr fallback logger.
+    // Best-effort peek: the authoritative config load + error handling happens
+    // below; default to "info"/"text" if the file is missing/invalid so logging
+    // still initialises (and the real load reports the error properly).
+    let (config_level, log_format) = Config::load(Some(&args.config))
+        .map(|c| (c.daemon.log_level, c.daemon.log_format))
+        .unwrap_or_else(|_| ("info".to_string(), "text".to_string()));
+    init_tracing(args.log_level.as_deref(), &config_level, &log_format)?;
 
     // SDD-002 follow-up: `--validate` is a pure pre-flight. Load the config
     // (which runs the TOML parse + every semantic fail-fast rule) and exit
@@ -427,6 +427,15 @@ async fn main() -> Result<()> {
         tokio::spawn(async move { run_store_sink(s, store_sub, sd).await })
     };
 
+    // F-2026-094: shared bus-lag counters for the two consequential consumers.
+    // The same Arc is handed to each consumer (which bumps it on a broadcast
+    // lag) and to the Metrics handle (which renders it live), so dropped-before-
+    // action findings / missed detections become observable instead of living
+    // only in a warn log. Created here so both the metrics wiring below and the
+    // correlator + responder constructions further down can clone them.
+    let responder_lag = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let correlator_lag = Arc::new(std::sync::atomic::AtomicU64::new(0));
+
     // The shared Metrics handle. Constructed here (before the retention +
     // mirror loops) so every producer records into the SAME Arc that the
     // API /metrics surface renders. Cheap + Arc'd; only the /metrics scrape
@@ -441,6 +450,22 @@ async fn main() -> Result<()> {
         // SDD-081: surface retention on/off so a consumer alert can tell
         // "operator opted out" from "retention stalled".
         m.set_retention_enabled(cfg.store.hot_retention_days > 0);
+        // F-2026-092: surface the responder's autonomous-response severity
+        // floor (0 = none) so a dashboard can chart suppression against
+        // selfdef_findings_by_severity_total instead of guessing the config.
+        let floor_repr = match cfg
+            .responder
+            .min_severity
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "" | "none" | "unknown" => 0,
+            other => parse_severity_floor(other).map_or(0, |s| s as u32),
+        };
+        m.set_responder_min_severity_floor(floor_repr);
+        // F-2026-094: hand the consumers' live lag counters to /metrics.
+        m.set_lag_sources(Arc::clone(&responder_lag), Arc::clone(&correlator_lag));
     }
 
     // SD-R retention sweep (SDD-081): enforce StoreConfig::hot_retention_days.
@@ -583,7 +608,8 @@ async fn main() -> Result<()> {
             publisher.clone(),
             host_tag.clone(),
             cfg.correlator.rules_dir.clone(),
-        );
+        )
+        .with_lag_counter(Arc::clone(&correlator_lag));
         if cfg.security.require_signed_rules {
             let key_path = cfg.security.signing_public_key_file.as_ref().context(
                 "[security].require_signed_rules = true but \
@@ -644,11 +670,51 @@ async fn main() -> Result<()> {
             cfg.responder.velociraptor_args.clone(),
         )),
     ];
-    let responder = Arc::new(Responder::new(
-        actions,
-        cfg.responder.allowed_actions.clone(),
-        cfg.responder.dry_run,
-    ));
+    let responder = {
+        let base = Responder::new(
+            actions,
+            cfg.responder.allowed_actions.clone(),
+            cfg.responder.dry_run,
+        )
+        .with_lag_counter(Arc::clone(&responder_lag));
+        // Surface allowlisted action names that match no registered action. The
+        // dispatch loop only runs registered+allowed actions, so such an entry is
+        // inert — almost always a typo (e.g. `kil_pid`) that silently means the
+        // operator's intended response will NOT fire on a real threat. Warned,
+        // not fatal: a forward-compatible entry for a not-yet-built action is a
+        // legitimate (if rare) reason to keep loading.
+        let unknown_actions = base.unknown_allowed_actions();
+        if !unknown_actions.is_empty() {
+            warn!(
+                unknown_actions = ?unknown_actions,
+                available = ?base.action_names(),
+                "[responder].allowed_actions names match no registered action — \
+                 likely a typo; those entries are inert and the intended response will not fire"
+            );
+        }
+        // F-2026-092: apply the optional autonomous-response severity floor.
+        // `none`/`unknown`/empty means no floor (process every finding, the
+        // default). A recognized grade raises the floor; an unrecognized token
+        // is logged and treated as no floor rather than silently dropping.
+        let token = cfg.responder.min_severity.trim();
+        let floored = match token.to_ascii_lowercase().as_str() {
+            "" | "none" | "unknown" => base,
+            other => match parse_severity_floor(other) {
+                Some(floor) => {
+                    info!(floor = %floor, "responder autonomous-response severity floor enabled");
+                    base.with_min_severity(floor)
+                }
+                None => {
+                    warn!(
+                        token = %token,
+                        "unrecognized responder.min_severity; no floor applied (every finding processed)"
+                    );
+                    base
+                }
+            },
+        };
+        Arc::new(floored)
+    };
 
     let responder_task = {
         let sub = bus.subscribe();
@@ -744,14 +810,58 @@ async fn main() -> Result<()> {
                 max_msgs: cfg.bus.nats.jetstream.max_msgs,
             },
         };
-        let sub = bus.subscribe();
+        let bus_for_nats = Arc::clone(&bus);
         let pub_ = publisher.clone();
         let ht = host_tag.clone();
         let sd = shutdown.clone();
         info!(url = %nats_cfg.url, "nats bridge: starting");
         Some(tokio::spawn(async move {
-            if let Err(e) = selfdef_nats::run_bridge(nats_cfg, ht, pub_, sub, sd).await {
-                error!(error = %e, "nats bridge failed");
+            // Supervised retry loop. A single failed run previously killed the
+            // multi-host fan-out for the daemon's whole lifetime — most
+            // commonly when selfdefd boots BEFORE the NATS server (the initial
+            // `connect` errors once, the task logs and ends, and the operator
+            // believes they have fan-out but don't). Same respawn-with-backoff
+            // doctrine as the journalctl follower (selfdef-collector-journald).
+            // async-nats reconnects by itself AFTER a successful connect; this
+            // loop covers the initial-connect / setup window it does not.
+            let mut backoff = NATS_MIN_RETRY_BACKOFF;
+            loop {
+                if sd.is_cancelled() {
+                    return;
+                }
+                // Fresh bus subscription per attempt — the previous one was
+                // consumed (moved) by the failed bridge run.
+                let sub = bus_for_nats.subscribe();
+                let started = std::time::Instant::now();
+                match selfdef_nats::run_bridge(
+                    nats_cfg.clone(),
+                    ht.clone(),
+                    pub_.clone(),
+                    sub,
+                    sd.clone(),
+                )
+                .await
+                {
+                    // run_bridge returns Ok only on shutdown-driven exit.
+                    Ok(()) => return,
+                    Err(e) => {
+                        if sd.is_cancelled() {
+                            return;
+                        }
+                        let healthy_run = started.elapsed() >= NATS_HEALTHY_RUN_RESET_THRESHOLD;
+                        let (sleep_for, next) = nats_bridge_backoff(backoff, healthy_run);
+                        error!(
+                            error = %e,
+                            backoff_ms = sleep_for.as_millis() as u64,
+                            "nats bridge failed; retrying after backoff"
+                        );
+                        tokio::select! {
+                            () = sd.cancelled() => return,
+                            () = tokio::time::sleep(sleep_for) => {}
+                        }
+                        backoff = next;
+                    }
+                }
             }
         }))
     } else {
@@ -994,7 +1104,34 @@ async fn run_store_sink(
     loop {
         tokio::select! {
             () = shutdown.cancelled() => {
-                info!(written, lagged, "store sink shutting down");
+                // Drain the backlog before exiting. The shutdown sequence
+                // cancels, then joins the producers, then drops the publisher
+                // and awaits THIS task last (with a timeout) — a choreography
+                // that only makes sense if the sink flushes what's already been
+                // published. But `Bus` keeps its own sender, so the channel
+                // never reports `Closed` while the daemon lives; we can't wait
+                // for it. Instead pull everything currently buffered in this
+                // subscriber's ring (non-blocking) and persist it, so events the
+                // producers emitted before we observed the cancel reach the hot
+                // store instead of being dropped on the floor.
+                loop {
+                    match sub.try_recv() {
+                        Ok(Some(event)) => {
+                            if let Err(e) = store.insert(&event).await {
+                                error!(error = %e, "store insert failed (shutdown drain)");
+                            } else {
+                                written += 1;
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(BusError::Lagged(n)) => {
+                            lagged = lagged.saturating_add(n);
+                            warn!(missed = n, "store sink lagged (shutdown drain)");
+                        }
+                        Err(_) => break,
+                    }
+                }
+                info!(written, lagged, "store sink shutting down (backlog drained)");
                 return (written, lagged);
             }
             res = sub.recv() => match res {
@@ -1017,6 +1154,30 @@ async fn run_store_sink(
             }
         }
     }
+}
+
+/// NATS bridge retry cadence (supervised loop in the spawn site above).
+/// Slightly slower floor than the journald follower's 100ms — each retry is
+/// a remote TCP connect, not a local exec — same 30s ceiling.
+const NATS_MIN_RETRY_BACKOFF: Duration = Duration::from_millis(500);
+const NATS_MAX_RETRY_BACKOFF: Duration = Duration::from_secs(30);
+/// An attempt that stayed up at least this long connected and bridged
+/// healthily; the NEXT failure starts back at the floor so a flapping NATS
+/// server still recovers quickly after a good run (journald-follower
+/// doctrine).
+const NATS_HEALTHY_RUN_RESET_THRESHOLD: Duration = Duration::from_secs(60);
+
+/// Backoff step for the supervised NATS bridge: returns
+/// `(sleep_for_now, next_backoff)`. A healthy prior run resets to the
+/// floor; otherwise the current backoff is slept and doubled, capped at
+/// [`NATS_MAX_RETRY_BACKOFF`].
+fn nats_bridge_backoff(prev: Duration, healthy_run: bool) -> (Duration, Duration) {
+    let current = if healthy_run {
+        NATS_MIN_RETRY_BACKOFF
+    } else {
+        prev
+    };
+    (current, (current * 2).min(NATS_MAX_RETRY_BACKOFF))
 }
 
 /// Translate the string-shaped `[api]` config into the typed `ApiConfig`
@@ -2063,12 +2224,32 @@ fn parse_severity_floor(s: &str) -> Option<selfdef_core::severity::SeverityId> {
     }
 }
 
-fn init_tracing(level_override: Option<&str>, log_format: &str) -> Result<()> {
+/// Resolve which log-filter directive to apply, by precedence:
+/// `--log-level` / `$SELFDEF_LOG` (the explicit override) > `[daemon].log_level`
+/// (config) > `$RUST_LOG` / built-in default. Returns `Some(directive)` to use
+/// explicitly, or `None` to fall back to `EnvFilter::from_default_env`.
+///
+/// The config field previously did nothing: it was never threaded into
+/// `init_tracing`, so a `[daemon].log_level = "debug"` was silently ignored, and
+/// a default daemon (no `--log-level`, no `$RUST_LOG`) logged at near-silent
+/// ERROR via `from_default_env` despite the field's documented `"info"` default.
+fn resolve_log_level<'a>(cli_level: Option<&'a str>, config_level: &'a str) -> Option<&'a str> {
+    cli_level
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            let c = config_level.trim();
+            (!c.is_empty()).then_some(c)
+        })
+}
+
+fn init_tracing(level_override: Option<&str>, config_level: &str, log_format: &str) -> Result<()> {
     use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-    let filter = level_override.map_or_else(EnvFilter::from_default_env, |lvl| {
-        EnvFilter::try_new(lvl).unwrap_or_else(|_| EnvFilter::new("info"))
-    });
+    let filter = match resolve_log_level(level_override, config_level) {
+        Some(lvl) => EnvFilter::try_new(lvl).unwrap_or_else(|_| EnvFilter::new("info")),
+        None => EnvFilter::from_default_env(),
+    };
 
     if let Ok(journald) = tracing_journald::layer() {
         // journald carries structured fields natively; [daemon].log_format
@@ -2251,5 +2432,138 @@ async fn run_heartbeat() {
     loop {
         tick.tick().await;
         let _ = sd_notify::notify(false, &[sd_notify::NotifyState::Watchdog]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        NATS_MAX_RETRY_BACKOFF, NATS_MIN_RETRY_BACKOFF, nats_bridge_backoff, resolve_log_level,
+        run_store_sink,
+    };
+
+    // Supervised NATS bridge backoff: doubles per consecutive failure, caps at
+    // the ceiling, and a healthy run resets to the floor. The loop exists so a
+    // NATS server that comes up AFTER selfdefd (or restarts) doesn't silently
+    // kill multi-host fan-out for the daemon's lifetime.
+    #[test]
+    fn nats_backoff_doubles_and_caps() {
+        let mut b = NATS_MIN_RETRY_BACKOFF;
+        let mut slept = Vec::new();
+        for _ in 0..10 {
+            let (sleep_for, next) = nats_bridge_backoff(b, false);
+            slept.push(sleep_for);
+            b = next;
+        }
+        // First sleep is the floor; sleeps are non-decreasing; ceiling holds.
+        assert_eq!(slept[0], NATS_MIN_RETRY_BACKOFF);
+        assert!(slept.windows(2).all(|w| w[0] <= w[1]));
+        assert_eq!(*slept.last().unwrap(), NATS_MAX_RETRY_BACKOFF);
+        assert_eq!(b, NATS_MAX_RETRY_BACKOFF, "next stays capped");
+    }
+
+    #[test]
+    fn nats_backoff_resets_after_healthy_run() {
+        // Saturate to the ceiling, then a healthy run resets to the floor —
+        // a flapping NATS still recovers quickly after a good stretch.
+        let (sleep_for, next) = nats_bridge_backoff(NATS_MAX_RETRY_BACKOFF, true);
+        assert_eq!(sleep_for, NATS_MIN_RETRY_BACKOFF);
+        assert_eq!(next, NATS_MIN_RETRY_BACKOFF * 2);
+    }
+
+    // On graceful shutdown the store sink must DRAIN events already buffered in
+    // its subscriber, not abandon them. The Bus keeps its own sender so the
+    // channel never closes while the daemon lives; the old code returned the
+    // instant it saw the cancel, dropping the backlog. Publish a batch, cancel
+    // BEFORE running the sink, then assert every event was persisted.
+    #[tokio::test]
+    async fn store_sink_drains_buffered_events_on_shutdown() {
+        use selfdef_bus::Bus;
+        use selfdef_core::category::ClassUid;
+        use selfdef_core::prelude::*;
+        use selfdef_store::SqliteStore;
+        use std::sync::Arc;
+        use tokio_util::sync::CancellationToken;
+
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(SqliteStore::open(dir.path().join("hot.sqlite")).unwrap());
+
+        const N: u64 = 64;
+        let bus = Bus::new(256); // capacity > N so nothing is evicted
+        let sub = bus.subscribe();
+        let pub_ = bus.publisher();
+        for seq in 0..N {
+            pub_.publish(Event::new(
+                ClassUid::AUTHENTICATION,
+                1,
+                SeverityId::Informational,
+                "test-host",
+                "test",
+                seq,
+            ))
+            .unwrap();
+        }
+
+        // Cancel first: the sink must still flush the buffered backlog.
+        let shutdown = CancellationToken::new();
+        shutdown.cancel();
+        let (written, _lagged) = run_store_sink(store.clone(), sub, shutdown).await;
+
+        assert_eq!(
+            written, N,
+            "sink must persist every buffered event on drain"
+        );
+        assert_eq!(
+            store.count().await.unwrap(),
+            N,
+            "all events must be in the store, not dropped on shutdown"
+        );
+    }
+
+    // `--log-level` / $SELFDEF_LOG wins over the config field.
+    #[test]
+    fn cli_override_beats_config() {
+        assert_eq!(resolve_log_level(Some("debug"), "warn"), Some("debug"));
+    }
+
+    // With no CLI override, the config field is honored (the bug: it was ignored).
+    #[test]
+    fn config_used_when_no_cli_override() {
+        assert_eq!(resolve_log_level(None, "debug"), Some("debug"));
+        // the documented default still produces an explicit "info" directive
+        // (not the near-silent ERROR-only from_default_env path).
+        assert_eq!(resolve_log_level(None, "info"), Some("info"));
+    }
+
+    // An empty config field (explicitly unset) falls through to $RUST_LOG /
+    // default via the None sentinel — the escape hatch is preserved.
+    #[test]
+    fn empty_config_falls_through_to_env() {
+        assert_eq!(resolve_log_level(None, ""), None);
+        assert_eq!(resolve_log_level(None, "   "), None);
+    }
+
+    // A blank CLI value does not shadow a real config value.
+    #[test]
+    fn blank_cli_falls_through_to_config() {
+        assert_eq!(resolve_log_level(Some(""), "trace"), Some("trace"));
+        assert_eq!(resolve_log_level(Some("  "), "trace"), Some("trace"));
+    }
+
+    // Both empty → fall through to the env/default path.
+    #[test]
+    fn both_empty_falls_through() {
+        assert_eq!(resolve_log_level(None, ""), None);
+        assert_eq!(resolve_log_level(Some(""), ""), None);
+    }
+
+    // Complex EnvFilter directives (per-target) survive — log_level is a
+    // directive string, not a closed level vocabulary.
+    #[test]
+    fn complex_directive_passes_through() {
+        assert_eq!(
+            resolve_log_level(None, "info,selfdef_correlator=debug"),
+            Some("info,selfdef_correlator=debug")
+        );
     }
 }

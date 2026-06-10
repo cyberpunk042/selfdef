@@ -100,6 +100,12 @@ pub enum QuarantineError {
     BackendUnreachable(String),
     #[error("pid {pid} not found (process exited?)")]
     PidNotFound { pid: i32 },
+    /// pid 1 (init) is sacrosanct — freezing init via the cgroup freezer hangs
+    /// the whole system (init stops reaping children and handling signals).
+    /// The sibling process-tree-freeze / capability-drop / process-env-scrub /
+    /// netns-isolation backends already refuse pid 1; quarantine must too.
+    #[error("pid {pid} refused: {reason}")]
+    PidRefused { pid: i32, reason: String },
 }
 
 #[async_trait]
@@ -159,6 +165,12 @@ fn validate(req: &FreezeRequest) -> Result<(), QuarantineError> {
             "pid must be positive, got {}",
             req.pid
         )));
+    }
+    if req.pid == 1 {
+        return Err(QuarantineError::PidRefused {
+            pid: req.pid,
+            reason: "pid 1 (init) is never freezable; freezing init hangs the host".into(),
+        });
     }
     let max = req.authority.max_duration();
     if req.duration > max {
@@ -341,9 +353,26 @@ impl FsBackend {
                 .and_then(|n| n.to_str())
                 .unwrap_or("state")
         ));
-        fs::write(&tmp, bytes).map_err(|e| {
-            QuarantineError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
-        })?;
+        // fsync the tempfile contents before the rename publishes them. This is
+        // the durable quarantine state-journal (active + pending-release sets);
+        // fs::write + fs::rename gives crash *consistency* (no torn read) but not
+        // *durability* — both can return Ok with the bytes still only in the
+        // page cache. A power loss right after quarantining a process could then
+        // lose that entry, resurrect a stale journal, or leave a zero-length
+        // file the daemon reloads as an empty quarantine set on reboot —
+        // silently freeing a process that was deliberately contained (fail-open).
+        {
+            use std::io::Write as _;
+            let mut f = fs::File::create(&tmp).map_err(|e| {
+                QuarantineError::BackendUnreachable(format!("create {}: {e}", tmp.display()))
+            })?;
+            f.write_all(bytes).map_err(|e| {
+                QuarantineError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
+            })?;
+            f.sync_all().map_err(|e| {
+                QuarantineError::BackendUnreachable(format!("fsync {}: {e}", tmp.display()))
+            })?;
+        }
         fs::rename(&tmp, target).map_err(|e| {
             let _ = fs::remove_file(&tmp);
             QuarantineError::BackendUnreachable(format!(
@@ -352,6 +381,12 @@ impl FsBackend {
                 target.display()
             ))
         })?;
+        // fsync the parent directory so the rename's new directory entry is
+        // itself durable. Best-effort: a filesystem that refuses to open or
+        // fsync a directory must not fail an otherwise-good journal write.
+        if let Ok(d) = fs::File::open(parent) {
+            let _ = d.sync_all();
+        }
         Ok(())
     }
 
@@ -455,5 +490,41 @@ impl ProcessQuarantineBackend for FsBackend {
             let _ = self.persist(&snapshot);
         }
         removed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn req(pid: i32) -> FreezeRequest {
+        FreezeRequest {
+            pid,
+            reason: "containment".into(),
+            duration: Duration::from_secs(60),
+            authority: AuthorityTier::Operator,
+            scope: FreezeScope::Process,
+            idempotency_key: "k1".into(),
+        }
+    }
+
+    #[test]
+    fn pid_1_freeze_refused() {
+        // SAFETY: pid 1 (init) is sacrosanct — freezing init via the cgroup
+        // freezer hangs the whole host. The sibling process-tree-freeze and
+        // other enforcement backends refuse pid 1; quarantine must too.
+        assert!(matches!(
+            validate(&req(1)).unwrap_err(),
+            QuarantineError::PidRefused { pid: 1, .. }
+        ));
+    }
+
+    #[test]
+    fn nonpositive_rejected_normal_ok() {
+        assert!(matches!(
+            validate(&req(0)).unwrap_err(),
+            QuarantineError::InvalidRequest(_)
+        ));
+        validate(&req(4242)).unwrap();
     }
 }

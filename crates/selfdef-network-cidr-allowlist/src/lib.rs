@@ -102,6 +102,16 @@ pub fn parse_cidr(s: &str) -> Result<Cidr, CidrError> {
 impl Cidr {
     /// Does this CIDR contain the address?
     pub fn contains(&self, ip: u32) -> bool {
+        // Defend against an unvalidated prefix (serde bypasses parse_cidr's
+        // `p > 32` check): `32 - prefix_len` underflows for prefix_len > 32 — a
+        // panic in debug, and in release Rust masks the shift to 5 bits so e.g.
+        // /40 silently becomes a /24 mask, matching a 256-address range the
+        // entry never named (a fail-OPEN allowlist match). Fail closed: an
+        // out-of-range prefix contains nothing. Matches the guard cidr-matcher's
+        // `contains` already carries.
+        if self.prefix_len > 32 {
+            return false;
+        }
         let mask = if self.prefix_len == 0 {
             0
         } else {
@@ -266,5 +276,21 @@ mod tests {
         let j = serde_json::to_string(&a).unwrap();
         let back: CidrAllowlist = serde_json::from_str(&j).unwrap();
         assert_eq!(a, back);
+    }
+
+    #[test]
+    fn out_of_range_prefix_contains_nothing() {
+        // parse_cidr rejects prefix_len > 32, but serde can construct a Cidr
+        // directly, bypassing that check. Cidr::contains must be fail-closed on
+        // an out-of-range prefix: before the guard, `32 - prefix_len`
+        // underflowed (debug panic; release masked the shift so /40 became a
+        // /24 mask — a fail-OPEN allowlist match).
+        let bad = Cidr {
+            network: 0x0A_00_00_00, // 10.0.0.0
+            prefix_len: 40,
+        };
+        // 10.0.0.5 would fall inside a wrongly-masked /24 — must still be denied.
+        assert!(!bad.contains(0x0A_00_00_05));
+        assert!(!bad.contains(0xCB_00_71_01)); // 203.0.113.1
     }
 }

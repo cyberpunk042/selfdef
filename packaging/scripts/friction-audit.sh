@@ -74,16 +74,28 @@ echo "[*] INITIATING SOVEREIGN HARDWARE FRICTION AUDIT..."
 # ----------------------------------------------------------------
 # 1. Check for True Physical PCIe Bifurcation Symmetry (x8/x8 Link Width)
 # ----------------------------------------------------------------
-LANE_AUDIT_COUNT=$(lspci -vvv 2>/dev/null | grep -c "LnkSta:.*Width x8" || true)
-if [ "${LANE_AUDIT_COUNT}" -lt 2 ]; then
-    echo "CRITICAL ARCHITECTURAL FRICTION ERROR: PCIe Bus Degradation Detected." >&2
-    echo "Diagnostic: One or more slots running below symmetric x8 configuration parameters." >&2
-    echo "Remediation Check: Verify if M.2_2 slot is populated, interfering with lane paths." >&2
-    emit_ocsf 2004 4 "pcie" ",\"lane_count\":${LANE_AUDIT_COUNT}"
-    emit_ring "pcie" "fail"
-    exit 1
+# OPERATOR-EXTENSION: SKIP for hosts without lspci (containers, VMs) — mirrors
+# the zfs + memory gate skip-guards below. Without this guard an absent lspci
+# left LANE_AUDIT_COUNT=0 (empty pipe under `set -o pipefail` + `|| true`),
+# which is < 2 and hard-failed the gate (exit 1) on every non-PCIe host —
+# blocking BEFORE the zfs/memory skip-guards were even reachable. When lspci IS
+# present the gate is unchanged: a real < 2 x8-lane reading still fails exit 1.
+if command -v lspci >/dev/null 2>&1; then
+    LANE_AUDIT_COUNT=$(lspci -vvv 2>/dev/null | grep -c "LnkSta:.*Width x8" || true)
+    if [ "${LANE_AUDIT_COUNT}" -lt 2 ]; then
+        echo "CRITICAL ARCHITECTURAL FRICTION ERROR: PCIe Bus Degradation Detected." >&2
+        echo "Diagnostic: One or more slots running below symmetric x8 configuration parameters." >&2
+        echo "Remediation Check: Verify if M.2_2 slot is populated, interfering with lane paths." >&2
+        emit_ocsf 2004 4 "pcie" ",\"lane_count\":${LANE_AUDIT_COUNT}"
+        emit_ring "pcie" "fail"
+        exit 1
+    fi
+    emit_ring "pcie" "pass"
+else
+    # OPERATOR-EXTENSION: SKIP audit for hosts without lspci.
+    emit_ocsf 1003 1 "pcie" ",\"note\":\"lspci not installed; skipped\""
+    emit_ring "pcie" "skip"
 fi
-emit_ring "pcie" "pass"
 
 # ----------------------------------------------------------------
 # 2. Check ZFS Array Integrity status

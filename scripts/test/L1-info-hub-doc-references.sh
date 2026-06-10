@@ -66,9 +66,13 @@ hard_failures=0
 # break CI but should surface on every commit so the operator sees the
 # stale reference each run.
 # Format: <path>|<reason>
-ADVISORY_PATHS=(
-    "wiki/spine/doctrine/peace-machine-and-core-law.md|operator-supervised authoring per SDD-031 line 147; on info-hub PR #17 (branch claude/recover-projects-b0oT6) awaiting operator decision"
-)
+# (Empty: all former entries have since merged to info-hub main and are now
+# verified DIRECTLY by the file-existence check below:
+#   - wiki/spine/doctrine/peace-machine-and-core-law.md   (info-hub PR #17)
+#   - wiki/runbooks/metrics-correlator-lag.md             (info-hub PR #18)
+#   - wiki/runbooks/metrics-responder-lag.md              (info-hub PR #18)
+# The dispensation mechanism is retained for any future known-pending merge.)
+ADVISORY_PATHS=()
 
 is_advisory_path() {
     local p="$1"

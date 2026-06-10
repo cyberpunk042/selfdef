@@ -74,6 +74,21 @@ EOF
     [ "${status}" -eq 0 ]
 }
 
+@test "PCIe gate has a command -v lspci skip-guard (operator-extension)" {
+    # Static guard-presence check. The runtime behaviour (lspci absent -> the
+    # PCIe gate SKIPs and the script still exits 0, instead of hard-failing on
+    # LANE_AUDIT_COUNT=0 < 2) is verified by reproduction; asserting it here at
+    # runtime would require forcing lspci absence by rewriting PATH, which is
+    # not portable across runners (GitHub images ship pciutils, and a
+    # symlink-farm PATH trips the friction-audit watchdog on a loaded runner).
+    # So we lock the GUARD's presence + that the absent branch is a SKIP audit
+    # event, not a fail — mirroring the zfs/memory skip-guards' shape.
+    grep -q 'command -v lspci' "${SCRIPT}"
+    grep -q 'lspci not installed; skipped' "${SCRIPT}"
+    # and that the SKIP path emits a ring SKIP for the pcie gate
+    grep -Eq 'emit_ring "pcie" "skip"' "${SCRIPT}"
+}
+
 # ============================================================
 # R10820-R10826 — ZFS gate
 # ============================================================

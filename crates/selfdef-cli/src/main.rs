@@ -3244,7 +3244,18 @@ enum RulesAction {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let daemon_config_path = cli.config.clone();
-    let cfg = Config::load(Some(&cli.config)).context("loading configuration")?;
+    // `doctor` is a diagnostic tool: it must be able to PARSE a
+    // semantically-broken config to report which invariant it violates. The
+    // strict `Config::load` would abort at the validation gate before the
+    // doctor's own per-check report could run (e.g. require_signed_rules=true
+    // with no key path is exactly what the signing check is meant to flag), so
+    // route doctor through the parse-only loader. Every other command keeps
+    // the strict, fail-fast load.
+    let cfg = match &cli.command {
+        Command::Doctor { .. } => Config::load_unvalidated(Some(&cli.config)),
+        _ => Config::load(Some(&cli.config)),
+    }
+    .context("loading configuration")?;
 
     match cli.command {
         Command::Version => {

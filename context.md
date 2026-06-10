@@ -288,6 +288,28 @@ integrity watchdogs to unlock their L2 coverage; mine distinct new
 host-hardening surfaces. Routing + capture integrity are now guard-locked, so
 new watchdogs are protected from the two known silent-failure classes.
 
+> **STALE-QUEUE CORRECTION (2026-06-10, verified):** three items above /
+> elsewhere in this file have since SHIPPED but were never struck through
+> (same update-protocol drift as the 2026-05-27 correction):
+> - **"retrofit input-source knobs onto the 21 non-testable integrity
+>   watchdogs" — DONE.** Measured directly: all 21 (account …
+>   coredump-pattern) now expose `SELFDEF_*` input knobs AND own a
+>   same-named `packaging/test/L2-<mod>-watchdog.bats` suite (197 L2
+>   suites total on disk).
+> - **`m3_pipeline` "pre-existing failure" — HEALED.** `cargo test -p
+>   selfdef-daemon --test m3_pipeline` passes (1/1,
+>   `auditd_to_sqlite_pipeline ... ok`).
+> - **`dcgm::nvidia_smi_real_substrate_success` "known flake" — HEALED.**
+>   Root-caused to `ETXTBSY` on execve of a just-written fixture script;
+>   `run_nvidia_smi` carries a bounded retry plus the dedicated regression
+>   test `nvidia_smi_retries_through_transient_etxtbsy`. 3× parallel runs
+>   of the dcgm module: 32/32 each, no flake.
+>
+> Verified same day, all green: 37/37 L1 gates · 65/65 Python tests via
+> stdlib `unittest discover` (apply.sh e2e locks made pytest-less-runnable)
+> · coherence cargo trio + scheduler 546/546 + api green ·
+> `selfdefctl doctor` 5 ok / 0 warn / 0 fail / 24 env-conditional skips.
+
 ---
 
 ## Where we are right now (selfdef, 2026-05-19 snapshot)

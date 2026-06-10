@@ -51,10 +51,18 @@ impl Pattern {
         match self {
             Pattern::PathGlob(g) => match_path_glob(g, input),
             Pattern::Fqdn(s) => {
-                if let Some(suffix) = s.strip_prefix('.') {
-                    input == suffix || input.ends_with(s.as_str())
+                // FQDNs are case-insensitive (DNS). Matching case-sensitively
+                // lets a mixed-case destination (`sub.EVIL.com`) slip a deny
+                // pattern (`.evil.com`) in network-rule-pack — a denylist
+                // case-bypass — and wrongly miss a case-varied allow. Fold both
+                // sides (SubstringRule already does; PathGlob stays case-
+                // sensitive for Linux paths).
+                let input_l = input.to_ascii_lowercase();
+                let s_l = s.to_ascii_lowercase();
+                if let Some(suffix) = s_l.strip_prefix('.') {
+                    input_l == suffix || input_l.ends_with(&s_l)
                 } else {
-                    s == input
+                    s_l == input_l
                 }
             }
             Pattern::Cidr(c) => match_cidr(c, input),
@@ -193,6 +201,23 @@ mod tests {
         assert!(p.matches("x.y.example.org"));
         assert!(p.matches("example.org"));
         assert!(!p.matches("example.com"));
+    }
+
+    #[test]
+    fn fqdn_match_is_case_insensitive() {
+        // FQDNs are case-insensitive (DNS). A deny pattern in network-rule-pack
+        // must catch a mixed-case destination, and an allow must catch a
+        // case-varied host — case-sensitive matching was a denylist case-bypass.
+        let suffix = Pattern::Fqdn(".evil.com".into());
+        assert!(suffix.matches("sub.EVIL.com"));
+        assert!(suffix.matches("SUB.evil.COM"));
+        assert!(suffix.matches("EVIL.com"));
+        let exact = Pattern::Fqdn("Api.Anthropic.Com".into());
+        assert!(exact.matches("api.anthropic.com"));
+        assert!(exact.matches("API.ANTHROPIC.COM"));
+        // Boundary still holds case-insensitively: not-a-subdomain doesn't match.
+        assert!(!suffix.matches("notevil.com"));
+        assert!(!suffix.matches("evil.com.attacker.net"));
     }
 
     #[test]

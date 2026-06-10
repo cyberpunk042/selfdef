@@ -442,6 +442,22 @@ fn parse_map_spec_rejects_malformed() {
 }
 
 #[test]
+fn parse_map_spec_rejects_parent_traversal() {
+    // A bpffs pin path must stay under /sys/fs/bpf/. The '.'/'/' charset
+    // otherwise lets a ".." component through, blessing an escaping spec as
+    // well-formed and handing a future BPF_OBJ_GET a path resolving outside
+    // bpffs. Every parent-traversal form must be rejected.
+    assert_eq!(parse_map_spec("/sys/fs/bpf/../../etc/passwd"), None);
+    assert_eq!(parse_map_spec("/sys/fs/bpf/a/../../../root"), None);
+    assert_eq!(parse_map_spec("/sys/fs/bpf/.."), None);
+    assert_eq!(parse_map_spec("/sys/fs/bpf/sub/../map"), None);
+    // A single leading dot in a name (not a traversal) is still fine, and
+    // legitimately nested pins must keep working.
+    assert!(parse_map_spec("/sys/fs/bpf/.hidden_map").is_some());
+    assert!(parse_map_spec("/sys/fs/bpf/nested/dir/map").is_some());
+}
+
+#[test]
 fn parse_key_hex_accepts_even_hex() {
     assert_eq!(parse_key_hex("00"), Some(1));
     assert_eq!(parse_key_hex("0a000001"), Some(4));

@@ -57,6 +57,15 @@ impl FixedWindowCounter {
     }
 
     fn realign(&mut self, now_ms: u64) {
+        // Defend against a zero window (serde bypasses new()/validate()): the
+        // `now_ms / self.window_ms` below would divide by zero — a panic in
+        // debug, crashing the counter. Skip realignment instead, which leaves
+        // the count un-reset → the limiter stays at whatever it has accrued
+        // (fail-CLOSED: an over-limit corrupt counter keeps denying rather than
+        // crashing or silently resetting).
+        if self.window_ms == 0 {
+            return;
+        }
         let cur_bucket = (now_ms / self.window_ms) * self.window_ms;
         if cur_bucket != self.bucket_start_ms {
             self.bucket_start_ms = cur_bucket;
@@ -121,6 +130,22 @@ mod tests {
         c.observe(7, 100);
         // No observe in next bucket, but count must read 0 there.
         assert_eq!(c.count(1500), 0);
+    }
+
+    #[test]
+    fn zero_window_does_not_divide_by_zero() {
+        // new()/validate() reject window_ms==0, but serde can construct one
+        // directly. realign must not divide by zero (debug panic / crash);
+        // it skips realignment, leaving the count intact (fail-closed).
+        let mut c = FixedWindowCounter {
+            schema_version: SCHEMA_VERSION.into(),
+            window_ms: 0,
+            bucket_start_ms: 0,
+            current_count: 5,
+        };
+        c.observe(3, 1000); // must not panic
+        // No realign happened (window 0) → count accrues, never silently resets.
+        assert_eq!(c.count(9_999_999), 8);
     }
 
     #[test]

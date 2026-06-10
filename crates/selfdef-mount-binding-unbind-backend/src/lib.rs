@@ -160,6 +160,18 @@ fn validate(req: &UnbindMountRequest) -> Result<(), MountBindingUnbindError> {
             req.mount_point
         )));
     }
+    // umount2() VFS-resolves the path, so a ".." component would walk the
+    // unbind to a DIFFERENT mount than named: `/mnt/data/../../proc` resolves
+    // to `/proc` and would unmount it. A real, kernel-canonical mount point
+    // never contains a ".." component, so reject parent-traversal outright —
+    // this is a destructive host operation and must act only on the mount the
+    // caller literally named.
+    if req.mount_point.split('/').any(|seg| seg == "..") {
+        return Err(MountBindingUnbindError::InvalidRequest(format!(
+            "mount_point must not contain a '..' component, got {:?}",
+            req.mount_point
+        )));
+    }
     if req.reason.trim().is_empty() {
         return Err(MountBindingUnbindError::InvalidRequest(
             "reason must be non-empty".into(),
@@ -354,9 +366,29 @@ impl FsBackend {
                 .and_then(|n| n.to_str())
                 .unwrap_or("state")
         ));
-        fs::write(&tmp, bytes).map_err(|e| {
-            MountBindingUnbindError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
-        })?;
+        // fsync the tempfile contents before the rename publishes them. This
+        // is a durable SDD-066 state-journal: fs::write + fs::rename gives
+        // crash consistency (no torn read) but not durability — both can
+        // return Ok with the bytes still only in the page cache, so a power
+        // loss right after an enforcement action could lose the journal entry,
+        // resurrect a stale journal, or leave a zero-length file the backend
+        // reloads as an empty set on reboot, silently undoing a containment /
+        // revocation (fail-open). Matches the registry / quarantine-backend fix.
+        {
+            use std::io::Write as _;
+            let mut f = fs::File::create(&tmp).map_err(|e| {
+                MountBindingUnbindError::BackendUnreachable(format!(
+                    "create {}: {e}",
+                    tmp.display()
+                ))
+            })?;
+            f.write_all(bytes).map_err(|e| {
+                MountBindingUnbindError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
+            })?;
+            f.sync_all().map_err(|e| {
+                MountBindingUnbindError::BackendUnreachable(format!("fsync {}: {e}", tmp.display()))
+            })?;
+        }
         fs::rename(&tmp, target).map_err(|e| {
             let _ = fs::remove_file(&tmp);
             MountBindingUnbindError::BackendUnreachable(format!(
@@ -365,6 +397,11 @@ impl FsBackend {
                 target.display()
             ))
         })?;
+        // fsync the parent directory so the rename (the new dir entry) is
+        // durable too. Best-effort.
+        if let Ok(d) = fs::File::open(parent) {
+            let _ = d.sync_all();
+        }
         Ok(())
     }
 

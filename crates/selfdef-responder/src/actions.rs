@@ -74,6 +74,13 @@ fn pid_from_event(event: &Event) -> Option<i32> {
         .and_then(|a| a.process.as_ref())
         .map(|p| p.pid)
         .or_else(|| event.process.as_ref().map(|p| p.pid))
+        // `> 0` is load-bearing safety, not just extraction: `kill 0` signals the
+        // responder's WHOLE process group and `kill -1` signals EVERY process, so
+        // a crafted or buggy event must never reach a signalling action with a
+        // `0` or negative pid. PID 1 (init) IS still returned here — individual
+        // actions own the policy for it (most refuse it; apparmor propagates a
+        // "sacrosanct" pid), so that decision lives in the per-action guard, not
+        // in this shared extractor.
         .filter(|p| *p > 0)
 }
 
@@ -194,6 +201,15 @@ impl Action for KillPidAction {
             return Ok(ActionOutcome::skipped("no actor pid available"));
         };
 
+        // Never signal init. `pid_from_event` already blocks 0 and negatives (the
+        // process-group and `kill -1` mass-kill targets); pid 1 still reaches
+        // here, but SIGTERM-ing init is never a legitimate response (only ever an
+        // attempt to disrupt the host), and the sibling containment actions
+        // refuse pid 1 too — kill_pid, the most destructive of them, must as well.
+        if pid == 1 {
+            return Ok(ActionOutcome::skipped("refusing to signal pid 1 (init)"));
+        }
+
         if dry_run {
             return Ok(ActionOutcome::dry_run(format!("would SIGTERM pid {pid}")));
         }
@@ -201,6 +217,7 @@ impl Action for KillPidAction {
         let output = Command::new("kill")
             .arg("-TERM")
             .arg(pid.to_string())
+            .kill_on_drop(true)
             .output()
             .await?;
         if output.status.success() {
@@ -241,7 +258,11 @@ impl Action for LockdownEgressAction {
             )));
         }
         debug!(event_id = %event.id, script = %self.script.display(), "activating egress lockdown");
-        let output = Command::new(&self.script).arg("activate").output().await?;
+        let output = Command::new(&self.script)
+            .arg("activate")
+            .kill_on_drop(true)
+            .output()
+            .await?;
         if output.status.success() {
             Ok(ActionOutcome::ok("egress locked down"))
         } else {
@@ -289,7 +310,11 @@ impl Action for RevokeSessionAction {
             )));
         }
 
-        let output = Command::new(&self.script).arg(&user).output().await?;
+        let output = Command::new(&self.script)
+            .arg(&user)
+            .kill_on_drop(true)
+            .output()
+            .await?;
         if output.status.success() {
             Ok(ActionOutcome::ok(format!("revoked sessions for {user}")))
         } else {
@@ -391,7 +416,12 @@ impl Action for ForensicsBundleAction {
             ("uname", "uname", vec!["-a"]),
             ("ss-tnap", "ss", vec!["-tnap"]),
         ] {
-            match Command::new(prog).args(&args).output().await {
+            match Command::new(prog)
+                .args(&args)
+                .kill_on_drop(true)
+                .output()
+                .await
+            {
                 Ok(output) => {
                     let _ = tokio::fs::write(dir.join(dest), &output.stdout).await;
                     manifest.push(format!(
@@ -405,7 +435,12 @@ impl Action for ForensicsBundleAction {
         }
 
         // dmesg — kernel ring buffer tail.
-        match Command::new("dmesg").arg("--ctime").output().await {
+        match Command::new("dmesg")
+            .arg("--ctime")
+            .kill_on_drop(true)
+            .output()
+            .await
+        {
             Ok(output) => {
                 let tail = tail_lines(&output.stdout, DMESG_TAIL_LINES);
                 let _ = tokio::fs::write(dir.join("dmesg"), &tail).await;
@@ -417,6 +452,7 @@ impl Action for ForensicsBundleAction {
         // journalctl — recent system journal.
         match Command::new("journalctl")
             .args(["-n", &JOURNAL_TAIL_LINES.to_string(), "--no-pager"])
+            .kill_on_drop(true)
             .output()
             .await
         {
@@ -556,7 +592,11 @@ impl Action for VelociraptorEscalateAction {
             argc = rendered.len(),
             "escalating to Velociraptor"
         );
-        let output = Command::new(&self.binary).args(&rendered).output().await?;
+        let output = Command::new(&self.binary)
+            .args(&rendered)
+            .kill_on_drop(true)
+            .output()
+            .await?;
         if output.status.success() {
             Ok(ActionOutcome::ok(format!(
                 "velociraptor escalation dispatched ({} args)",
@@ -2024,6 +2064,26 @@ mod tests {
     #[tokio::test]
     async fn kill_pid_dry_run() {
         let action = KillPidAction::new();
+        let outcome = action
+            .execute(&finding_with_pid(99999), true)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+    }
+
+    #[tokio::test]
+    async fn kill_pid_refuses_init_and_invalid_pids() {
+        // A crafted/buggy event naming init (pid 1), pid 0 (process-group signal),
+        // or a negative pid (kill -1 mass-kill) must NEVER reach `kill` —
+        // pid_from_event refuses them, so kill_pid skips before doing anything.
+        // Run with dry_run = false to prove nothing is signalled.
+        let action = KillPidAction::new();
+        for pid in [1, 0, -1] {
+            let outcome = action.execute(&finding_with_pid(pid), false).await.unwrap();
+            assert_eq!(outcome.status, Status::Skipped, "pid {pid} must be refused");
+        }
+        // A real userspace pid (> 1) is accepted (verified via dry-run so no
+        // actual signal is sent in the test).
         let outcome = action
             .execute(&finding_with_pid(99999), true)
             .await

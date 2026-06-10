@@ -104,6 +104,56 @@ pub enum PathPolicyError {
     UnknownSubstrate(String),
 }
 
+/// Resolve `.`, `..`, and repeated `/` into a canonical path so that prefix
+/// comparison reflects where the path actually points — not how it is spelled.
+///
+/// Returns `None` when an absolute path uses `..` to climb above root: such a
+/// path cannot be safely placed under any prefix, so the caller fails closed.
+/// Relative `..` that cannot be resolved is preserved as leading `..` segments
+/// (matching ordinary path-resolution semantics).
+fn canonicalize(path: &str) -> Option<String> {
+    let absolute = path.starts_with('/');
+    let mut segs: Vec<&str> = Vec::new();
+    for s in path.split('/') {
+        match s {
+            "" | "." => continue,
+            ".." => {
+                if segs.last().is_some_and(|&t| t != "..") {
+                    segs.pop();
+                } else if absolute {
+                    return None; // escapes root
+                } else {
+                    segs.push("..");
+                }
+            }
+            other => segs.push(other),
+        }
+    }
+    let joined = segs.join("/");
+    Some(if absolute {
+        format!("/{joined}") // "/" when joined is empty
+    } else if joined.is_empty() {
+        ".".to_string()
+    } else {
+        joined
+    })
+}
+
+/// True iff the already-canonical `norm_path` lies at or under `raw_prefix`,
+/// respecting path-COMPONENT boundaries. The prefix is canonicalized the same
+/// way, so a grant for `/srv/data` matches `/srv/data` and `/srv/data/...` but
+/// NOT the sibling `/srv/data-secret` (a raw `starts_with` would wrongly admit
+/// it). A prefix that canonicalizes to `/` covers every absolute path.
+fn path_under_prefix(norm_path: &str, raw_prefix: &str) -> bool {
+    let Some(np) = canonicalize(raw_prefix) else {
+        return false;
+    };
+    if np == "/" {
+        return norm_path.starts_with('/');
+    }
+    norm_path == np || (norm_path.starts_with(&np) && norm_path[np.len()..].starts_with('/'))
+}
+
 impl PathAllowlistPolicy {
     /// New.
     pub fn new() -> Self {
@@ -164,8 +214,16 @@ impl PathAllowlistPolicy {
         let Some(s) = self.substrates.get(substrate_id) else {
             return PathVerdict::Unknown;
         };
+        // Canonicalize the requested path BEFORE prefix-matching. A raw
+        // `starts_with` is unsafe for an access-control allowlist: `/etc/../x`
+        // textually starts with `/etc/` yet resolves to `/x`, so the unfixed
+        // code authorized paths well outside the grant (a path-traversal
+        // bypass). An absolute path that climbs above root fails closed.
+        let Some(norm) = canonicalize(path) else {
+            return PathVerdict::DeniedNoMatch;
+        };
         for g in &s.grants {
-            if path.starts_with(&g.prefix) {
+            if path_under_prefix(&norm, &g.prefix) {
                 if g.mode.satisfies(requested) {
                     return PathVerdict::Allowed;
                 }
@@ -320,6 +378,71 @@ mod tests {
             p.grant("nope", "/a", Mode::Read).unwrap_err(),
             PathPolicyError::UnknownSubstrate(_)
         ));
+    }
+
+    #[test]
+    fn dotdot_traversal_cannot_escape_prefix() {
+        // SECURITY: a grant for `/etc/` must NOT authorize a path that only
+        // *textually* starts with `/etc/` but resolves elsewhere via `..`.
+        // The pre-fix code did a raw `starts_with`, so `/etc/../root/.ssh/...`
+        // (which resolves to `/root/.ssh/...`) was Allowed — a full path-
+        // traversal allowlist bypass.
+        let mut p = PathAllowlistPolicy::new();
+        p.register("box").unwrap();
+        p.grant("box", "/etc/", Mode::Read).unwrap();
+        assert_eq!(
+            p.decide("box", "/etc/../root/.ssh/id_rsa", Mode::Read),
+            PathVerdict::DeniedNoMatch
+        );
+        // An absolute path that climbs above root fails closed too.
+        assert_eq!(
+            p.decide("box", "/etc/../../x", Mode::Read),
+            PathVerdict::DeniedNoMatch
+        );
+        // But a `..` that stays inside the grant is still allowed (it really
+        // does resolve under `/etc/`).
+        assert_eq!(
+            p.decide("box", "/etc/foo/../bar", Mode::Read),
+            PathVerdict::Allowed
+        );
+        // Plain `.` and `//` are collapsed, not treated as a boundary escape.
+        assert_eq!(
+            p.decide("box", "/etc/./sub//file", Mode::Read),
+            PathVerdict::Allowed
+        );
+    }
+
+    #[test]
+    fn prefix_match_respects_component_boundary() {
+        // SECURITY: a grant for `/srv/data` must not leak into a sibling like
+        // `/srv/data-secret/` just because the latter shares a textual prefix.
+        let mut p = PathAllowlistPolicy::new();
+        p.register("box").unwrap();
+        p.grant("box", "/srv/data", Mode::Read).unwrap();
+        assert_eq!(
+            p.decide("box", "/srv/data-secret/key", Mode::Read),
+            PathVerdict::DeniedNoMatch
+        );
+        // The granted subtree (and the directory itself) still match.
+        assert_eq!(
+            p.decide("box", "/srv/data", Mode::Read),
+            PathVerdict::Allowed
+        );
+        assert_eq!(
+            p.decide("box", "/srv/data/file", Mode::Read),
+            PathVerdict::Allowed
+        );
+    }
+
+    #[test]
+    fn root_prefix_matches_any_absolute() {
+        let mut p = PathAllowlistPolicy::new();
+        p.register("box").unwrap();
+        p.grant("box", "/", Mode::Read).unwrap();
+        assert_eq!(
+            p.decide("box", "/anything/here", Mode::Read),
+            PathVerdict::Allowed
+        );
     }
 
     #[test]

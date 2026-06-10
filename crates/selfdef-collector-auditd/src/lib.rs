@@ -12,6 +12,7 @@ mod parser;
 
 pub use parser::{AuditRecord, parse_avc_decision, parse_execve_argv};
 
+use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -99,6 +100,15 @@ impl AuditdCollector {
             }
         }
 
+        // Rotation detection state (same doctrine as suricata/tetragon):
+        // audit.log is rotated by auditd ITSELF by default
+        // (max_log_file_action = ROTATE renames audit.log → audit.log.1 and
+        // creates a fresh file) or by logrotate. Tailing the renamed-away
+        // inode forever means the IPS silently loses ALL auditd visibility
+        // after the first rotation while reporting healthy.
+        let mut read_pos = file.stream_position().await.unwrap_or(0);
+        let mut open_inode = file.metadata().await.map(|m| m.ino()).unwrap_or(0);
+
         let mut reader = BufReader::new(file);
         let mut buf = String::new();
 
@@ -121,23 +131,75 @@ impl AuditdCollector {
                 return Ok(());
             }
 
-            buf.clear();
+            // `buf` is intentionally NOT cleared at the top of the loop:
+            // `read_line` appends, and we only clear after consuming a COMPLETE
+            // (newline-terminated) line. A partial line left by an in-flight /
+            // interrupted writer is retained in `buf` and completed on the next
+            // read instead of being parsed as a torn record — the same
+            // partial-line write-race fixed for the other file-tailing
+            // collectors via selfdef-collector-util::drain_complete_lines.
+            // auditd's read_line + SYSCALL/EXECVE pairing loop carries the
+            // partial in `buf` directly rather than through that helper.
             let n = tokio::select! {
                 r = reader.read_line(&mut buf) => r?,
                 () = shutdown.cancelled() => return Ok(()),
             };
 
             if n == 0 {
-                // EOF — wait for more data.
+                // EOF — but audit.log may have been rotated out from under us
+                // (rename+create by auditd's own ROTATE action, or
+                // copytruncate by logrotate). Check and reopen, else we tail a
+                // dead inode forever — the silent-blindness bug fixed for
+                // suricata/tetragon (this collector was missed in that sweep
+                // because its pairing loop doesn't share their tail helper).
+                if let Ok(md) = tokio::fs::metadata(&self.input_path).await {
+                    if selfdef_collector_util::should_reopen(
+                        read_pos,
+                        md.len(),
+                        open_inode,
+                        md.ino(),
+                    ) {
+                        if let Ok(f) = tokio::fs::File::open(&self.input_path).await {
+                            open_inode = f.metadata().await.map(|m| m.ino()).unwrap_or(open_inode);
+                            reader = BufReader::new(f); // rotated/truncated → fresh stream
+                            read_pos = 0;
+                            // A partial line from the dead file can never
+                            // complete; the fresh file starts at a record
+                            // boundary.
+                            buf.clear();
+                            // The pending SYSCALL's EXECVE companion is lost
+                            // with the old stream — flush it standalone, same
+                            // as the shutdown-path flush.
+                            if let Some((rec, line)) = pending_syscall.take() {
+                                let evt = self.build_event(&rec, &line);
+                                self.publisher.publish_lossy(evt);
+                            }
+                            info!(path = %self.input_path.display(), "audit.log rotated/truncated; reopened");
+                            continue;
+                        }
+                    }
+                }
+                // Plain EOF — wait for more data. Any partial line stays in `buf`.
+                tokio::time::sleep(POLL_INTERVAL).await;
+                continue;
+            }
+            read_pos += n as u64;
+
+            // `read_line` returns a newline-less result only at EOF, so a `buf`
+            // not ending in '\n' means we read a line mid-write. Retain it and
+            // wait for the rest rather than parsing a torn record.
+            if !buf.ends_with('\n') {
                 tokio::time::sleep(POLL_INTERVAL).await;
                 continue;
             }
 
-            let line = buf.trim_end();
-            if line.is_empty() {
+            // Blank line (just the newline) — clear and move on.
+            if buf.trim_end().is_empty() {
+                buf.clear();
                 continue;
             }
 
+            let line = buf.trim_end();
             match parser::parse_line(line) {
                 Some(record) => {
                     match record.kind.as_str() {
@@ -191,6 +253,9 @@ impl AuditdCollector {
                     debug!(line, "ignored unparseable audit line");
                 }
             }
+
+            // Consumed a complete line; reset for the next one.
+            buf.clear();
         }
     }
 
@@ -557,5 +622,137 @@ mod tests {
         assert_eq!(ReadFrom::parse("start"), ReadFrom::Start);
         assert_eq!(ReadFrom::parse("end"), ReadFrom::End);
         assert_eq!(ReadFrom::parse("garbage"), ReadFrom::End); // default
+    }
+
+    /// A line written in two chunks (a partial flush, then the rest) must NOT
+    /// be parsed as a torn record: the collector waits for the terminating
+    /// newline before emitting. The split is placed *after* the parseable
+    /// `type=`/`msg=audit(` prefix, so the old code (which parsed whatever
+    /// `read_line` returned) WOULD have emitted a malformed event from the
+    /// partial — this test fails against that behavior and passes against the
+    /// newline-gated read.
+    #[tokio::test]
+    async fn partial_line_is_not_emitted_until_newline_arrives() {
+        use std::io::Write as _;
+
+        use selfdef_bus::Bus;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.log");
+        let full = r#"type=USER_LOGIN msg=audit(1736944500.123:1234568): pid=4567 uid=0 acct="alice" exe="/usr/sbin/sshd" hostname=192.0.2.5 res=success"#;
+        // Cut right before `res=` so the first chunk still parses (type + msg +
+        // serial present) but the record is incomplete.
+        let split = full.find("res=").unwrap();
+        std::fs::write(&path, &full[..split]).unwrap();
+
+        let bus = Bus::new(64);
+        let mut sub = bus.subscribe();
+        let collector = AuditdCollector::new(
+            path.clone(),
+            ReadFrom::Start,
+            bus.publisher(),
+            "test-host".into(),
+        );
+        let shutdown = CancellationToken::new();
+        let sd = shutdown.clone();
+        let task = tokio::spawn(async move { collector.run(sd).await });
+
+        // The partial (newline-less) line must produce no event.
+        let early = tokio::time::timeout(Duration::from_millis(600), sub.recv()).await;
+        assert!(
+            early.is_err(),
+            "a partial line (no terminating newline) must not be emitted, got {early:?}"
+        );
+
+        // Complete the line, then the terminating newline.
+        {
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap();
+            f.write_all(&full.as_bytes()[split..]).unwrap();
+            f.write_all(b"\n").unwrap();
+            f.flush().unwrap();
+        }
+
+        // Now exactly one event must arrive.
+        let got = tokio::time::timeout(Duration::from_secs(3), sub.recv()).await;
+        assert!(
+            matches!(got, Ok(Ok(_))),
+            "the completed line must be emitted once its newline arrives, got {got:?}"
+        );
+
+        shutdown.cancel();
+        let _ = task.await;
+    }
+
+    /// audit.log is rotated by auditd ITSELF by default (max_log_file_action
+    /// = ROTATE → rename audit.log aside + create fresh) or by logrotate.
+    /// The collector must detect the new inode at EOF and reopen — otherwise
+    /// it tails the renamed-away file forever and the IPS silently loses all
+    /// auditd visibility after the first rotation (the suricata/tetragon
+    /// blindness bug; this collector was missed in that sweep).
+    #[tokio::test]
+    async fn reopens_after_log_rotation() {
+        use std::io::Write as _;
+
+        use selfdef_bus::Bus;
+
+        let login = |acct: &str| {
+            format!(
+                r#"type=USER_LOGIN msg=audit(1736944500.123:1234568): pid=4567 uid=0 acct="{acct}" exe="/usr/sbin/sshd" hostname=192.0.2.5 res=success"#
+            )
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.log");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(f, "{}", login("before-rotation")).unwrap();
+        }
+
+        let bus = Bus::new(64);
+        let mut sub = bus.subscribe();
+        let collector = AuditdCollector::new(
+            path.clone(),
+            ReadFrom::Start,
+            bus.publisher(),
+            "test-host".into(),
+        );
+        let shutdown = CancellationToken::new();
+        let sd = shutdown.clone();
+        let task = tokio::spawn(async move { collector.run(sd).await });
+
+        // Pre-rotation event arrives.
+        let e1 = tokio::time::timeout(Duration::from_secs(3), sub.recv())
+            .await
+            .expect("first event timed out")
+            .expect("recv error");
+        assert!(format!("{e1:?}").contains("before-rotation"));
+
+        // Rotate: rename the live file aside and create a NEW file at the
+        // same path with a fresh record (auditd's ROTATE style).
+        std::fs::rename(&path, dir.path().join("audit.log.1")).unwrap();
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(f, "{}", login("after-rotation")).unwrap();
+        }
+
+        // The post-rotation event must arrive — proving the collector
+        // detected the new inode and reopened.
+        let mut got_after = false;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while !got_after && tokio::time::Instant::now() < deadline {
+            if let Ok(Ok(ev)) = tokio::time::timeout(Duration::from_secs(1), sub.recv()).await {
+                if format!("{ev:?}").contains("after-rotation") {
+                    got_after = true;
+                }
+            }
+        }
+        shutdown.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), task).await;
+        assert!(
+            got_after,
+            "collector did not pick up events from the rotated-in audit.log"
+        );
     }
 }

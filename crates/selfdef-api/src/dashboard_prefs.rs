@@ -151,18 +151,50 @@ fn atomic_write(path: &Path, body: &str) -> Result<(), (StatusCode, String)> {
             })?;
         }
     }
-    std::fs::write(&tmp, body).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("write {}: {e}", tmp.display()),
-        )
-    })?;
+    // fsync the tempfile contents before the rename so a power loss right
+    // after a prefs write cannot lose the mutation, resurrect a stale file, or
+    // leave a zero-length prefs the next read parses back to defaults. The
+    // rename alone gives crash consistency (no torn read) but not durability.
+    // fsync the parent directory afterward so the rename's new directory entry
+    // is durable too. Directory fsync is best-effort. Matches the selfdef-cli
+    // init / guardian fsync convention.
+    {
+        use std::io::Write as _;
+        let mut f = std::fs::File::create(&tmp).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("create {}: {e}", tmp.display()),
+            )
+        })?;
+        f.write_all(body.as_bytes()).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("write {}: {e}", tmp.display()),
+            )
+        })?;
+        f.sync_all().map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("fsync {}: {e}", tmp.display()),
+            )
+        })?;
+    }
     std::fs::rename(&tmp, path).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("rename {} → {}: {e}", tmp.display(), path.display()),
         )
     })?;
+    if let Some(parent) = path.parent() {
+        let parent = if parent.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            parent
+        };
+        if let Ok(d) = std::fs::File::open(parent) {
+            let _ = d.sync_all();
+        }
+    }
     Ok(())
 }
 
@@ -286,6 +318,7 @@ fn validate_custom_preset(cp: &CustomPreset) -> Result<(), String> {
 ///   builtin, duplicate name within request, bad refresh_rate / tab)
 /// - 200 OK + the new persisted body on success
 pub(crate) async fn put(
+    _cap: crate::control::RequireControl,
     ExtractJson(req): ExtractJson<DashboardPrefsPut>,
 ) -> Result<Json<DashboardPrefs>, (StatusCode, String)> {
     if req.schema_version != SCHEMA_VERSION {

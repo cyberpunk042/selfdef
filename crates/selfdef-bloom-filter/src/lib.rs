@@ -70,6 +70,13 @@ impl BloomFilter {
 
     /// Insert.
     pub fn insert(&mut self, key: &[u8]) {
+        // positions() computes `% self.bit_count`; a serde-bypassed zero
+        // bit_count (new() derives it from a non-zero byte_size, but
+        // deserialization can set it directly) would panic that modulo in
+        // every build. A zero-width filter can store nothing — no-op.
+        if self.bit_count == 0 {
+            return;
+        }
         let (a, b) = self.positions(key);
         self.set_bit(a);
         self.set_bit(b);
@@ -78,6 +85,11 @@ impl BloomFilter {
 
     /// Contains (may be false-positive).
     pub fn contains(&self, key: &[u8]) -> bool {
+        // Same serde-bypass guard as insert(): a zero-width filter holds
+        // nothing, so report absent rather than panic in positions()'s modulo.
+        if self.bit_count == 0 {
+            return false;
+        }
         let (a, b) = self.positions(key);
         self.get_bit(a) && self.get_bit(b)
     }
@@ -128,6 +140,21 @@ impl BloomFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_bit_count_serde_bypass_does_not_panic() {
+        // new() derives a non-zero bit_count, but serde can set it to 0.
+        // positions()'s `% self.bit_count` would panic in every build. Guard
+        // makes insert a no-op and contains return false instead of crashing.
+        let mut b = BloomFilter {
+            schema_version: SCHEMA_VERSION.into(),
+            bits: Vec::new(),
+            count: 0,
+            bit_count: 0,
+        };
+        b.insert(b"k"); // must not panic
+        assert!(!b.contains(b"k")); // must not panic
+    }
 
     #[test]
     fn insert_then_contains() {

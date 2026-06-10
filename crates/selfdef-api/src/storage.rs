@@ -223,8 +223,40 @@ pub(crate) fn probe() -> StorageResponse {
     }
 }
 
+/// Hard ceiling on what one `/v1/storage` request waits for the SYNC
+/// probe — `df` can block INDEFINITELY on a hung network mount (NFS hard
+/// mount with a dead server is the classic). The probe runs on the
+/// blocking pool so it can't starve async workers; on expiry the request
+/// gets an honest `unknown` (reason logged) instead of hanging.
+const PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+
+async fn show_bounded(
+    deadline: std::time::Duration,
+    probe_fn: fn() -> StorageResponse,
+) -> Json<StorageResponse> {
+    let degraded = || StorageResponse {
+        worst: "unknown",
+        mounts: Vec::new(),
+        log_dirs: Vec::new(),
+    };
+    match tokio::time::timeout(deadline, tokio::task::spawn_blocking(probe_fn)).await {
+        Ok(Ok(resp)) => Json(resp),
+        Ok(Err(join_err)) => {
+            tracing::warn!(error = %join_err, "storage probe task failed; reporting unknown");
+            Json(degraded())
+        }
+        Err(_) => {
+            tracing::warn!(
+                deadline_secs = deadline.as_secs(),
+                "storage probe timed out (hung mount?); reporting unknown"
+            );
+            Json(degraded())
+        }
+    }
+}
+
 pub(crate) async fn show() -> Json<StorageResponse> {
-    Json(probe())
+    show_bounded(PROBE_DEADLINE, probe).await
 }
 
 #[cfg(test)]
@@ -319,5 +351,25 @@ mod tests {
         assert_eq!(bytes, 5 + 8 + 6);
         assert_eq!(files, 3);
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+    /// A zero deadline deterministically takes the timeout branch: the
+    /// request must get an honest degraded `unknown`, never hang on the probe.
+    #[tokio::test]
+    async fn show_bounded_returns_degraded_unknown_on_deadline() {
+        // Injected probe that wedges far past the deadline — deterministic
+        // stand-in for `df` hung on a dead NFS hard mount.
+        fn stalled() -> StorageResponse {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            probe()
+        }
+        let start = std::time::Instant::now();
+        let axum::Json(resp) = show_bounded(std::time::Duration::from_millis(50), stalled).await;
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(4),
+            "must not wait the probe out"
+        );
+        assert_eq!(resp.worst, "unknown");
+        assert!(resp.mounts.is_empty());
+        assert!(resp.log_dirs.is_empty());
     }
 }

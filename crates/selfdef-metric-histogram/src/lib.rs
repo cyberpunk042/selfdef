@@ -48,6 +48,14 @@ pub enum HistogramError {
     /// q out of range.
     #[error("q {0} > 100")]
     QuantileOver100(u16),
+    /// counts length doesn't match bounds+1 (corrupt/serde-bypassed state).
+    #[error("counts len {counts} must equal bucket_upper_bounds len + 1 ({expected})")]
+    BadCountsLen {
+        /// Actual counts length.
+        counts: usize,
+        /// Expected (bounds + 1).
+        expected: usize,
+    },
 }
 
 impl MetricHistogram {
@@ -78,9 +86,17 @@ impl MetricHistogram {
             .iter()
             .position(|b| *b >= value)
             .unwrap_or(self.bucket_upper_bounds.len()); // overflow
-        self.counts[idx] = self.counts[idx].saturating_add(1);
-        self.total = self.total.saturating_add(1);
-        self.sum = self.sum.saturating_add(value as u128);
+        // new() builds counts with len == bounds.len() + 1, so idx is always a
+        // valid index — but serde deserialization can desync the two vecs so
+        // idx >= counts.len(). A direct `self.counts[idx]` would then panic
+        // (OOB, every build). get_mut drops the observation on a corrupt
+        // histogram (fail-safe) and keeps total/sum consistent with what was
+        // actually bucketed. In a well-formed histogram the index always hits.
+        if let Some(c) = self.counts.get_mut(idx) {
+            *c = c.saturating_add(1);
+            self.total = self.total.saturating_add(1);
+            self.sum = self.sum.saturating_add(value as u128);
+        }
     }
 
     /// Quantile q (0..=100). Returns the upper-bound of the chosen bucket.
@@ -129,6 +145,13 @@ impl MetricHistogram {
                 return Err(HistogramError::BadBuckets);
             }
         }
+        let expected = self.bucket_upper_bounds.len() + 1;
+        if self.counts.len() != expected {
+            return Err(HistogramError::BadCountsLen {
+                counts: self.counts.len(),
+                expected,
+            });
+        }
         Ok(())
     }
 }
@@ -136,6 +159,30 @@ impl MetricHistogram {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desynced_counts_serde_bypass_does_not_panic() {
+        // new() builds counts with len == bounds.len()+1; serde can desync them.
+        // observe() computed idx up to bounds.len() then did counts[idx] — a
+        // serde-bypassed too-short counts panicked (OOB). get_mut drops the
+        // observation (fail-safe); validate() rejects the desync.
+        let mut h = MetricHistogram {
+            schema_version: SCHEMA_VERSION.into(),
+            bucket_upper_bounds: vec![10, 20, 30],
+            counts: Vec::new(), // desynced: should be len 4
+            total: 0,
+            sum: 0,
+        };
+        h.observe(25); // must not panic
+        assert_eq!(h.total, 0); // dropped — nothing bucketed
+        assert!(matches!(
+            h.validate().unwrap_err(),
+            HistogramError::BadCountsLen {
+                counts: 0,
+                expected: 4
+            }
+        ));
+    }
 
     #[test]
     fn empty_buckets_rejected() {

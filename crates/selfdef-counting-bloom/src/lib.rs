@@ -75,6 +75,12 @@ impl CountingBloom {
 
     /// Add (increment each of k positions, saturating at 255).
     pub fn add(&mut self, key: &str) {
+        // pos() computes `% self.m`; a serde-bypassed zero m (new()/validate()
+        // reject it) would panic that modulo in every build. A zero-cell
+        // filter can store nothing — no-op.
+        if self.m == 0 || self.counters.is_empty() {
+            return;
+        }
         for i in 0..self.k {
             let p = self.pos(i, key);
             self.counters[p] = self.counters[p].saturating_add(1);
@@ -84,6 +90,11 @@ impl CountingBloom {
     /// Remove (decrement each of k positions; saturates at 0). Note
     /// that cells which previously saturated at 255 lose accuracy.
     pub fn remove(&mut self, key: &str) {
+        // Same serde-bypass guard as add(): nothing to remove from a
+        // zero-cell filter, and pos()'s modulo would otherwise panic.
+        if self.m == 0 || self.counters.is_empty() {
+            return;
+        }
         for i in 0..self.k {
             let p = self.pos(i, key);
             // Don't decrement saturated cells (they're already lossy).
@@ -95,6 +106,11 @@ impl CountingBloom {
 
     /// Contains.
     pub fn contains(&self, key: &str) -> bool {
+        // Same serde-bypass guard as add(): a zero-cell filter holds nothing,
+        // so report absent rather than panic in pos()'s modulo.
+        if self.m == 0 || self.counters.is_empty() {
+            return false;
+        }
         for i in 0..self.k {
             let p = self.pos(i, key);
             if self.counters[p] == 0 {
@@ -129,6 +145,22 @@ impl CountingBloom {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_m_serde_bypass_does_not_panic() {
+        // new()/validate() reject m==0, but serde can construct it. pos()'s
+        // `% self.m` would panic in every build. Guard makes add/remove no-ops
+        // and contains return false (empty filter) instead of crashing.
+        let mut c = CountingBloom {
+            schema_version: SCHEMA_VERSION.into(),
+            m: 0,
+            k: 3,
+            counters: Vec::new(),
+        };
+        c.add("k"); // must not panic
+        assert!(!c.contains("k")); // must not panic
+        c.remove("k"); // must not panic
+    }
 
     #[test]
     fn add_then_contains() {

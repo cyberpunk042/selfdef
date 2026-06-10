@@ -127,8 +127,24 @@ impl GrantRegistry {
         Ok(Self { snapshot })
     }
 
-    /// Atomically persist the registry (sibling tempfile + rename).
+    /// Atomically and durably persist the registry (sibling tempfile +
+    /// fsync + rename + parent-dir fsync).
+    ///
+    /// The rename gives crash *consistency* (a reader never sees a torn
+    /// write — it sees either the old file or the complete new one). The
+    /// fsyncs give crash *durability*: without them, `save` can return Ok
+    /// while the bytes still sit in the page cache, so a power loss right
+    /// after issuing/revoking a grant could lose that mutation or — worse —
+    /// resurrect a stale file or leave a zero-length `grants.json`. This is
+    /// daemon-resident security state (the live set of operator-issued
+    /// grants that sovereign-os renders), so the write must survive a crash,
+    /// not just avoid tearing. We fsync the tempfile's *contents* before the
+    /// rename, then fsync the parent *directory* so the rename's new
+    /// directory entry is itself durable. Matches the fsync convention in
+    /// `selfdef-cli` init / `selfdef-guardian`.
     pub fn save(&self, path: &Path) -> Result<(), RegistryError> {
+        use std::io::Write as _;
+
         let io_err = |e: std::io::Error| RegistryError::Io {
             path: path.display().to_string(),
             source: e,
@@ -144,8 +160,26 @@ impl GrantRegistry {
                 source: e,
             })?;
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, body).map_err(io_err)?;
+        {
+            let mut f = std::fs::File::create(&tmp).map_err(io_err)?;
+            f.write_all(body.as_bytes()).map_err(io_err)?;
+            // fsync the contents to disk before the rename publishes them.
+            f.sync_all().map_err(io_err)?;
+        }
         std::fs::rename(&tmp, path).map_err(io_err)?;
+        // fsync the directory so the rename (the new dir entry) is itself
+        // durable across a crash. Best-effort: a filesystem that refuses to
+        // open or fsync a directory must not fail an otherwise-good save.
+        if let Some(dir) = path.parent() {
+            let dir = if dir.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                dir
+            };
+            if let Ok(d) = std::fs::File::open(dir) {
+                let _ = d.sync_all();
+            }
+        }
         Ok(())
     }
 
@@ -190,11 +224,18 @@ impl GrantRegistry {
         let mut changed = 0usize;
         for g in &mut self.snapshot.grants {
             if matches!(g.state, GrantState::Active | GrantState::Pending) {
-                if let Ok(exp) = OffsetDateTime::parse(&g.expires_at, &Rfc3339) {
-                    if exp <= now {
-                        g.state = GrantState::Expired;
-                        changed += 1;
-                    }
+                let expire = match OffsetDateTime::parse(&g.expires_at, &Rfc3339) {
+                    Ok(exp) => exp <= now,
+                    // Unparseable expiry: `issue()` always writes RFC3339, so a
+                    // malformed value means the persisted store was corrupted or
+                    // tampered. Fail safe — expire a grant whose validity window
+                    // we cannot read, rather than leaving a grant of unknown
+                    // expiry presented as Active (fail-open).
+                    Err(_) => true,
+                };
+                if expire {
+                    g.state = GrantState::Expired;
+                    changed += 1;
                 }
             }
         }
@@ -350,6 +391,20 @@ mod tests {
     }
 
     #[test]
+    fn expire_due_fails_safe_on_unparseable_expiry() {
+        let mut r = GrantRegistry::new();
+        r.issue(&req(GrantKind::Sandbox, 3600), "gr-1", "t1", now())
+            .unwrap();
+        r.activate("gr-1", now()).unwrap();
+        // Tamper/corrupt the persisted expiry to a non-RFC3339 value.
+        r.snapshot.grants[0].expires_at = "not-a-timestamp".into();
+        // `now` is well within the original 3600s TTL, yet a grant whose expiry
+        // can't be parsed must be expired (fail-safe), never left Active.
+        assert_eq!(r.expire_due(now()).unwrap(), 1);
+        assert_eq!(r.grants()[0].state, GrantState::Expired);
+    }
+
+    #[test]
     fn save_load_round_trip() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("grants.json");
@@ -364,6 +419,35 @@ mod tests {
         assert_eq!(back.grants().len(), 1);
         assert_eq!(back.grants()[0].state, GrantState::Active);
         back.snapshot().validate_schema().unwrap();
+    }
+
+    #[test]
+    fn save_overwrites_existing_and_creates_missing_dirs() {
+        // Durable save must still overwrite a pre-existing, longer file
+        // (File::create truncates) and create absent parent dirs. A failure
+        // here would mean the fsync rework silently dropped a write path.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/deeper/grants.json");
+
+        let mut r = GrantRegistry::new();
+        r.issue(&req(GrantKind::Filesystem, 3600), "gr-1", "t1", now())
+            .unwrap();
+        r.issue(&req(GrantKind::Sandbox, 3600), "gr-2", "t2", now())
+            .unwrap();
+        r.save(&path).unwrap();
+        assert_eq!(GrantRegistry::load(&path).unwrap().grants().len(), 2);
+
+        // Re-save a SHORTER snapshot over the longer file; no stale tail.
+        let mut r2 = GrantRegistry::new();
+        r2.issue(&req(GrantKind::Filesystem, 3600), "gr-9", "t9", now())
+            .unwrap();
+        r2.save(&path).unwrap();
+
+        let back = GrantRegistry::load(&path).unwrap();
+        assert_eq!(back.grants().len(), 1);
+        assert_eq!(back.grants()[0].grant_id, "gr-9");
+        back.snapshot().validate_schema().unwrap();
+        assert!(!path.with_extension("json.tmp").exists(), "tmp cleaned up");
     }
 
     #[test]

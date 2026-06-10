@@ -5,7 +5,7 @@
 //! `Outcome::Allow` / `Outcome::Deny` / `Outcome::Ask`.
 //!
 //! Pattern matching is literal (no regex): suffix patterns start with
-//! ".", CIDR uses naive prefix match on the leading octet count.
+//! ".", CIDR uses a precise IPv4 prefix bitmask match.
 //!
 //! Standing rule: We do not minimize anything.
 
@@ -27,7 +27,7 @@ pub enum PatternKind {
     ExactHost,
     /// Domain suffix (".example.com" matches "a.example.com" and "x.y.example.com").
     DomainSuffix,
-    /// CIDR (naive: "10.0.0.0/8" matches any 10.x.x.x).
+    /// CIDR (precise bitmask: "10.0.0.0/8" matches 10.x.x.x, "10.0.0.0/20" only 10.0.0-15.x).
     Cidr,
 }
 
@@ -85,6 +85,25 @@ pub enum EgressError {
     EmptyDestination,
 }
 
+/// Parse a dotted IPv4 literal into a u32, rejecting non-4-octet or
+/// out-of-range (>255) inputs. Returns None for hostnames / malformed input
+/// (so CIDR entries only ever match genuine IPv4 destinations).
+fn parse_ipv4(s: &str) -> Option<u32> {
+    let parts: Vec<&str> = s.split('.').collect();
+    if parts.len() != 4 {
+        return None;
+    }
+    let mut out: u32 = 0;
+    for p in parts {
+        let n: u32 = p.parse().ok()?;
+        if n > 255 {
+            return None;
+        }
+        out = (out << 8) | n;
+    }
+    Some(out)
+}
+
 fn matches(entry: &AllowlistEntry, dest: &str) -> bool {
     match entry.kind {
         PatternKind::ExactHost => entry.pattern == dest,
@@ -98,23 +117,26 @@ fn matches(entry: &AllowlistEntry, dest: &str) -> bool {
             }
         }
         PatternKind::Cidr => {
+            // Precise IPv4 prefix match (bitmask), NOT octet-count truncation.
+            // The old `bits / 8` octet match rounded a non-aligned prefix DOWN
+            // to the octet boundary, so e.g. `10.0.0.0/20` matched on only the
+            // first two octets — allowing the whole `10.0.0.0/16`, egress the
+            // operator never named (a fail-OPEN over-allow in the egress gate).
+            // Match exactly the prefix the operator wrote.
             let Some((prefix, bits_s)) = entry.pattern.split_once('/') else {
                 return false;
             };
             let Ok(bits) = bits_s.parse::<u32>() else {
                 return false;
             };
-            // Octets matched: bits / 8 (truncate).
-            let octets_needed = (bits / 8) as usize;
-            let prefix_parts: Vec<&str> = prefix.split('.').collect();
-            let dest_parts: Vec<&str> = dest.split('.').collect();
-            if prefix_parts.len() != 4 || dest_parts.len() != 4 {
+            if bits > 32 {
                 return false;
             }
-            if octets_needed > 4 {
+            let (Some(prefix_u32), Some(dest_u32)) = (parse_ipv4(prefix), parse_ipv4(dest)) else {
                 return false;
-            }
-            prefix_parts[..octets_needed] == dest_parts[..octets_needed]
+            };
+            let mask: u32 = if bits == 0 { 0 } else { (!0u32) << (32 - bits) };
+            (prefix_u32 & mask) == (dest_u32 & mask)
         }
     }
 }
@@ -261,6 +283,30 @@ mod tests {
         a.add(e(PatternKind::Cidr, "192.168.0.0/16")).unwrap();
         assert_eq!(a.decide(&req("192.168.1.1")).unwrap(), Outcome::Allow);
         assert_eq!(a.decide(&req("192.169.0.0")).unwrap(), Outcome::Deny);
+    }
+
+    #[test]
+    fn cidr_non_octet_aligned_prefix_is_precise() {
+        // BYPASS regression: the old `bits / 8` octet match rounded /20 down to
+        // two octets, so `10.0.0.0/20` allowed the whole `10.0.0.0/16`. A
+        // precise bitmask must allow only the /20 (10.0.0.0–10.0.15.255) and
+        // DENY an in-/16-but-out-of-/20 address.
+        let mut a = EgressAllowlist::new();
+        a.add(e(PatternKind::Cidr, "10.0.0.0/20")).unwrap();
+        assert_eq!(a.decide(&req("10.0.5.5")).unwrap(), Outcome::Allow); // in /20
+        assert_eq!(
+            a.decide(&req("10.0.200.5")).unwrap(),
+            Outcome::Deny,
+            "in /16 but outside /20 must be denied"
+        );
+        // A /28 is far stricter than any octet boundary.
+        let mut b = EgressAllowlist::new();
+        b.add(e(PatternKind::Cidr, "192.168.1.0/28")).unwrap();
+        assert_eq!(b.decide(&req("192.168.1.5")).unwrap(), Outcome::Allow); // in /28
+        assert_eq!(b.decide(&req("192.168.1.20")).unwrap(), Outcome::Deny); // outside /28
+        // Out-of-range octets and non-IP destinations don't match a CIDR.
+        assert_eq!(a.decide(&req("10.0.0.999")).unwrap(), Outcome::Deny);
+        assert_eq!(a.decide(&req("example.com")).unwrap(), Outcome::Deny);
     }
 
     #[test]

@@ -176,6 +176,18 @@ run_layer "L2: python suites (guardian / adversary / replay / ux-harness)" \
 # drift accumulated unseen). Run it via pytest; self-skip (not fail) when
 # pytest isn't installed so the harness still works on a bats-only box.
 if python3 -c 'import pytest' 2>/dev/null; then
+    # Operator visibility for the cross-repo lockstep suites
+    # (tests/observability/*_partner_repo_lockstep.py): they read
+    # $SOVEREIGN_OS_REPO_ROOT and SKIP silently when it's unset or points at a
+    # missing tree. Report ENFORCED-vs-SKIP up front so a failed/absent partner
+    # checkout can't read as a pass — the "false confidence" trap (sovereign-os
+    # test.yml documents the same). Tolerant: a SKIP is no regression.
+    _lockstep_n="$(grep -rl SOVEREIGN_OS_REPO_ROOT tests/observability --include='*.py' 2>/dev/null | wc -l | tr -d ' ')"
+    if [ -n "${SOVEREIGN_OS_REPO_ROOT:-}" ] && [ -d "${SOVEREIGN_OS_REPO_ROOT}/crates" ]; then
+        echo "  cross-repo lockstep: partner present → ${_lockstep_n} suite file(s) ENFORCED against ${SOVEREIGN_OS_REPO_ROOT}"
+    else
+        echo "  cross-repo lockstep: partner unavailable (SOVEREIGN_OS_REPO_ROOT unset/missing) → ${_lockstep_n} suite file(s) will SKIP (no regression)"
+    fi
     # Every pytest-style test dir/file NOT covered by the unittest layer
     # above. Keep this in sync with tests/observability/
     # test_no_orphaned_pytest_tests.py, which fails if a new pytest-style

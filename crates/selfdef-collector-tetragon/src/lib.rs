@@ -16,6 +16,7 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -83,8 +84,12 @@ impl TetragonCollector {
         if self.read_from == ReadFrom::End {
             file.seek(std::io::SeekFrom::End(0)).await?;
         }
+        let mut read_pos = file.stream_position().await.unwrap_or(0);
+        let mut open_inode = file.metadata().await.map(|m| m.ino()).unwrap_or(0);
         let mut reader = BufReader::new(file);
         let mut buf = String::new();
+        // Buffers a partial line so a write racing the reader can't split+drop.
+        let mut pending = String::new();
 
         loop {
             if shutdown.is_cancelled() {
@@ -96,10 +101,36 @@ impl TetragonCollector {
                 () = shutdown.cancelled() => return Ok(()),
             };
             if n == 0 {
+                // EOF — but the Tetragon export file is rotated by logrotate
+                // (rename+create, or copytruncate). Without detecting that we'd
+                // tail a dead handle forever and silently go blind to every event
+                // after a rotation. Reopen the fresh file from its start if the
+                // path was rotated/truncated out from under us.
+                if let Ok(md) = tokio::fs::metadata(&self.input_path).await {
+                    if selfdef_collector_util::should_reopen(
+                        read_pos,
+                        md.len(),
+                        open_inode,
+                        md.ino(),
+                    ) {
+                        if let Ok(f) = tokio::fs::File::open(&self.input_path).await {
+                            open_inode = f.metadata().await.map(|m| m.ino()).unwrap_or(open_inode);
+                            reader = BufReader::new(f); // rotated/truncated → fresh stream
+                            read_pos = 0;
+                            pending.clear();
+                            info!(path = %self.input_path.display(), "tetragon export rotated/truncated; reopened");
+                            continue;
+                        }
+                    }
+                }
                 tokio::time::sleep(POLL_INTERVAL).await;
                 continue;
             }
-            self.process_line(buf.trim_end());
+            read_pos += n as u64;
+            pending.push_str(&buf);
+            for line in selfdef_collector_util::drain_complete_lines(&mut pending) {
+                self.process_line(&line);
+            }
         }
     }
 
@@ -411,5 +442,62 @@ mod tests {
         );
         // The original Tetragon payload is preserved alongside.
         assert!(raw.get("process_kprobe").is_some());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn reopens_after_log_rotation() {
+        use std::io::Write;
+        let exec = |pid: u32| {
+            format!(
+                r#"{{"process_exec":{{"process":{{"pid":{pid},"binary":"/usr/bin/ls","arguments":"-la","uid":1000}}}}}}"#
+            )
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tetragon.log");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(f, "{}", exec(1111)).unwrap();
+        }
+
+        let bus = Bus::new(64);
+        let mut sub = bus.subscribe();
+        let coll =
+            TetragonCollector::new(path.clone(), ReadFrom::Start, bus.publisher(), "h".into());
+        let token = CancellationToken::new();
+        let run_token = token.clone();
+        let handle = tokio::spawn(async move { coll.run(run_token).await });
+
+        // pre-rotation event arrives (pid 1111).
+        let e1 = tokio::time::timeout(Duration::from_secs(3), sub.recv())
+            .await
+            .expect("first event timed out")
+            .expect("recv error");
+        assert_eq!(e1.process.expect("process attached").pid, 1111);
+
+        // logrotate: rename the live file aside, create a NEW file at the same
+        // path, write a fresh event (pid 2222).
+        std::fs::rename(&path, dir.path().join("tetragon.log.1")).unwrap();
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(f, "{}", exec(2222)).unwrap();
+        }
+
+        // The pid-2222 event must arrive — proving the collector reopened the
+        // rotated-in file rather than tailing the renamed-away inode.
+        let mut got_after = false;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while !got_after && tokio::time::Instant::now() < deadline {
+            if let Ok(Ok(ev)) = tokio::time::timeout(Duration::from_secs(1), sub.recv()).await {
+                if ev.process.map(|p| p.pid) == Some(2222) {
+                    got_after = true;
+                }
+            }
+        }
+        token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), handle).await;
+        assert!(
+            got_after,
+            "collector did not pick up events from the rotated-in file"
+        );
     }
 }

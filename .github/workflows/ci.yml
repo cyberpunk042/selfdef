@@ -156,6 +156,14 @@ jobs:
           # Activates L1-cross-repo-alert-runbook-binding.sh against the real
           # sovereign-os tree (skips cleanly if the checkout above failed).
           SOVEREIGN_OS_REPO: ${{ github.workspace }}/_sovereign-os
+          # Activates the ~11 tests/observability/*_partner_repo_lockstep.py
+          # suites, which read SOVEREIGN_OS_REPO_ROOT (a different name from the
+          # SOVEREIGN_OS_REPO the shell gate above uses) and otherwise skip
+          # SILENTLY — so the cross-repo dashboard/alert/systemd/catalog
+          # lockstep checks were never actually running in CI (a declaration
+          # without a verification gate). Point it at the same checkout; the
+          # suites skip per-file if a given partner file is absent.
+          SOVEREIGN_OS_REPO_ROOT: ${{ github.workspace }}/_sovereign-os
         run: bash scripts/test/coherence.sh
 
   coherence-root:

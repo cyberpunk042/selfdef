@@ -5,7 +5,9 @@
 //! - `GitHubToken`:  matches `ghp_` / `gho_` / `ghs_` + 36 base62 chars.
 //! - `GenericApiKey`: matches `(apikey|api_key|token)=` followed by 20+
 //!   non-space chars.
-//! - `GcpServiceAccount`: detects substring `"type": "service_account"`.
+//! - `GcpServiceAccount`: detects the JSON pair `"type":"service_account"`,
+//!   tolerant of the insignificant whitespace JSON allows around the colon
+//!   (so both the compact and space-after-colon forms match).
 //!
 //! Standing rule: We do not minimize anything.
 
@@ -151,15 +153,41 @@ fn scan_generic(input: &str) -> Vec<Hit> {
 }
 
 fn scan_gcp(input: &str) -> Vec<Hit> {
+    // Detect the JSON pair `"type" : "service_account"`, tolerating the
+    // insignificant whitespace JSON permits around the colon. A fixed-string
+    // needle (`"type": "service_account"`, one space) missed the COMPACT form
+    // `"type":"service_account"` that serde and most serializers emit by
+    // default — so a real service-account key serialized compactly evaded the
+    // egress gate. Scan every occurrence, not just the first.
     let mut hits = Vec::new();
-    let needle = "\"type\": \"service_account\"";
-    if let Some(pos) = input.find(needle) {
-        hits.push(Hit {
-            class: DetectorClass::GcpServiceAccount,
-            offset: pos,
-            length: needle.len(),
-            score: 90,
-        });
+    let bytes = input.as_bytes();
+    let key = b"\"type\"";
+    let val = b"\"service_account\"";
+    let mut i = 0;
+    while i + key.len() <= bytes.len() {
+        if &bytes[i..i + key.len()] == key {
+            let mut j = i + key.len();
+            while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                j += 1;
+            }
+            if j < bytes.len() && bytes[j] == b':' {
+                j += 1;
+                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                if j + val.len() <= bytes.len() && &bytes[j..j + val.len()] == val {
+                    hits.push(Hit {
+                        class: DetectorClass::GcpServiceAccount,
+                        offset: i,
+                        length: (j + val.len()) - i,
+                        score: 90,
+                    });
+                    i = j + val.len();
+                    continue;
+                }
+            }
+        }
+        i += 1;
     }
     hits
 }
@@ -221,6 +249,31 @@ mod tests {
             hits.iter()
                 .any(|h| h.class == DetectorClass::GcpServiceAccount)
         );
+    }
+
+    #[test]
+    fn gcp_service_account_compact_json_detected() {
+        // serde (this repo's own serializer) and most JSON emitters produce
+        // COMPACT output with no space after the colon. The fixed-string needle
+        // only matched the space-after-colon form, so a real service-account
+        // key serialized compactly slipped past the egress gate entirely.
+        let compact = r#"{"type":"service_account","project_id":"x"}"#;
+        assert!(
+            scan(compact)
+                .iter()
+                .any(|h| h.class == DetectorClass::GcpServiceAccount),
+            "compact GCP key JSON must be detected"
+        );
+        // Extra/irregular whitespace around the colon (all insignificant in
+        // JSON) is tolerated too.
+        let spaced = "{\"type\"  :\t\"service_account\"}";
+        assert!(
+            scan(spaced)
+                .iter()
+                .any(|h| h.class == DetectorClass::GcpServiceAccount)
+        );
+        // The egress gate fires on the compact form.
+        assert!(blocks_egress(compact, 80));
     }
 
     #[test]

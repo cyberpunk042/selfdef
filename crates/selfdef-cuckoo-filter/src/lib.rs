@@ -44,6 +44,14 @@ pub enum CuckooError {
     /// Zero buckets.
     #[error("n_buckets and max_relocations must be >= 1")]
     BadConfig,
+    /// n_buckets not a power of two — the XOR-based alternate-bucket function
+    /// (`alt(i) = (i XOR h(fp)) mod n`) is only an involution when `n` is a
+    /// power of two. With any other `n`, `alt(alt(i)) != i`, so a relocated
+    /// fingerprint can land outside an item's two candidate buckets and become
+    /// unfindable — a silent FALSE NEGATIVE (a present key reported absent),
+    /// which breaks the filter's no-false-negative contract.
+    #[error("n_buckets {0} must be a power of two")]
+    NBucketsNotPowerOfTwo(u32),
     /// Geometry.
     #[error("cells length must equal n_buckets * 4")]
     BadGeometry,
@@ -73,6 +81,9 @@ impl CuckooFilter {
     pub fn new(n_buckets: u32, max_relocations: u32) -> Result<Self, CuckooError> {
         if n_buckets == 0 || max_relocations == 0 {
             return Err(CuckooError::BadConfig);
+        }
+        if !n_buckets.is_power_of_two() {
+            return Err(CuckooError::NBucketsNotPowerOfTwo(n_buckets));
         }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -111,6 +122,12 @@ impl CuckooFilter {
 
     /// Insert.
     pub fn insert(&mut self, key: &str) -> Result<(), CuckooError> {
+        // i1()/alt() compute `% self.n_buckets`; a serde-bypassed zero
+        // n_buckets (new()/validate() reject it) would panic that modulo in
+        // every build. A zero-bucket filter can hold nothing — refuse.
+        if self.n_buckets == 0 {
+            return Err(CuckooError::Full);
+        }
         let fp = fp_byte(key);
         let i1 = self.i1(key);
         if self.try_insert_into(i1, fp) {
@@ -144,6 +161,11 @@ impl CuckooFilter {
 
     /// Contains.
     pub fn contains(&self, key: &str) -> bool {
+        // Same serde-bypass guard as insert(): a zero-bucket filter holds
+        // nothing, so report absent rather than panic in i1()/alt()'s modulo.
+        if self.n_buckets == 0 {
+            return false;
+        }
         let fp = fp_byte(key);
         let i1 = self.i1(key);
         let i2 = self.alt(i1, fp);
@@ -156,6 +178,11 @@ impl CuckooFilter {
 
     /// Remove.
     pub fn remove(&mut self, key: &str) -> bool {
+        // Same serde-bypass guard as insert(): nothing to remove from a
+        // zero-bucket filter, and the modulo would otherwise panic.
+        if self.n_buckets == 0 {
+            return false;
+        }
         let fp = fp_byte(key);
         let i1 = self.i1(key);
         if let Some(slot) = self.bucket(i1).iter_mut().find(|s| **s == fp) {
@@ -178,6 +205,9 @@ impl CuckooFilter {
         if self.n_buckets == 0 || self.max_relocations == 0 {
             return Err(CuckooError::BadConfig);
         }
+        if !self.n_buckets.is_power_of_two() {
+            return Err(CuckooError::NBucketsNotPowerOfTwo(self.n_buckets));
+        }
         if self.cells.len() != (self.n_buckets as usize) * SLOTS_PER_BUCKET {
             return Err(CuckooError::BadGeometry);
         }
@@ -190,10 +220,56 @@ mod tests {
     use super::*;
 
     #[test]
+    fn zero_buckets_serde_bypass_does_not_panic() {
+        // new()/validate() reject n_buckets==0, but serde can construct it.
+        // i1()/alt()'s `% self.n_buckets` would panic in every build. Guard
+        // makes the ops fail-closed (refuse / absent) instead of crashing.
+        let mut c = CuckooFilter {
+            schema_version: SCHEMA_VERSION.into(),
+            n_buckets: 0,
+            max_relocations: 8,
+            cells: Vec::new(),
+        };
+        assert!(c.insert("k").is_err()); // must not panic
+        assert!(!c.contains("k")); // must not panic
+        assert!(!c.remove("k")); // must not panic
+    }
+
+    #[test]
     fn insert_then_contains() {
         let mut f = CuckooFilter::new(64, 100).unwrap();
         f.insert("a").unwrap();
         assert!(f.contains("a"));
+    }
+
+    #[test]
+    fn non_power_of_two_n_buckets_rejected() {
+        // The XOR-based alternate-bucket function is only an involution for a
+        // power-of-two bucket count. A non-power-of-two count silently breaks
+        // `alt(alt(i)) == i`, letting relocated fingerprints escape their
+        // candidate buckets — a false negative that defeats a replay/dedup
+        // filter. Such configs must be refused at construction, and a
+        // deserialized filter carrying one must fail validation.
+        for n in [3u32, 6, 10, 100, 1000] {
+            assert!(
+                matches!(
+                    CuckooFilter::new(n, 100).unwrap_err(),
+                    CuckooError::NBucketsNotPowerOfTwo(_)
+                ),
+                "n_buckets={n} must be rejected"
+            );
+        }
+        // Powers of two still construct fine.
+        for n in [1u32, 2, 4, 64, 256] {
+            CuckooFilter::new(n, 100).unwrap();
+        }
+        // A deserialized non-power-of-two filter fails validate().
+        let mut bad = CuckooFilter::new(4, 10).unwrap();
+        bad.n_buckets = 6;
+        assert!(matches!(
+            bad.validate().unwrap_err(),
+            CuckooError::NBucketsNotPowerOfTwo(6)
+        ));
     }
 
     #[test]

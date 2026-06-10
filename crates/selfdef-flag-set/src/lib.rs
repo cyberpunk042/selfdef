@@ -43,6 +43,22 @@ pub enum FlagError {
     /// Unknown.
     #[error("unknown flag: {0}")]
     UnknownFlag(String),
+    /// Bit index outside the representable 0..=63 range (corrupt/serde-bypassed state).
+    #[error("bit index {0} out of range (must be 0..=63)")]
+    BitOutOfRange(u8),
+}
+
+/// Bit mask for index `b`, defending against an out-of-range index.
+///
+/// `register()` only ever assigns `0..=63`, but serde deserialization
+/// bypasses it and can persist `b >= 64`. A raw `1u64 << b` would then
+/// overflow — a debug panic (DoS), and in release Rust masks the shift
+/// amount (`1u64 << 64 == 1u64 << 0`) so the out-of-range flag *aliases*
+/// bit 0, cross-talking with a distinct registered flag. Returning 0 for
+/// an unrepresentable index makes every bit op fail-CLOSED: the flag reads
+/// as not-set and cannot be set (`|= 0` / `&= !0` are both no-ops).
+fn bit_mask(b: u8) -> u64 {
+    if b < 64 { 1u64 << b } else { 0 }
 }
 
 impl FlagSet {
@@ -66,8 +82,9 @@ impl FlagSet {
         if self.bits.len() >= 64 {
             return Err(FlagError::Full);
         }
-        // Next free bit.
-        let used: u64 = self.bits.values().map(|b| 1u64 << b).sum();
+        // Next free bit. Out-of-range (serde-bypassed) indices contribute 0
+        // via bit_mask, so they neither alias nor block a fresh assignment.
+        let used: u64 = self.bits.values().map(|b| bit_mask(*b)).sum();
         let mut idx = 0u8;
         while idx < 64 && (used & (1u64 << idx)) != 0 {
             idx += 1;
@@ -82,7 +99,7 @@ impl FlagSet {
             .bits
             .get(name)
             .ok_or_else(|| FlagError::UnknownFlag(name.into()))?;
-        self.mask |= 1u64 << b;
+        self.mask |= bit_mask(b);
         Ok(())
     }
 
@@ -92,7 +109,7 @@ impl FlagSet {
             .bits
             .get(name)
             .ok_or_else(|| FlagError::UnknownFlag(name.into()))?;
-        self.mask &= !(1u64 << b);
+        self.mask &= !bit_mask(b);
         Ok(())
     }
 
@@ -102,7 +119,7 @@ impl FlagSet {
             .bits
             .get(name)
             .ok_or_else(|| FlagError::UnknownFlag(name.into()))?;
-        Ok((self.mask & (1u64 << b)) != 0)
+        Ok((self.mask & bit_mask(b)) != 0)
     }
 
     /// Union with another (same name table required).
@@ -130,7 +147,7 @@ impl FlagSet {
         let mut pairs: Vec<(u8, String)> = self
             .bits
             .iter()
-            .filter(|&(_, &b)| (self.mask & (1u64 << b)) != 0)
+            .filter(|&(_, &b)| (self.mask & bit_mask(b)) != 0)
             .map(|(k, &b)| (b, k.clone()))
             .collect();
         pairs.sort_by_key(|(b, _)| *b);
@@ -142,9 +159,12 @@ impl FlagSet {
         if self.schema_version != SCHEMA_VERSION {
             return Err(FlagError::SchemaMismatch);
         }
-        for k in self.bits.keys() {
+        for (k, &b) in self.bits.iter() {
             if k.is_empty() {
                 return Err(FlagError::EmptyName);
+            }
+            if b >= 64 {
+                return Err(FlagError::BitOutOfRange(b));
             }
         }
         Ok(())
@@ -257,6 +277,51 @@ mod tests {
         assert!(matches!(
             s.validate().unwrap_err(),
             FlagError::SchemaMismatch
+        ));
+    }
+
+    #[test]
+    fn out_of_range_bit_does_not_overflow_or_alias() {
+        // register() keeps indices in 0..=63, but serde can construct a state
+        // with b >= 64. A raw `1u64 << b` would panic in debug (DoS) and in
+        // release alias bit 0 (`1u64 << 64 == 1u64 << 0`), cross-talking with
+        // a distinct registered flag. bit_mask() forces fail-closed: the
+        // out-of-range flag reads as not-set and cannot be set, and it must
+        // not corrupt the genuine bit-0 flag.
+        let mut bits = BTreeMap::new();
+        bits.insert("real_low".to_string(), 0u8); // genuine bit 0
+        bits.insert("aliased".to_string(), 64u8); // serde-bypassed, would alias bit 0
+        let mut s = FlagSet {
+            schema_version: SCHEMA_VERSION.into(),
+            bits,
+            mask: 0,
+        };
+        // Setting the out-of-range flag must not panic and must not light bit 0.
+        s.set("aliased").unwrap();
+        assert!(!s.contains("aliased").unwrap()); // unrepresentable → fail-closed
+        assert!(!s.contains("real_low").unwrap()); // genuine flag untouched (no alias)
+        // The genuine flag still works independently.
+        s.set("real_low").unwrap();
+        assert!(s.contains("real_low").unwrap());
+        assert!(!s.contains("aliased").unwrap());
+        // Clearing the out-of-range flag must not clear bit 0 either.
+        s.clear("aliased").unwrap();
+        assert!(s.contains("real_low").unwrap());
+        assert_eq!(s.active_names(), vec!["real_low"]);
+    }
+
+    #[test]
+    fn out_of_range_bit_rejected_by_validate() {
+        let mut bits = BTreeMap::new();
+        bits.insert("x".to_string(), 200u8);
+        let s = FlagSet {
+            schema_version: SCHEMA_VERSION.into(),
+            bits,
+            mask: 0,
+        };
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            FlagError::BitOutOfRange(200)
         ));
     }
 

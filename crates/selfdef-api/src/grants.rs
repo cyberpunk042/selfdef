@@ -67,6 +67,7 @@ pub(crate) async fn show() -> Result<Json<GrantsMirrorSnapshot>, (StatusCode, St
 /// The daemon mints the `grant_id` + `trace_id` (callers never supply
 /// them) and stamps `now`. Returns the issued (Pending) grant.
 pub(crate) async fn issue(
+    _cap: crate::control::RequireControl,
     Json(req): Json<GrantRequest>,
 ) -> Result<Json<GrantEntry>, (StatusCode, String)> {
     let path = state_path();
@@ -94,6 +95,7 @@ pub(crate) async fn issue(
 /// `POST /v1/grants/revoke` — revoke a grant by id. 404 when unknown.
 /// Returns the updated snapshot.
 pub(crate) async fn revoke(
+    _cap: crate::control::RequireControl,
     Json(req): Json<RevokeRequest>,
 ) -> Result<Json<GrantsMirrorSnapshot>, (StatusCode, String)> {
     let path = state_path();

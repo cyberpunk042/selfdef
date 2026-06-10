@@ -114,7 +114,16 @@ impl TierLadder {
 
     /// Current tier name.
     pub fn current_tier(&self) -> &str {
-        &self.tiers[self.current]
+        // promote/demote keep current in range, but serde can persist an
+        // out-of-range value; indexing it would panic (OOB, every build). Fall
+        // back to the lowest tier (index 0 — the demote/least-privileged end,
+        // fail-closed), or "" if a serde-bypassed empty tiers list leaves
+        // nothing to return.
+        if self.current < self.tiers.len() {
+            &self.tiers[self.current]
+        } else {
+            self.tiers.first().map(String::as_str).unwrap_or("")
+        }
     }
 
     /// Promote.
@@ -130,6 +139,16 @@ impl TierLadder {
     fn step(&mut self, dir: Direction, reason: &str, ts_ms: u64) -> Result<&str, LadderError> {
         if reason.is_empty() {
             return Err(LadderError::EmptyReason);
+        }
+        if self.tiers.is_empty() {
+            return Err(LadderError::NoTiers);
+        }
+        // Normalize a serde-bypassed out-of-range current to the lowest tier
+        // (fail-closed) before the `self.tiers[self.current]` indexing below
+        // would panic (OOB). The Demote path is the live hazard: a huge current
+        // is != 0, so it proceeds to `new = current - 1` and then indexes.
+        if self.current >= self.tiers.len() {
+            self.current = 0;
         }
         let new = match dir {
             Direction::Promote => {
@@ -191,6 +210,24 @@ mod tests {
 
     fn ladder() -> TierLadder {
         TierLadder::new(vec!["bronze".into(), "silver".into(), "gold".into()], 0, 5).unwrap()
+    }
+
+    #[test]
+    fn out_of_range_current_serde_bypass_does_not_panic() {
+        // promote/demote keep current in range; serde can persist current >=
+        // tiers.len(). current_tier() and step()'s Demote path index
+        // self.tiers[self.current] — an OOB panic in every build. Guards make
+        // current_tier() report the lowest tier (fail-closed) and step()
+        // normalize before indexing.
+        let mut l = ladder();
+        l.current = 99; // serde-bypassed, past tiers.len() == 3
+        assert_eq!(l.current_tier(), "bronze"); // lowest tier, no panic
+        // Demote from a corrupt position must not panic; it normalizes to 0
+        // (bronze) first, where demote is at the boundary.
+        assert!(matches!(
+            l.demote("corrupt-recovery", 1).unwrap_err(),
+            LadderError::AtBoundary
+        ));
     }
 
     #[test]

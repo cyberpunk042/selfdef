@@ -106,6 +106,14 @@ impl PeriodicQuotaBudget {
 
     #[allow(dead_code)]
     fn maybe_roll(&self, b: &mut ActorBudget, now_ms: u64) {
+        // Defend against a zero period (serde bypasses new()/validate()): with
+        // period_ms==0 the `>= self.period_ms` check is always true and the
+        // `elapsed / self.period_ms` below would divide by zero — a panic in
+        // debug. Skip the roll; the budget never resets (fail-CLOSED: an
+        // exhausted budget keeps denying) rather than crashing.
+        if self.period_ms == 0 {
+            return;
+        }
         if now_ms.saturating_sub(b.current_period_start_ms) >= self.period_ms {
             // Snap forward by whole periods.
             let elapsed = now_ms.saturating_sub(b.current_period_start_ms);

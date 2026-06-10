@@ -21,7 +21,7 @@ A reload is `kill -HUP $(pidof selfdefd)` (rules) or
 [correlator]        # rules dir, hot reload
 [notifier]          # channel list — see ops/notifications.md
 [notifier.<channel>]# per-channel knobs
-[responder]         # dry-run, allowed actions, scripts
+[responder]         # dry-run, allowed actions, severity floor, scripts
 [api]               # HTTP API binding + auth — see ops/api.md
 [api.tls]           # optional TLS / mTLS
 ```
@@ -30,9 +30,14 @@ A reload is `kill -HUP $(pidof selfdefd)` (rules) or
 
 Every collector defaults to `enabled = false`. The API
 defaults to disabled. The responder defaults to
-`dry_run = true` and `allowed_actions = ["notify"]` only.
+`dry_run = true` and `allowed_actions = ["notify"]` only,
+with `min_severity = "none"` (no autonomous-response floor).
 This is deliberate — selfdef does nothing operator-visible
 out of the box; opt in to each surface as you understand it.
+Once you allow-list aggressive actions, set
+`responder.min_severity = "high"` so they only fire on
+high-confidence findings (operator-commanded `selfdefctl
+panic` and the authenticated action API bypass the floor).
 
 ## Module-side defaults vs daemon-side defaults
 

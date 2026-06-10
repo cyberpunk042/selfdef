@@ -22,6 +22,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use selfdef_core::Event;
@@ -30,12 +31,22 @@ use selfdef_notifier_orchestrator::{
     AckReplyHint, Channel, ChannelError, DeliveryReceipt, Payload,
 };
 
+/// Hard ceiling on one signal-cli send. signal-cli is a network-touching
+/// JVM process: on a black-holed network (or a wedged JVM) it can hang
+/// indefinitely, and the notifier chain awaits channels SEQUENTIALLY — one
+/// hung send would block every later channel, defeating the chain's whole
+/// failover purpose on the path that must never go dark. 30s allows JVM
+/// startup plus a slow send; on expiry the child is killed (`kill_on_drop`)
+/// and the error lets the chain move to the next channel.
+pub const DEFAULT_SEND_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// signal-cli outbound channel.
 #[derive(Debug)]
 pub struct SignalCliNotifier {
     binary: PathBuf,
     account: String,
     recipient: String,
+    send_timeout: Duration,
 }
 
 impl SignalCliNotifier {
@@ -46,7 +57,17 @@ impl SignalCliNotifier {
             binary,
             account,
             recipient,
+            send_timeout: DEFAULT_SEND_TIMEOUT,
         }
+    }
+
+    /// Builder: override the per-send subprocess deadline
+    /// ([`DEFAULT_SEND_TIMEOUT`]). Tests use a short value with a slow
+    /// stand-in binary to lock the no-hang contract.
+    #[must_use]
+    pub fn with_send_timeout(mut self, timeout: Duration) -> Self {
+        self.send_timeout = timeout;
+        self
     }
 
     /// Shared core: shell out to `signal-cli` with the rendered
@@ -56,16 +77,25 @@ impl SignalCliNotifier {
         if self.account.is_empty() || self.recipient.is_empty() {
             return Err(SignalDeliveryError::NotConfigured);
         }
-        let output = tokio::process::Command::new(&self.binary)
+        // kill_on_drop: when the timeout below fires, the dropped future
+        // takes the child with it instead of leaking a wedged JVM.
+        let pending = tokio::process::Command::new(&self.binary)
             .arg("-a")
             .arg(&self.account)
             .arg("send")
             .arg("-m")
             .arg(message)
             .arg(&self.recipient)
-            .output()
-            .await
-            .map_err(SignalDeliveryError::Io)?;
+            .kill_on_drop(true)
+            .output();
+        let output = match tokio::time::timeout(self.send_timeout, pending).await {
+            Ok(r) => r.map_err(SignalDeliveryError::Io)?,
+            Err(_) => {
+                return Err(SignalDeliveryError::Timeout {
+                    secs: self.send_timeout.as_secs_f64(),
+                });
+            }
+        };
         if output.status.success() {
             Ok(())
         } else {
@@ -87,6 +117,8 @@ enum SignalDeliveryError {
     Io(#[from] std::io::Error),
     #[error("signal-cli exited with status {status}: {stderr}")]
     Subprocess { status: i32, stderr: String },
+    #[error("signal-cli send timed out after {secs}s (child killed)")]
+    Timeout { secs: f64 },
 }
 
 impl From<SignalDeliveryError> for NotifierError {
@@ -97,6 +129,10 @@ impl From<SignalDeliveryError> for NotifierError {
             SignalDeliveryError::Subprocess { status, stderr } => {
                 Self::SignalCli { status, stderr }
             }
+            SignalDeliveryError::Timeout { secs } => Self::Io(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!("signal-cli send timed out after {secs}s (child killed)"),
+            )),
         }
     }
 }
@@ -118,6 +154,9 @@ impl From<SignalDeliveryError> for ChannelError {
                     body: stderr,
                 }
             }
+            SignalDeliveryError::Timeout { secs } => Self::Transport(format!(
+                "signal-cli send timed out after {secs}s (child killed)"
+            )),
         }
     }
 }
@@ -298,5 +337,40 @@ mod tests {
         );
         let r = <SignalCliNotifier as Notifier>::notify(&n, &finding_event()).await;
         assert!(r.is_ok(), "{r:?}");
+    }
+
+    /// The no-hang contract: a wedged signal-cli (stand-in: a script that
+    /// sleeps far past the deadline) must surface a timeout error within the
+    /// configured send deadline — NOT hang. The notifier chain awaits
+    /// channels sequentially, so a hang here would block every later
+    /// channel and silence ALL alerting.
+    #[tokio::test]
+    async fn hung_signal_cli_times_out_instead_of_blocking_forever() {
+        use std::io::Write as _;
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("hung-signal-cli");
+        {
+            let mut f = std::fs::File::create(&script).unwrap();
+            // Ignores its args and wedges.
+            f.write_all(b"#!/bin/sh\nsleep 60\n").unwrap();
+        }
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let n = SignalCliNotifier::new(script, "+15550000000".into(), "+15551234567".into())
+            .with_send_timeout(Duration::from_millis(200));
+
+        let start = std::time::Instant::now();
+        let r = <SignalCliNotifier as Notifier>::notify(&n, &finding_event()).await;
+        let elapsed = start.elapsed();
+
+        assert!(r.is_err(), "hung child must surface an error, got {r:?}");
+        let msg = format!("{}", r.unwrap_err());
+        assert!(msg.contains("timed out"), "expected timeout error: {msg}");
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "must return promptly after the deadline, took {elapsed:?}"
+        );
     }
 }

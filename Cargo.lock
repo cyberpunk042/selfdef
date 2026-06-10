@@ -3014,8 +3014,10 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "selfdef-bus",
+ "selfdef-collector-util",
  "selfdef-core",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
@@ -3080,6 +3082,7 @@ name = "selfdef-collector-eventstream"
 version = "0.1.0"
 dependencies = [
  "selfdef-bus",
+ "selfdef-collector-util",
  "selfdef-core",
  "serde_json",
  "tempfile",
@@ -3104,6 +3107,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "selfdef-bus",
+ "selfdef-collector-util",
  "selfdef-core",
  "serde",
  "serde_json",
@@ -3149,6 +3153,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "selfdef-bus",
+ "selfdef-collector-util",
  "selfdef-core",
  "serde",
  "serde_json",
@@ -3165,6 +3170,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "selfdef-bus",
+ "selfdef-collector-util",
  "selfdef-core",
  "serde",
  "serde_json",
@@ -3174,6 +3180,10 @@ dependencies = [
  "tokio-util",
  "tracing",
 ]
+
+[[package]]
+name = "selfdef-collector-util"
+version = "0.1.0"
 
 [[package]]
 name = "selfdef-commit-authority"
@@ -4795,6 +4805,7 @@ dependencies = [
  "selfdef-core",
  "selfdef-notifier",
  "selfdef-notifier-orchestrator",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -4878,6 +4889,7 @@ dependencies = [
  "selfdef-core",
  "selfdef-notifier",
  "selfdef-notifier-orchestrator",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -4892,6 +4904,7 @@ dependencies = [
  "selfdef-core",
  "selfdef-notifier",
  "selfdef-notifier-orchestrator",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

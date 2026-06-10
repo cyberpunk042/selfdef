@@ -87,6 +87,13 @@ impl PriorityAging {
 
     /// Compute effective priority at now_ms for a job.
     pub fn effective(&self, job: &Job, now_ms: u64) -> u64 {
+        // new()/validate() reject age_step_ms==0, but serde deserialization can
+        // set it directly; `waited / self.age_step_ms` would then panic in every
+        // build (integer div-by-zero is never masked). A zero step means no
+        // aging — return the base priority unbumped rather than crash.
+        if self.age_step_ms == 0 {
+            return job.base_priority as u64;
+        }
         let waited = now_ms.saturating_sub(job.enqueued_at_ms);
         let bump = waited / self.age_step_ms;
         job.base_priority as u64 + bump
@@ -137,6 +144,24 @@ impl PriorityAging {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_age_step_serde_bypass_does_not_panic() {
+        // new()/validate() reject age_step_ms==0, but serde can construct it.
+        // `waited / self.age_step_ms` would panic in every build. Guard returns
+        // the unbumped base priority instead of crashing.
+        let p = PriorityAging {
+            schema_version: SCHEMA_VERSION.into(),
+            age_step_ms: 0,
+            jobs: Vec::new(),
+        };
+        let j = Job {
+            id: "j1".into(),
+            base_priority: 7,
+            enqueued_at_ms: 0,
+        };
+        assert_eq!(p.effective(&j, 1_000_000), 7); // must not panic
+    }
 
     #[test]
     fn high_base_wins_immediately() {

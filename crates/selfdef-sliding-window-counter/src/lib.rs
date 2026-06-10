@@ -69,6 +69,13 @@ impl SlidingWindowCounter {
 
     /// Rotate buckets if time has advanced past the window.
     fn rotate(&mut self, now_ms: u64) {
+        // Defend against a zero bucket width (serde bypasses new()/validate()):
+        // the `elapsed_past_window_end / self.bucket_ms` below would divide by
+        // zero — a panic in debug, crashing the counter. Skip rotation; the
+        // window stops sliding so counts accrue (fail-CLOSED) rather than crash.
+        if self.bucket_ms == 0 {
+            return;
+        }
         let last_bucket_end = self
             .window_start_ms
             .saturating_add(self.bucket_ms.saturating_mul(self.bucket_count as u64));
@@ -213,5 +220,21 @@ mod tests {
         let j = serde_json::to_string(&c).unwrap();
         let back: SlidingWindowCounter = serde_json::from_str(&j).unwrap();
         assert_eq!(c, back);
+    }
+
+    #[test]
+    fn zero_bucket_ms_does_not_divide_by_zero() {
+        // new()/validate() reject bucket_ms==0, but serde can construct one
+        // directly. rotate must not divide by zero (debug panic / crash); it
+        // skips rotation, so counts accrue (fail-closed) rather than crash.
+        let mut c = SlidingWindowCounter {
+            schema_version: SCHEMA_VERSION.into(),
+            bucket_ms: 0,
+            bucket_count: 4,
+            buckets: std::collections::VecDeque::from(vec![0u64; 4]),
+            window_start_ms: 0,
+        };
+        c.record(7, 1000); // must not panic
+        assert_eq!(c.total(9_999_999), 7); // must not panic; count retained
     }
 }

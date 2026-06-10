@@ -506,6 +506,19 @@ allowed_actions = ["notify"]
 # allowed_actions = ["notify", "snapshot_proc", "lockdown_egress", "kill_pid",
 #                    "revoke_session", "forensics_bundle", "velociraptor_escalate"]
 
+# Autonomous-response severity floor. Findings graded below this are NOT
+# auto-dispatched on the bus path — a guard so an allow-listed aggressive
+# action (e.g. kill_pid) never fires on a low-confidence finding. Accepts
+# `none` (default — every finding processed, the historical behavior) or a
+# grade: info, low, medium, high, critical, fatal. Recommended once you enable
+# powerful actions: floor them to `high` so only high-confidence findings act.
+# Note: operator-commanded paths (`selfdefctl panic`, the authenticated
+# /actions/{name}/run API) bypass this floor by design — it gates autonomous
+# response only.
+min_severity = "none"
+# Example: only High/Critical/Fatal findings trigger autonomous actions:
+# min_severity = "high"
+
 # Where snapshot_proc writes per-event directories.
 snapshot_dir = "/var/lib/selfdef/snapshots"
 

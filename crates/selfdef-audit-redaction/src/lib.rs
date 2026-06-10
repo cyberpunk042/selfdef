@@ -180,8 +180,11 @@ fn redact_email(text: &str) -> String {
                 continue;
             }
         }
-        out.push(bytes[i] as char);
-        i += 1;
+        // Not an email: emit the char at `i` UTF-8-correctly. `byte as char`
+        // would split a multi-byte code point into mojibake.
+        let ch = text[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
     }
     out
 }
@@ -216,8 +219,11 @@ fn redact_ipv4(text: &str) -> String {
             }
             continue;
         }
-        out.push(c as char);
-        i += 1;
+        // Non-digit byte: emit the char UTF-8-correctly (not `byte as char`,
+        // which would mangle multi-byte code points).
+        let ch = text[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
     }
     out
 }
@@ -247,8 +253,11 @@ fn redact_ipv6(text: &str) -> String {
             }
             continue;
         }
-        out.push(c as char);
-        i += 1;
+        // Non-hex/colon byte: emit the char UTF-8-correctly (not `byte as
+        // char`, which would mangle multi-byte code points).
+        let ch = text[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
     }
     out
 }
@@ -367,6 +376,21 @@ mod tests {
     fn ipv6_redacted() {
         let out = redact_one("addr 2001:db8:85a3::8a2e", RedactorClass::Ipv6);
         assert_eq!(out, "addr [ipv6]");
+    }
+
+    #[test]
+    fn non_ascii_audit_text_preserved_around_secrets() {
+        // The byte-walking redactors emitted each non-secret byte via
+        // `byte as char`, which mangles multi-byte UTF-8 into mojibake — an
+        // audit-log fidelity bug (the log is a security artifact). The ASCII
+        // secret must still be redacted while the surrounding Unicode survives
+        // byte-for-byte.
+        let out = redact_one("café 10.0.0.7 wörld ☂", RedactorClass::Ipv4);
+        assert_eq!(out, "café [ipv4] wörld ☂");
+        let out = redact_one("café 2001:db8::1 wörld ☂", RedactorClass::Ipv6);
+        assert_eq!(out, "café [ipv6] wörld ☂");
+        let out = redact_one("señor a@b.com ☂", RedactorClass::Email);
+        assert_eq!(out, "señor [email] ☂");
     }
 
     #[test]

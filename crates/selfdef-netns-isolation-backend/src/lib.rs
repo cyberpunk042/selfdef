@@ -88,6 +88,13 @@ pub enum NetnsIsolationError {
     BackendUnreachable(String),
     #[error("pid {pid} already containerized — refusing isolation")]
     AlreadyContainerized { pid: i32 },
+    /// pid 1 (init) is sacrosanct — moving it into an isolated network
+    /// namespace severs the host's networking for init and every process that
+    /// shares its netns (i.e. the whole host), a host-wide outage. Matches the
+    /// pid-1 refusal already enforced by the sibling capability-drop /
+    /// process-tree-freeze / process-env-scrub backends.
+    #[error("pid {pid} refused: {reason}")]
+    PidRefused { pid: i32, reason: String },
 }
 
 #[async_trait]
@@ -144,6 +151,14 @@ fn validate(req: &IsolatePidRequest) -> Result<(), NetnsIsolationError> {
             "pid must be positive, got {}",
             req.pid
         )));
+    }
+    if req.pid == 1 {
+        return Err(NetnsIsolationError::PidRefused {
+            pid: req.pid,
+            reason: "pid 1 (init) is never isolatable; moving its netns would \
+                     sever host networking"
+                .into(),
+        });
     }
     if req.reason.trim().is_empty() {
         return Err(NetnsIsolationError::InvalidRequest(
@@ -327,9 +342,26 @@ impl FsBackend {
                 .and_then(|n| n.to_str())
                 .unwrap_or("state")
         ));
-        fs::write(&tmp, bytes).map_err(|e| {
-            NetnsIsolationError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
-        })?;
+        // fsync the tempfile contents before the rename publishes them. This
+        // is a durable SDD-066 state-journal: fs::write + fs::rename gives
+        // crash consistency (no torn read) but not durability — both can
+        // return Ok with the bytes still only in the page cache, so a power
+        // loss right after an enforcement action could lose the journal entry,
+        // resurrect a stale journal, or leave a zero-length file the backend
+        // reloads as an empty set on reboot, silently undoing a containment /
+        // revocation (fail-open). Matches the registry / quarantine-backend fix.
+        {
+            use std::io::Write as _;
+            let mut f = fs::File::create(&tmp).map_err(|e| {
+                NetnsIsolationError::BackendUnreachable(format!("create {}: {e}", tmp.display()))
+            })?;
+            f.write_all(bytes).map_err(|e| {
+                NetnsIsolationError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
+            })?;
+            f.sync_all().map_err(|e| {
+                NetnsIsolationError::BackendUnreachable(format!("fsync {}: {e}", tmp.display()))
+            })?;
+        }
         fs::rename(&tmp, target).map_err(|e| {
             let _ = fs::remove_file(&tmp);
             NetnsIsolationError::BackendUnreachable(format!(
@@ -338,6 +370,11 @@ impl FsBackend {
                 target.display()
             ))
         })?;
+        // fsync the parent directory so the rename (the new dir entry) is
+        // durable too. Best-effort.
+        if let Ok(d) = fs::File::open(parent) {
+            let _ = d.sync_all();
+        }
         Ok(())
     }
 
@@ -446,5 +483,47 @@ impl NetnsIsolationBackend for FsBackend {
             let _ = self.persist(&snapshot);
         }
         removed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn req(pid: i32) -> IsolatePidRequest {
+        IsolatePidRequest {
+            pid,
+            reason: "containment".into(),
+            duration: Duration::from_secs(60),
+            authority: AuthorityTier::Operator,
+            scope: IsolationScope::NetOnly,
+            idempotency_key: "k1".into(),
+        }
+    }
+
+    #[test]
+    fn pid_1_isolation_refused() {
+        // SAFETY: pid 1 (init) is sacrosanct — moving init into an isolated
+        // network namespace severs networking for the whole host. The sibling
+        // capability-drop / process-tree-freeze / process-env-scrub backends
+        // already refuse pid 1; netns-isolation must too.
+        assert!(matches!(
+            validate(&req(1)).unwrap_err(),
+            NetnsIsolationError::PidRefused { pid: 1, .. }
+        ));
+    }
+
+    #[test]
+    fn nonpositive_pid_rejected_and_normal_pid_ok() {
+        assert!(matches!(
+            validate(&req(0)).unwrap_err(),
+            NetnsIsolationError::InvalidRequest(_)
+        ));
+        assert!(matches!(
+            validate(&req(-5)).unwrap_err(),
+            NetnsIsolationError::InvalidRequest(_)
+        ));
+        // A normal pid still passes validation.
+        validate(&req(4242)).unwrap();
     }
 }

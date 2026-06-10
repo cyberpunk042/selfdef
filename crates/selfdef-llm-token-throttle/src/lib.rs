@@ -200,6 +200,17 @@ impl LlmTokenThrottle {
             Some(c) => *c,
             None => return Ok(ConsumeVerdict::Unconfigured),
         };
+        // Self-bound the record set. `consume` is the per-LLM-call hot path;
+        // without this it appends a record on every grant and never trims, so a
+        // long-running daemon that calls `consume` but forgets the separate
+        // public `rotate` would grow `records` without bound AND make
+        // `in_window` (a full scan) O(n) per call — O(n²) overall. Rotating
+        // here drops only records older than the largest configured window,
+        // which are outside every profile's window and so never contribute to
+        // any `in_window` sum: verdicts are unchanged, memory and scan cost are
+        // bounded to the in-window working set. `rotate` stays public for
+        // explicit callers.
+        self.rotate(now_ms);
         let (used, oldest_in) = self.in_window(profile, &cfg, now_ms);
         let would = used.saturating_add(tokens);
         if would > cfg.window_token_budget {
@@ -314,6 +325,26 @@ mod tests {
             t.consume(Profile::Fast, 10, 50).unwrap_err(),
             ThrottleError::NonMonotonic { .. }
         ));
+    }
+
+    #[test]
+    fn consume_self_bounds_records_without_explicit_rotate() {
+        // The per-call hot path must not leak: consuming repeatedly, each call
+        // more than the max window after the last, must keep `records` bounded
+        // even though the caller never invokes `rotate` itself.
+        let mut t = LlmTokenThrottle::canonical();
+        for i in 0..1000u64 {
+            let now = i * 120_000; // 2 minutes apart > 60s max window
+            assert!(matches!(
+                t.consume(Profile::Fast, 100, now).unwrap(),
+                ConsumeVerdict::Granted
+            ));
+        }
+        assert!(
+            t.records.len() < 5,
+            "records self-bounded by consume (was {})",
+            t.records.len()
+        );
     }
 
     #[test]

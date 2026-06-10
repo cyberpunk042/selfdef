@@ -14,8 +14,10 @@
 //! - **detection.timeframe**: e.g. `60s`, `5m`, `1h`.
 //! - **detection.condition**: one of
 //!   - `<selection_name>` — fire on any event matching the selection.
-//!   - `<selection_name> | count() by <field> > <N>` — fire when ≥ N matches
-//!     share a value of `<field>` within `timeframe`.
+//!   - `<selection_name> | count() by <field> > <N>` — fire when MORE THAN `N`
+//!     matches (i.e. the `N+1`-th) share a value of `<field>` within
+//!     `timeframe`. The `>` is strict: `> 5` fires on the 6th match, not the
+//!     5th (matching standard Sigma `count()` semantics).
 //!
 //! Complex boolean conditions (`and`, `or`, `not`, multiple selections) are
 //! a later milestone.
@@ -163,8 +165,10 @@ pub struct CompiledRule {
 pub enum Condition {
     /// Fire on any event matching the named selection.
     Single(String),
-    /// Fire when ≥ threshold events match the selection sharing the same
-    /// value of `group_by_field` within timeframe.
+    /// Fire when the count of matching events sharing the same value of
+    /// `group_by_field` within `timeframe` STRICTLY EXCEEDS `threshold` (i.e.
+    /// on the `threshold + 1`-th match — `Aggregator::observe` fires on
+    /// `len > threshold`, matching the strict `> N` Sigma syntax).
     Count {
         selection: String,
         group_by_field: String,
@@ -206,17 +210,22 @@ pub enum MatchValue {
 
 impl MatchValue {
     fn matches_json(&self, v: &serde_json::Value, op: FieldOp) -> bool {
+        // Sigma compares strings case-insensitively by default (only the `|re`
+        // modifier is case-sensitive, and it carries its own `(?i)` if needed).
+        // Folding ASCII case here covers the fields these rules key on — process
+        // images, binary paths, syscall names — without which a rule written as
+        // `...|endswith: '\powershell.exe'` would silently miss `PowerShell.EXE`.
         match (self, op) {
-            (Self::String(s), FieldOp::Eq) => v.as_str() == Some(s.as_str()),
-            (Self::String(s), FieldOp::Contains) => {
-                v.as_str().is_some_and(|x| x.contains(s.as_str()))
-            }
-            (Self::String(s), FieldOp::StartsWith) => {
-                v.as_str().is_some_and(|x| x.starts_with(s.as_str()))
-            }
-            (Self::String(s), FieldOp::EndsWith) => {
-                v.as_str().is_some_and(|x| x.ends_with(s.as_str()))
-            }
+            (Self::String(s), FieldOp::Eq) => v.as_str().is_some_and(|x| x.eq_ignore_ascii_case(s)),
+            (Self::String(s), FieldOp::Contains) => v
+                .as_str()
+                .is_some_and(|x| x.to_ascii_lowercase().contains(&s.to_ascii_lowercase())),
+            (Self::String(s), FieldOp::StartsWith) => v
+                .as_str()
+                .is_some_and(|x| x.to_ascii_lowercase().starts_with(&s.to_ascii_lowercase())),
+            (Self::String(s), FieldOp::EndsWith) => v
+                .as_str()
+                .is_some_and(|x| x.to_ascii_lowercase().ends_with(&s.to_ascii_lowercase())),
             (Self::Int(n), FieldOp::Eq) => v.as_i64() == Some(*n) || v.as_u64() == Some(*n as u64),
             (Self::Bool(b), FieldOp::Eq) => v.as_bool() == Some(*b),
             (Self::Regex(r), FieldOp::Regex) => v.as_str().is_some_and(|x| r.is_match(x)),
@@ -227,10 +236,31 @@ impl MatchValue {
 
 // ---------------------------------- aggregator
 
+/// Run an opportunistic stale-group sweep once every this many observations.
+/// The aggregator keys on `group_by_field` (e.g. source IP, username, pid),
+/// which is attacker-influenced: a flood of distinct one-shot values would
+/// otherwise park one map entry per value forever, since a group is only
+/// pruned when that same key is observed again. Sweeping on a fixed cadence
+/// reclaims groups whose newest observation has already aged out of the
+/// window, bounding memory to (groups active within the window) + at most one
+/// cadence of stragglers. Gated on a counter, not on map size, so the sweep
+/// amortizes to O(1) per observe instead of O(n) every call — an O(n)-per-event
+/// sweep would make a high-cardinality flood worse, not better.
+const GC_EVERY: u64 = 1024;
+
+/// Aggregator state behind the lock: the per-group observation deques plus a
+/// monotonic observe counter that drives the periodic GC sweep.
+#[derive(Debug, Default)]
+struct AggState {
+    /// (group key) -> deque of observation times (front = oldest).
+    groups: HashMap<String, VecDeque<Instant>>,
+    /// Total observations since construction; gates the GC sweep cadence.
+    observes: u64,
+}
+
 #[derive(Debug)]
 pub struct Aggregator {
-    /// (group key) -> deque of observation times.
-    state: Mutex<HashMap<String, VecDeque<Instant>>>,
+    state: Mutex<AggState>,
     threshold: u32,
     window: Duration,
 }
@@ -238,32 +268,64 @@ pub struct Aggregator {
 impl Aggregator {
     fn new(threshold: u32, window: Duration) -> Self {
         Self {
-            state: Mutex::new(HashMap::new()),
+            state: Mutex::new(AggState::default()),
             threshold,
             window,
         }
     }
 
     /// Returns Some(key) if observation pushes that group over threshold.
-    /// Clears the group's window on fire so we don't double-fire.
-    fn observe(&self, key: String) -> Option<String> {
-        let now = Instant::now();
+    /// Removes the group's entry on fire so we don't double-fire and so a
+    /// fired group doesn't leave an empty deque parked in the map.
+    ///
+    /// `now` is injected (rather than read from `Instant::now()` here) so the
+    /// window and GC behaviour are deterministically testable; the production
+    /// caller passes `Instant::now()`.
+    fn observe(&self, key: String, now: Instant) -> Option<String> {
+        let window = self.window;
         let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
-        let queue = state.entry(key.clone()).or_default();
+        state.observes = state.observes.wrapping_add(1);
+
+        // Periodic GC: drop groups whose most-recent observation is already
+        // older than the window. Such a group would prune to empty the next
+        // time it is touched, but a group that is never seen again would
+        // otherwise linger forever — the unbounded-growth vector for
+        // high-cardinality, attacker-influenced group-by values. Active groups
+        // (newest observation within the window) are kept, so verdicts are
+        // unaffected.
+        if state.observes % GC_EVERY == 0 {
+            state.groups.retain(|_, q| {
+                q.back()
+                    .is_some_and(|&last| now.duration_since(last) <= window)
+            });
+        }
+
+        let queue = state.groups.entry(key.clone()).or_default();
         queue.push_back(now);
         while let Some(&front) = queue.front() {
-            if now.duration_since(front) > self.window {
+            if now.duration_since(front) > window {
                 queue.pop_front();
             } else {
                 break;
             }
         }
-        if queue.len() as u32 > self.threshold {
-            queue.clear();
+        let fired = queue.len() as u32 > self.threshold;
+        if fired {
+            state.groups.remove(&key);
             Some(key)
         } else {
             None
         }
+    }
+
+    /// Number of tracked groups (test-only; asserts the GC bound).
+    #[cfg(test)]
+    fn group_count(&self) -> usize {
+        self.state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .groups
+            .len()
     }
 }
 
@@ -403,20 +465,36 @@ fn compile_value(v: &serde_yaml_ng::Value, op: FieldOp) -> Result<MatchValue, St
 
 /// Parse a duration string like `60s`, `5m`, `1h`, `1d`.
 pub fn parse_duration(s: &str) -> Result<Duration, SigmaError> {
-    if s.len() < 2 {
+    let s = s.trim();
+    // Split off the trailing unit by *character*, not by byte: `s.split_at(
+    // s.len() - 1)` panics when the last char is multibyte (e.g. a stray
+    // non-ASCII unit), because byte `len - 1` is not a char boundary. Rule
+    // files are operator-authored input on the load/SIGHUP path, so a
+    // malformed timeframe must surface as InvalidTimeframe, never a panic that
+    // aborts a rule reload.
+    let unit = s
+        .chars()
+        .next_back()
+        .ok_or_else(|| SigmaError::InvalidTimeframe(s.into()))?;
+    let num_part = &s[..s.len() - unit.len_utf8()];
+    if num_part.is_empty() {
         return Err(SigmaError::InvalidTimeframe(s.into()));
     }
-    let (num_part, unit) = s.split_at(s.len() - 1);
     let n: u64 = num_part
         .parse()
         .map_err(|_| SigmaError::InvalidTimeframe(s.into()))?;
-    let secs = match unit {
-        "s" => n,
-        "m" => n * 60,
-        "h" => n * 3600,
-        "d" => n * 86_400,
+    let mult: u64 = match unit {
+        's' => 1,
+        'm' => 60,
+        'h' => 3600,
+        'd' => 86_400,
         _ => return Err(SigmaError::InvalidTimeframe(s.into())),
     };
+    // checked_mul: a large `n` (e.g. a huge day count) would otherwise overflow
+    // u64 — a debug panic / silent release wrap. Treat overflow as malformed.
+    let secs = n
+        .checked_mul(mult)
+        .ok_or_else(|| SigmaError::InvalidTimeframe(s.into()))?;
     Ok(Duration::from_secs(secs))
 }
 
@@ -644,7 +722,7 @@ impl Engine {
                                 .or_else(|| Some(v.to_string()))
                         })
                         .unwrap_or_default();
-                    if let Some(k) = agg.observe(key) {
+                    if let Some(k) = agg.observe(key, Instant::now()) {
                         findings.push(build_finding(rule, event, host_tag, sequence, Some(k)));
                     }
                 }
@@ -830,6 +908,29 @@ mod tests {
     }
 
     #[test]
+    fn string_matching_is_case_insensitive_per_sigma() {
+        use serde_json::json;
+        // Sigma matches strings case-insensitively by default. A case-sensitive
+        // engine misses detections: a rule `Image|endswith: '\powershell.exe'`
+        // must fire on `...\PowerShell.EXE`, and an exact/contains/startswith
+        // value must match regardless of the casing in the event.
+        let ends = MatchValue::String("powershell.exe".to_string());
+        assert!(ends.matches_json(
+            &json!("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\PowerShell.EXE"),
+            FieldOp::EndsWith
+        ));
+        let eq = MatchValue::String("PowerShell.EXE".to_string());
+        assert!(eq.matches_json(&json!("powershell.exe"), FieldOp::Eq));
+        let contains = MatchValue::String("MIMIKATZ".to_string());
+        assert!(contains.matches_json(&json!("launched mimikatz.exe"), FieldOp::Contains));
+        let starts = MatchValue::String("/USR/BIN/".to_string());
+        assert!(starts.matches_json(&json!("/usr/bin/python3"), FieldOp::StartsWith));
+        // A genuine non-match still does not match.
+        let other = MatchValue::String("cmd.exe".to_string());
+        assert!(!other.matches_json(&json!("powershell.exe"), FieldOp::Eq));
+    }
+
+    #[test]
     fn parse_count_condition() {
         let (c, by) = parse_condition("failed_auth | count() by src_endpoint.ip > 2").unwrap();
         match c {
@@ -855,6 +956,16 @@ mod tests {
         assert_eq!(parse_duration("1d").unwrap(), Duration::from_secs(86_400));
         assert!(parse_duration("60").is_err());
         assert!(parse_duration("60z").is_err());
+        // Robustness: malformed timeframes must error, never panic.
+        assert!(parse_duration("").is_err());
+        assert!(parse_duration("s").is_err());
+        // Multibyte trailing char must not panic on a non-char-boundary split.
+        assert!(parse_duration("5é").is_err());
+        assert!(parse_duration("héh").is_err());
+        // Overflowing day count must error via checked_mul, not wrap/panic.
+        assert!(parse_duration("100000000000000000d").is_err());
+        // Whitespace is tolerated (trimmed).
+        assert_eq!(parse_duration("  30s ").unwrap(), Duration::from_secs(30));
     }
 
     #[test]
@@ -907,6 +1018,9 @@ level: high
         let rule = compile_rule(raw, PathBuf::from("inline.yml")).unwrap();
         let engine = Engine { rules: vec![rule] };
         let seq = AtomicU64::new(0);
+        // `> 2` is STRICT: the 1st AND the 2nd (the threshold-th) match must NOT
+        // fire — only MORE THAN 2 (the 3rd) does. Locks the `> N` semantics
+        // against a regression to `>= N` (which would fire one match early).
         for _ in 0..2 {
             let f = engine.process(&ssh_failure_event(), "host", &seq);
             assert!(f.is_empty());
@@ -916,6 +1030,50 @@ level: high
         assert_eq!(f[0].severity_id, SeverityId::High);
         assert!(!f[0].attack.is_empty());
         assert_eq!(f[0].attack[0].id, "T1110");
+    }
+
+    #[test]
+    fn fired_group_is_removed_from_state() {
+        // `count() > 0` fires on the first match of each group. Each fired
+        // group must be removed from the map, not left as an empty deque —
+        // otherwise a stream of distinct one-shot group-by values (e.g.
+        // spoofed source IPs) parks one residual entry per value forever.
+        let agg = Aggregator::new(0, Duration::from_secs(60));
+        let t = Instant::now();
+        assert_eq!(agg.observe("ip-a".into(), t), Some("ip-a".into()));
+        assert_eq!(agg.observe("ip-b".into(), t), Some("ip-b".into()));
+        assert_eq!(agg.observe("ip-c".into(), t), Some("ip-c".into()));
+        assert_eq!(agg.group_count(), 0, "fired groups leave no residue");
+    }
+
+    #[test]
+    fn stale_silent_groups_are_swept() {
+        // A group keyed on an attacker-influenced field that is seen once and
+        // never again would linger forever without the periodic GC. Observe a
+        // large set of distinct one-shot keys, advance past the window so they
+        // are all stale, then drive enough further observes to cross a GC
+        // cadence — the stale silent groups must be reclaimed, leaving the map
+        // bounded rather than monotonically growing.
+        let window = Duration::from_millis(10);
+        let agg = Aggregator::new(1_000_000, window); // threshold never met
+        let t0 = Instant::now();
+        for i in 0..2000 {
+            assert!(agg.observe(format!("k{i}"), t0).is_none());
+        }
+        assert_eq!(agg.group_count(), 2000);
+
+        // Past the window: every `k*` is now stale. Drive one GC cadence worth
+        // of fresh observes; the sweep that fires mid-loop drops the stale
+        // groups while keeping the fresh ones.
+        let t1 = t0 + window + Duration::from_millis(1);
+        for i in 0..GC_EVERY {
+            agg.observe(format!("fresh{i}"), t1);
+        }
+        assert!(
+            agg.group_count() < 2000,
+            "stale silent groups reclaimed by GC (was {})",
+            agg.group_count()
+        );
     }
 
     #[test]

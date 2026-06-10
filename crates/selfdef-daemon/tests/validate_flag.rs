@@ -26,7 +26,11 @@ fn validate_accepts_a_valid_config() {
         .arg("--validate")
         .output()
         .expect("spawn selfdefd");
-    assert!(out.status.success(), "expected exit 0, got {:?}", out.status);
+    assert!(
+        out.status.success(),
+        "expected exit 0, got {:?}",
+        out.status
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("OK:"), "stdout was: {stdout}");
 }
@@ -36,7 +40,11 @@ fn validate_rejects_an_invalid_value() {
     // An out-of-vocabulary collector read_from is rejected by the semantic
     // fail-fast rule — the flag must surface that, not silently pass.
     let mut f = NamedTempFile::new().unwrap();
-    writeln!(f, "[collectors.auditd]\nenabled = true\nread_from = \"begining\"").unwrap();
+    writeln!(
+        f,
+        "[collectors.auditd]\nenabled = true\nread_from = \"begining\""
+    )
+    .unwrap();
     let out = selfdefd()
         .arg("--config")
         .arg(f.path())
@@ -61,5 +69,8 @@ fn validate_rejects_a_missing_file() {
         .expect("spawn selfdefd");
     assert_eq!(out.status.code(), Some(1), "expected exit 1");
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("config file not found"), "stderr was: {stderr}");
+    assert!(
+        stderr.contains("config file not found"),
+        "stderr was: {stderr}"
+    );
 }

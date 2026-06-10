@@ -48,22 +48,36 @@ fn main() {
 fn run() -> Result<()> {
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
 
-    // Help/version pass-through without policy or event logging.
-    if raw_args
+    // ssh stops parsing its own options at the target; everything from the
+    // target onward is the remote command and is forwarded verbatim. Locate
+    // the target first so we only ever inspect ssh's OWN options — never the
+    // remote command (which could otherwise be mangled into ssh flags, or have
+    // a word stripped because it collides with a denied flag).
+    let target_idx = argv::target_index(&raw_args);
+
+    // Help/version pass-through. Only ssh's own options count — a `--help` that
+    // belongs to the remote command must not short-circuit us.
+    let option_region = match target_idx {
+        Some(i) => &raw_args[..i],
+        None => &raw_args[..],
+    };
+    if option_region
         .iter()
         .any(|a| matches!(a.as_str(), "-V" | "--version" | "-h" | "--help"))
     {
         return exec_passthrough(&raw_args);
     }
 
-    let policy_file = policy::load(policy_path().as_deref()).context("loading ssh-wrap policy")?;
-    let tokens = argv::classify(&raw_args);
-    let target = argv::extract_target(&tokens);
-
-    let Some(target) = target else {
+    let Some(target_idx) = target_idx else {
         // No target — let real ssh print its usage error.
         return exec_passthrough(&raw_args);
     };
+
+    let policy_file = policy::load(policy_path().as_deref()).context("loading ssh-wrap policy")?;
+    let target = raw_args[target_idx].as_str();
+    // Classify ONLY the options before the target. The target and remote
+    // command (`raw_args[target_idx..]`) are appended untouched below.
+    let tokens = argv::classify(&raw_args[..target_idx]);
 
     let (user, host, port) = argv::parse_target(target);
     let resolved = policy::ResolvedPolicy::resolve(&policy_file, &host);
@@ -77,6 +91,8 @@ fn run() -> Result<()> {
     let filtered = argv::filter(&tokens, &denied_flags, &denied_o);
     let mut final_args = resolved.to_ssh_args();
     final_args.extend(filtered);
+    // Target spec + remote command, forwarded byte-for-byte.
+    final_args.extend(raw_args[target_idx..].iter().cloned());
 
     // Best-effort: does ~/.ssh/known_hosts contain this host?
     let first_seen = host_first_seen(&host).unwrap_or(false);
@@ -143,7 +159,10 @@ fn compute_stripped(
                 out.push(format!("-{c}"));
             }
             argv::Token::Option('o', v) | argv::Token::AttachedOption('o', v) => {
-                let key = v.split('=').next().unwrap_or("").trim();
+                // Same key extraction as argv::filter — must stay in lock-step
+                // or the event log would under-report a strip the filter made
+                // (or vice-versa). Handles both `Key=Val` and `Key Val`.
+                let key = argv::o_option_key(v);
                 if denied_o.iter().any(|k| key.eq_ignore_ascii_case(k)) {
                     out.push(format!("-o {v}"));
                 }

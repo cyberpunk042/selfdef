@@ -69,6 +69,7 @@ pub(crate) async fn snapshot() -> Result<Json<SandboxMirrorSnapshot>, (StatusCod
 /// [`AllocationRequest`]. Daemon mints `allocation_id`/`trace_id` +
 /// stamps now. Returns the issued (Pending) allocation entry.
 pub(crate) async fn allocate(
+    _cap: crate::control::RequireControl,
     Json(req): Json<AllocationRequest>,
 ) -> Result<Json<AllocationEntry>, (StatusCode, String)> {
     let path = state_path();
@@ -95,6 +96,7 @@ pub(crate) async fn allocate(
 
 /// `POST /v1/sandboxes/release` — release by id (404 if unknown).
 pub(crate) async fn release(
+    _cap: crate::control::RequireControl,
     Json(req): Json<ReleaseRequest>,
 ) -> Result<Json<SandboxMirrorSnapshot>, (StatusCode, String)> {
     let path = state_path();

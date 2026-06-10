@@ -148,15 +148,22 @@ fn is_host_char(c: char) -> bool {
 }
 
 fn pattern_match(p: &str, host: &str) -> bool {
+    // Hostname matching is case-insensitive. `decide` already lowercases the
+    // host; lowercase the pattern too so the wildcard branch is symmetric with
+    // the exact branch's `eq_ignore_ascii_case`. Without this, an uppercase
+    // `*.suffix` deny/never rule never matched the lowercased host and silently
+    // failed to block egress.
+    let host = host.to_ascii_lowercase();
     if let Some(suffix) = p.strip_prefix("*.") {
+        let suffix = suffix.to_ascii_lowercase();
         // Match any host whose suffix is `.suffix` (not the suffix itself).
-        if let Some(stripped) = host.strip_suffix(suffix) {
+        if let Some(stripped) = host.strip_suffix(&suffix) {
             // Must end with ".suffix" (i.e., the char before must be a dot).
             return stripped.ends_with('.') && stripped.len() > 1;
         }
         false
     } else {
-        p.eq_ignore_ascii_case(host)
+        p.eq_ignore_ascii_case(&host)
     }
 }
 
@@ -242,6 +249,35 @@ mod tests {
         let mut p = DnsEgressPolicy::new();
         p.allow.push("example.com".into());
         assert!(matches!(p.decide("EXAMPLE.COM"), DnsDecision::Allow { .. }));
+    }
+
+    #[test]
+    fn wildcard_match_is_case_insensitive() {
+        // SECURITY: the exact branch is case-insensitive (eq_ignore_ascii_case)
+        // but the wildcard branch used a case-SENSITIVE strip_suffix. `decide`
+        // lowercases the host, so an uppercase `*.suffix` deny/never rule never
+        // matched the host — a silent egress-control bypass. A never-resolve
+        // rule must fire regardless of the rule's letter case.
+        let mut p = DnsEgressPolicy::new();
+        p.never_resolve.push("*.Pastebin.COM".into());
+        assert!(matches!(
+            p.decide("evil.pastebin.com"),
+            DnsDecision::DenyByNever { .. }
+        ));
+        // The same applies to allow rules: an uppercase wildcard still admits
+        // its subdomains.
+        let mut p = DnsEgressPolicy::new();
+        p.allow.push("*.Example.COM".into());
+        assert!(matches!(
+            p.decide("a.example.com"),
+            DnsDecision::Allow { .. }
+        ));
+        // And the label boundary is still enforced case-insensitively (no
+        // sibling-domain bypass).
+        assert!(matches!(
+            p.decide("evilexample.com"),
+            DnsDecision::DenyImplicit
+        ));
     }
 
     #[test]

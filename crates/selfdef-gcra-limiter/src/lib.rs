@@ -69,13 +69,24 @@ impl GcraLimiter {
     }
 
     fn emission_interval(&self) -> u64 {
-        // period / capacity (rounded down; at least 1).
+        // period / capacity (rounded down; at least 1). Callers gate
+        // capacity==0 before reaching here (see arrive/peek): integer
+        // division by zero panics in EVERY build (it is not masked like
+        // overflow), so this must never run with capacity==0.
         let i = self.period_ms / self.capacity;
         i.max(1)
     }
 
     /// Try to admit a cell at now_ms.
     pub fn arrive(&mut self, now_ms: u64) -> Outcome {
+        // A serde-bypassed zero capacity defines no admission rate: new()/
+        // validate() reject it but deserialization constructs it directly.
+        // emission_interval() would then divide by zero — a panic in ALL
+        // builds (integer div-by-zero is never masked), crashing the limiter.
+        // Admit nothing (fail-CLOSED) with a max retry hint instead.
+        if self.capacity == 0 || self.period_ms == 0 {
+            return Outcome::Reject(u64::MAX);
+        }
         let interval = self.emission_interval();
         // Allowed iff now + burst >= tat.
         if now_ms.saturating_add(self.burst_ms) >= self.tat_ms {
@@ -90,6 +101,11 @@ impl GcraLimiter {
 
     /// Peek (does not mutate).
     pub fn peek(&self, now_ms: u64) -> Outcome {
+        // Same serde-bypass guard as arrive(): zero capacity/period is
+        // fail-closed (reject), never a div-by-zero panic.
+        if self.capacity == 0 || self.period_ms == 0 {
+            return Outcome::Reject(u64::MAX);
+        }
         if now_ms.saturating_add(self.burst_ms) >= self.tat_ms {
             Outcome::Allow
         } else {
@@ -181,6 +197,32 @@ mod tests {
             g.validate().unwrap_err(),
             GcraError::SchemaMismatch
         ));
+    }
+
+    #[test]
+    fn zero_capacity_serde_bypass_does_not_panic() {
+        // new()/validate() reject capacity==0, but serde can deserialize a
+        // limiter with it directly. emission_interval() would divide by zero
+        // — a panic in every build — the first time arrive() runs. The guard
+        // makes it fail-closed (admit nothing) instead of crashing.
+        let mut g = GcraLimiter {
+            schema_version: SCHEMA_VERSION.into(),
+            period_ms: 1000,
+            capacity: 0, // bypassed invalid config
+            burst_ms: 0,
+            tat_ms: 0,
+        };
+        assert_eq!(g.arrive(0), Outcome::Reject(u64::MAX)); // must not panic
+        assert_eq!(g.peek(0), Outcome::Reject(u64::MAX)); // must not panic
+        // A zero period is equally guarded.
+        let mut g2 = GcraLimiter {
+            schema_version: SCHEMA_VERSION.into(),
+            period_ms: 0,
+            capacity: 10,
+            burst_ms: 0,
+            tat_ms: 0,
+        };
+        assert_eq!(g2.arrive(0), Outcome::Reject(u64::MAX)); // must not panic
     }
 
     #[test]

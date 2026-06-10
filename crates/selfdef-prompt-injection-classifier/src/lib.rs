@@ -122,10 +122,16 @@ impl Classifier {
             signals.push(Signal::JailbreakChain);
         }
         // Obfuscation: zero-width chars present.
-        if text
-            .chars()
-            .any(|c| matches!(c, '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{FEFF}'))
-        {
+        if text.chars().any(|c| {
+            // Zero-width code points used to hide / fragment instructions. Kept
+            // in lock-step with `selfdef-input-canonicalization`'s zero-width
+            // set — U+2060 WORD JOINER was previously missing here, letting a
+            // U+2060-only obfuscation slip past the signal.
+            matches!(
+                c,
+                '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}' | '\u{FEFF}'
+            )
+        }) {
             signals.push(Signal::Obfuscation);
         }
 
@@ -220,6 +226,17 @@ mod tests {
     #[test]
     fn obfuscation_zero_width_detected() {
         let text = "ignore\u{200B} normal text"; // zero-width space
+        let c = Classifier::classify(text);
+        assert!(c.signals.contains(&Signal::Obfuscation));
+    }
+
+    #[test]
+    fn obfuscation_word_joiner_detected() {
+        // U+2060 WORD JOINER is a zero-width code point (the sister
+        // `input-canonicalization` strips it as such). The obfuscation detector
+        // omitted it, so a payload obfuscated purely with U+2060 evaded the
+        // Obfuscation signal — a zero-width evasion gap.
+        let text = "transfer\u{2060}funds";
         let c = Classifier::classify(text);
         assert!(c.signals.contains(&Signal::Obfuscation));
     }

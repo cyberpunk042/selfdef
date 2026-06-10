@@ -76,6 +76,13 @@ impl CountMinSketch {
 
     /// Add n to key's d cells.
     pub fn add(&mut self, key: &str, n: u64) {
+        // col() computes `h % self.width`; a serde-bypassed zero width
+        // (new()/validate() reject it, deserialization does not) would make
+        // that modulo panic in every build. A zero-dimension sketch holds
+        // nothing — no-op rather than crash.
+        if self.width == 0 || self.depth == 0 {
+            return;
+        }
         for r in 0..self.depth {
             let c = self.col(r, key);
             let idx = (r as usize) * (self.width as usize) + c;
@@ -85,6 +92,11 @@ impl CountMinSketch {
 
     /// Estimate key frequency (min across rows).
     pub fn estimate(&self, key: &str) -> u64 {
+        // Mirror add()'s guard: a serde-bypassed zero dimension would panic
+        // in col()'s modulo. An empty sketch has seen nothing → estimate 0.
+        if self.width == 0 || self.depth == 0 {
+            return 0;
+        }
         let mut best = u64::MAX;
         for r in 0..self.depth {
             let c = self.col(r, key);
@@ -121,6 +133,21 @@ impl CountMinSketch {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_dim_serde_bypass_does_not_panic() {
+        // new()/validate() reject width==0, but serde can construct it. col()'s
+        // `% self.width` would panic in every build. Guard makes add a no-op
+        // and estimate return 0 (empty sketch) instead of crashing.
+        let mut s = CountMinSketch {
+            schema_version: SCHEMA_VERSION.into(),
+            depth: 4,
+            width: 0,
+            cells: Vec::new(),
+        };
+        s.add("k", 5); // must not panic
+        assert_eq!(s.estimate("k"), 0); // must not panic
+    }
 
     #[test]
     fn add_then_estimate_exact_for_single_key() {

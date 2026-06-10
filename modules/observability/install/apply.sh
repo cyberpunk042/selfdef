@@ -68,7 +68,11 @@ done
 
 # Render scrape config.
 NEW_SCRAPE=$(mktemp)
-trap 'rm -f "$NEW_SCRAPE" "$NEW_DASHBOARD"' EXIT
+# Use :- so the trap is safe under `set -u` if apply.sh exits between here and
+# the NEW_DASHBOARD assignment below (e.g. a render/manifest failure) — without
+# it the trap itself errors "NEW_DASHBOARD: unbound variable", masking the real
+# cause.
+trap 'rm -f "${NEW_SCRAPE:-}" "${NEW_DASHBOARD:-}"' EXIT
 render_scrape_config "${ASSETS_DIR}/scrape/selfdef.yml.template" "$NEW_SCRAPE" "$SCRAPE_TARGETS"
 
 if [[ ! -f "$SCRAPE_DST" ]] || ! cmp -s "$NEW_SCRAPE" "$SCRAPE_DST"; then

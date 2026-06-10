@@ -34,6 +34,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use selfdef_core::Event;
@@ -52,12 +53,22 @@ pub const DEFAULT_WRITE_BINARY: &str = "/usr/bin/write";
 /// write — same posture as wall.
 pub const DEFAULT_SEVERITY_FLOOR: SeverityId = SeverityId::High;
 
+/// Hard ceiling on one per-user write(1) invocation. write(2) to a
+/// flow-controlled TTY (the target user pressed Ctrl-S — the classic
+/// jam) blocks INDEFINITELY, and the notifier chain awaits channels
+/// sequentially — one jammed terminal would silence every later
+/// channel. On expiry the child is killed (`kill_on_drop`) and the
+/// per-user loop continues to the remaining users (same posture as a
+/// non-zero exit). Worst case is users × timeout, which stays bounded.
+pub const DEFAULT_SEND_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// `write(1)` per-user session-attention channel.
 #[derive(Debug, Clone)]
 pub struct WriteChannel {
     binary: PathBuf,
     severity_floor: SeverityId,
     users: Vec<String>,
+    send_timeout: Duration,
 }
 
 impl WriteChannel {
@@ -72,7 +83,17 @@ impl WriteChannel {
             binary: PathBuf::from(DEFAULT_WRITE_BINARY),
             severity_floor: DEFAULT_SEVERITY_FLOOR,
             users: Vec::new(),
+            send_timeout: DEFAULT_SEND_TIMEOUT,
         }
+    }
+
+    /// Builder: override the per-user write(1) deadline
+    /// ([`DEFAULT_SEND_TIMEOUT`]). Tests use a short value with a slow
+    /// stand-in binary to lock the no-hang contract.
+    #[must_use]
+    pub fn with_send_timeout(mut self, timeout: Duration) -> Self {
+        self.send_timeout = timeout;
+        self
     }
 
     /// Builder: override the `write` binary path.
@@ -134,6 +155,7 @@ impl WriteChannel {
             binary: binary.to_path_buf(),
             severity_floor: floor,
             users: users.to_vec(),
+            send_timeout: DEFAULT_SEND_TIMEOUT,
         })
     }
 
@@ -166,7 +188,7 @@ impl WriteChannel {
         let mut delivered_any = false;
         let mut last_spawn_err: Option<String> = None;
         for user in &self.users {
-            match write_to_user(&self.binary, user, message).await {
+            match write_to_user(&self.binary, user, message, self.send_timeout).await {
                 Ok(true) => delivered_any = true,
                 Ok(false) => {
                     // write(1) exited non-zero (user not logged in,
@@ -254,32 +276,55 @@ impl From<WriteDeliveryError> for ChannelError {
 /// child exits non-zero (e.g. user not logged in / mesg disabled);
 /// `Err` on spawn-time errors only (binary missing, permission
 /// denied at exec time).
-async fn write_to_user(binary: &Path, user: &str, message: &str) -> Result<bool, std::io::Error> {
+async fn write_to_user(
+    binary: &Path,
+    user: &str,
+    message: &str,
+    send_timeout: Duration,
+) -> Result<bool, std::io::Error> {
     use tokio::io::AsyncWriteExt as _;
+    // kill_on_drop: when the deadline below fires, the dropped future takes
+    // the child with it instead of leaking a write(1) wedged on a
+    // flow-controlled TTY.
     let mut child = tokio::process::Command::new(binary)
         .arg(user)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
         .spawn()?;
-    if let Some(stdin) = child.stdin.as_mut() {
-        // EPIPE tolerance per the wall(1) precedent: the child may
-        // close stdin (or exit entirely) before we finish writing.
-        // Don't error eagerly — the wait below surfaces the real
-        // exit status.
-        if let Err(e) = stdin.write_all(message.as_bytes()).await
-            && e.kind() != std::io::ErrorKind::BrokenPipe
-        {
-            return Err(e);
+    // Stdin writes AND the wait sit inside the deadline: a jammed TTY can
+    // park the child (and, through the full pipe, our writes) at any point.
+    let work = async move {
+        if let Some(stdin) = child.stdin.as_mut() {
+            // EPIPE tolerance per the wall(1) precedent: the child may
+            // close stdin (or exit entirely) before we finish writing.
+            // Don't error eagerly — the wait below surfaces the real
+            // exit status.
+            if let Err(e) = stdin.write_all(message.as_bytes()).await
+                && e.kind() != std::io::ErrorKind::BrokenPipe
+            {
+                return Err(e);
+            }
+            if let Err(e) = stdin.shutdown().await
+                && e.kind() != std::io::ErrorKind::BrokenPipe
+            {
+                return Err(e);
+            }
         }
-        if let Err(e) = stdin.shutdown().await
-            && e.kind() != std::io::ErrorKind::BrokenPipe
-        {
-            return Err(e);
-        }
+        let output = child.wait_with_output().await?;
+        Ok(output.status.success())
+    };
+    match tokio::time::timeout(send_timeout, work).await {
+        Ok(r) => r,
+        Err(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            format!(
+                "write(1) to user {user:?} timed out after {}s (child killed; jammed TTY?)",
+                send_timeout.as_secs_f64()
+            ),
+        )),
     }
-    let output = child.wait_with_output().await?;
-    Ok(output.status.success())
 }
 
 /// POSIX-ish username allowlist. Rejects anything outside
@@ -603,6 +648,45 @@ mod tests {
         assert!(
             result.is_ok(),
             "multi-user delivery should succeed; got {result:?}"
+        );
+    }
+
+    /// The no-hang contract: a write(1) wedged on a flow-controlled TTY
+    /// (stand-in: a script that swallows stdin then sleeps past the
+    /// deadline) must time out per-user and let the loop continue — NOT
+    /// hang the sequential notifier chain. Worst case stays bounded at
+    /// users × timeout.
+    #[tokio::test]
+    async fn jammed_write_times_out_instead_of_blocking_forever() {
+        use std::io::Write as _;
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("jammed-write");
+        {
+            let mut f = std::fs::File::create(&script).unwrap();
+            f.write_all(b"#!/bin/sh\ncat >/dev/null\nsleep 60\n")
+                .unwrap();
+        }
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let w = WriteChannel::new()
+            .with_binary(&script)
+            .with_users(["alice"])
+            .with_severity_floor(SeverityId::High)
+            .with_send_timeout(std::time::Duration::from_millis(200));
+
+        let start = std::time::Instant::now();
+        let result = <WriteChannel as Notifier>::notify(&w, &finding_event()).await;
+        let elapsed = start.elapsed();
+
+        // Every target timed out → surfaces as the channel's error path.
+        assert!(result.is_err(), "jammed write must error, got {result:?}");
+        let msg = format!("{}", result.unwrap_err());
+        assert!(msg.contains("timed out"), "expected timeout error: {msg}");
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "must return promptly after the deadline, took {elapsed:?}"
         );
     }
 }

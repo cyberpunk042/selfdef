@@ -193,6 +193,11 @@ impl Effector for RealEffector {
         if target_pid == 0 {
             return Err("target_pid=0 with empty container_id; nothing to kill".into());
         }
+        if target_pid == 1 {
+            // Backstop (the orchestrator already refuses pid <= 1 on the host
+            // path): SIGKILL-ing init halts the host — never do it.
+            return Err("refusing to SIGKILL pid 1 (init); would halt the host".into());
+        }
         let st = Command::new("kill")
             .args(["-9", &target_pid.to_string()])
             .status()
@@ -276,10 +281,21 @@ impl<E: Effector> Responder<E> {
         let action = classify(event);
         let mut steps = Vec::with_capacity(3);
 
-        // Step 1 — SIGKILL.
-        let sk_outcome = match self.effector.sigkill(event.pid, &event.container_id) {
-            Ok(()) => StepOutcome::Ok,
-            Err(e) => StepOutcome::Failed(e),
+        // Step 1 — SIGKILL. Never let the host path signal pid 0 or pid 1: `kill
+        // 0` hits the responder's whole process group and SIGKILL-ing pid 1
+        // (init) halts the machine, so a crafted or buggy Tetragon event must
+        // not turn the guardian into a host-down switch. The container path is
+        // unaffected — it kills a container, not a host pid.
+        let sk_outcome = if event.container_id.is_empty() && event.pid <= 1 {
+            StepOutcome::Skipped(format!(
+                "refusing host SIGKILL of pid {} (init/invalid); would halt the host",
+                event.pid
+            ))
+        } else {
+            match self.effector.sigkill(event.pid, &event.container_id) {
+                Ok(()) => StepOutcome::Ok,
+                Err(e) => StepOutcome::Failed(e),
+            }
         };
         steps.push(StepResult {
             step: ResponseStep::Sigkill,
@@ -462,6 +478,20 @@ pub fn audit_chain_check(ocsf_jsonl: &Path) -> Result<usize, GuardianError> {
                 return Err(GuardianError::AuditChainBreak {
                     line: idx + 1,
                     detail: "prev_event_sha256 missing from non-first event".into(),
+                });
+            }
+            (None, Some(got)) => {
+                // First event of the file. `emit_ocsf_detection_2004` always
+                // writes a null prev for the opening event (last_line_sha256
+                // returns None on an empty file), so a first line that claims a
+                // predecessor means the genuine opening events were deleted —
+                // prefix/head truncation. A pure forward walk would accept it;
+                // flag it as a chain break.
+                return Err(GuardianError::AuditChainBreak {
+                    line: idx + 1,
+                    detail: format!(
+                        "first event claims predecessor prev_event_sha256={got} (head truncated)"
+                    ),
                 });
             }
             _ => {}
@@ -673,6 +703,54 @@ mod tests {
     }
 
     #[test]
+    fn respond_refuses_host_sigkill_of_pid_1() {
+        // A Tetragon event targeting pid 1 with no container scope must never
+        // reach `kill -9 1` — SIGKILL-ing init halts the host. The sibling
+        // responder (SigtermProcess) and apparmor backend both guard pid 1.
+        let dir = TempDir::new().unwrap();
+        let sigkills = Rc::new(RefCell::new(Vec::new()));
+        let eff = StubEffector {
+            sigkills: sigkills.clone(),
+            ..StubEffector::default()
+        };
+        let r = make_responder(eff, &dir);
+        let mut ev = sample_event();
+        ev.pid = 1;
+        ev.container_id = String::new();
+        ev.action = "ProcessExec".into();
+        let v = r.respond(&ev).unwrap();
+        // The effector was never asked to kill pid 1.
+        assert!(
+            sigkills.borrow().is_empty(),
+            "must not invoke kill on host pid 1"
+        );
+        // Recorded as a safety Skipped, not Ok; audit/console still run.
+        assert!(matches!(
+            v.response_steps[0].outcome,
+            StepOutcome::Skipped(_)
+        ));
+        assert!(!v.sigkill_ok());
+        assert!(v.audit_append_ok());
+
+        // The container path is unaffected — it kills a container, not host pid 1.
+        let sigkills2 = Rc::new(RefCell::new(Vec::new()));
+        let eff2 = StubEffector {
+            sigkills: sigkills2.clone(),
+            ..StubEffector::default()
+        };
+        let r2 = make_responder(eff2, &dir);
+        let mut ev2 = sample_event();
+        ev2.pid = 1;
+        ev2.container_id = "abc123".into();
+        let _ = r2.respond(&ev2).unwrap();
+        assert_eq!(
+            sigkills2.borrow().len(),
+            1,
+            "container-scoped kill still proceeds"
+        );
+    }
+
+    #[test]
     fn respond_records_sigkill_failure_continues_to_step_2_and_3() {
         let dir = TempDir::new().unwrap();
         let eff = StubEffector {
@@ -812,6 +890,37 @@ mod tests {
             err,
             GuardianError::AuditChainBreak { line: 2, .. }
         ));
+    }
+
+    #[test]
+    fn audit_chain_check_detects_head_truncation() {
+        // A legitimate chain's first event carries a null prev. If the genuine
+        // opening events are deleted, the new first line still claims a real
+        // predecessor hash referencing a now-absent line. A forward-only walk
+        // would accept it; the chain check must flag a first event that claims
+        // a predecessor as a break (prefix-deletion tamper).
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("p.jsonl");
+        let eff = StubEffector::default();
+        let r = make_responder(eff, &dir);
+        for i in 0..3u32 {
+            let mut e = sample_event();
+            e.event_id = format!("evt-{i}");
+            e.ts_ms += u64::from(i);
+            let v = r.respond(&e).unwrap();
+            emit_ocsf_detection_2004(&path, &v).unwrap();
+        }
+        assert_eq!(audit_chain_check(&path).unwrap(), 3);
+        // Drop the genuine first event; the orphaned tail now opens with a line
+        // that claims a predecessor.
+        let text = fs::read_to_string(&path).unwrap();
+        let tail: String = text.lines().skip(1).collect::<Vec<_>>().join("\n");
+        fs::write(&path, format!("{tail}\n")).unwrap();
+        let err = audit_chain_check(&path).unwrap_err();
+        assert!(
+            matches!(err, GuardianError::AuditChainBreak { line: 1, .. }),
+            "head-truncated chain must break at line 1, got {err:?}"
+        );
     }
 
     #[test]

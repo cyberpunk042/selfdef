@@ -21,7 +21,7 @@ use selfdef_core::Event;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -99,6 +99,20 @@ impl EventstreamCollector {
         self
     }
 
+    /// Open the input through the integrity gate when enabled (F-2027-035),
+    /// plain otherwise. Shared by the startup open and the rotation reopen so
+    /// a rotated-in file can never bypass the check the original file passed.
+    fn open_input(&self) -> Result<std::fs::File, EventstreamError> {
+        if self.integrity.enabled {
+            open_with_integrity_check(&self.input_path, &self.integrity)
+        } else {
+            std::fs::OpenOptions::new()
+                .read(true)
+                .open(&self.input_path)
+                .map_err(EventstreamError::Io)
+        }
+    }
+
     pub async fn run(&self, shutdown: CancellationToken) -> Result<(), EventstreamError> {
         info!(path = %self.input_path.display(), "eventstream collector starting");
         wait_for_file(&self.input_path, &shutdown).await;
@@ -113,20 +127,28 @@ impl EventstreamCollector {
         // from, so a post-open replacement on disk can't change
         // what we validated. The opened file is moved into the
         // tokio runtime below.
-        let std_file = if self.integrity.enabled {
-            open_with_integrity_check(&self.input_path, &self.integrity)?
-        } else {
-            std::fs::OpenOptions::new()
-                .read(true)
-                .open(&self.input_path)
-                .map_err(EventstreamError::Io)?
-        };
+        let std_file = self.open_input()?;
         let mut file = tokio::fs::File::from_std(std_file);
         if self.read_from == ReadFrom::End {
             file.seek(std::io::SeekFrom::End(0)).await?;
         }
+        // Rotation detection state (same doctrine as the suricata / tetragon /
+        // auditd tailers): the JSONL input is rotated by logrotate
+        // (rename+create or copytruncate); without detection the collector
+        // tails the dead inode forever and silently goes blind after the
+        // first rotation.
+        let mut read_pos = file.stream_position().await.unwrap_or(0);
+        let mut open_inode = {
+            use std::os::unix::fs::MetadataExt as _;
+            file.metadata().await.map(|m| m.ino()).unwrap_or(0)
+        };
+        // Inode of a rotated-in file that FAILED the integrity check — kept so
+        // the refusal is logged once per offending inode, not every 200ms poll.
+        let mut refused_inode: Option<u64> = None;
         let mut reader = BufReader::new(file);
         let mut buf = String::new();
+        // Holds a partial line read before its terminating newline arrived.
+        let mut pending = String::new();
 
         loop {
             if shutdown.is_cancelled() {
@@ -138,16 +160,71 @@ impl EventstreamCollector {
                 () = shutdown.cancelled() => return Ok(()),
             };
             if n == 0 {
+                // EOF — check for rotation before waiting. The reopen goes
+                // through the SAME integrity-checked open as startup
+                // (F-2027-035): a rotated-in file that fails the check is
+                // REFUSED (fail-closed — never read an unverified file) and
+                // retried on every poll, so it is picked up the moment its
+                // owner/mode becomes compliant.
+                {
+                    use std::os::unix::fs::MetadataExt as _;
+                    if let Ok(md) = tokio::fs::metadata(&self.input_path).await {
+                        if selfdef_collector_util::should_reopen(
+                            read_pos,
+                            md.len(),
+                            open_inode,
+                            md.ino(),
+                        ) {
+                            match self.open_input() {
+                                Ok(std_file) => {
+                                    let f = tokio::fs::File::from_std(std_file);
+                                    open_inode =
+                                        f.metadata().await.map(|m| m.ino()).unwrap_or(open_inode);
+                                    reader = BufReader::new(f);
+                                    read_pos = 0;
+                                    // A partial from the dead file can never
+                                    // complete; the fresh file starts at a
+                                    // line boundary.
+                                    pending.clear();
+                                    refused_inode = None;
+                                    info!(
+                                        path = %self.input_path.display(),
+                                        "eventstream input rotated/truncated; reopened"
+                                    );
+                                    continue;
+                                }
+                                Err(e) => {
+                                    if refused_inode != Some(md.ino()) {
+                                        warn!(
+                                            error = %e,
+                                            path = %self.input_path.display(),
+                                            "rotated-in eventstream file failed the integrity \
+                                             check; refusing to read it (will reopen once it \
+                                             becomes compliant)"
+                                        );
+                                        refused_inode = Some(md.ino());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Plain EOF — wait for more. `pending` is preserved across the
+                // poll so a half-written line completes on the next read.
                 tokio::time::sleep(POLL_INTERVAL).await;
                 continue;
             }
-            let line = buf.trim();
-            if line.is_empty() {
-                continue;
-            }
-            match serde_json::from_str::<Event>(line) {
-                Ok(event) => self.publisher.publish_lossy(event),
-                Err(e) => debug!(error = %e, "skipping malformed eventstream line"),
+            read_pos += n as u64;
+            // Accumulate, then process only COMPLETE ('\n'-terminated) lines,
+            // leaving any trailing partial buffered. A read that didn't reach a
+            // newline is a partial write racing the reader; parsing it now would
+            // split — and drop — the event.
+            pending.push_str(&buf);
+            for line in selfdef_collector_util::drain_complete_lines(&mut pending) {
+                match serde_json::from_str::<Event>(&line) {
+                    Ok(event) => self.publisher.publish_lossy(event),
+                    Err(e) => debug!(error = %e, "skipping malformed eventstream line"),
+                }
             }
         }
     }
@@ -509,5 +586,141 @@ mod tests {
 
         shutdown.cancel();
         let _ = tokio::time::timeout(Duration::from_secs(2), task).await;
+    }
+
+    fn event_line(source: &str) -> String {
+        let event = Event::new(
+            ClassUid::SSH_ACTIVITY,
+            1,
+            SeverityId::Informational,
+            "test-host",
+            source,
+            0,
+        );
+        serde_json::to_string(&event).unwrap()
+    }
+
+    /// The JSONL input is rotated by logrotate (rename+create). The collector
+    /// must detect the new inode at EOF and reopen — otherwise it tails the
+    /// renamed-away file forever and silently goes blind (the same bug fixed
+    /// for the suricata/tetragon/auditd tailers).
+    #[tokio::test]
+    async fn reopens_after_log_rotation() {
+        use std::io::Write as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("events.jsonl");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(f, "{}", event_line("before-rotation")).unwrap();
+        }
+
+        let bus = Bus::new(16);
+        let mut sub = bus.subscribe();
+        let collector = EventstreamCollector::new(path.clone(), ReadFrom::Start, bus.publisher());
+        let shutdown = CancellationToken::new();
+        let sd = shutdown.clone();
+        let task = tokio::spawn(async move { collector.run(sd).await });
+
+        let e1 = tokio::time::timeout(Duration::from_secs(3), sub.recv())
+            .await
+            .expect("first event timed out")
+            .expect("recv error");
+        assert_eq!(e1.source, "before-rotation");
+
+        // logrotate: rename the live file aside, create fresh at the same path.
+        std::fs::rename(&path, dir.path().join("events.jsonl.1")).unwrap();
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(f, "{}", event_line("after-rotation")).unwrap();
+        }
+
+        let mut got_after = false;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while !got_after && tokio::time::Instant::now() < deadline {
+            if let Ok(Ok(ev)) = tokio::time::timeout(Duration::from_secs(1), sub.recv()).await {
+                if ev.source == "after-rotation" {
+                    got_after = true;
+                }
+            }
+        }
+        shutdown.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), task).await;
+        assert!(
+            got_after,
+            "collector did not pick up events from the rotated-in file"
+        );
+    }
+
+    /// Fail-closed reopen: with the integrity check enabled, a rotated-in
+    /// file that VIOLATES the check (world-writable) must NOT be read — and
+    /// must be picked up the moment it becomes compliant (the reopen retries
+    /// each poll against the same refused inode, so a later chmod recovers
+    /// without any inode change). Locks the reopen path going through
+    /// `open_input` rather than a bare `File::open` integrity bypass.
+    #[tokio::test]
+    async fn rotated_in_noncompliant_file_refused_until_fixed() {
+        use std::io::Write as _;
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("events.jsonl");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(f, "{}", event_line("before-rotation")).unwrap();
+        }
+        // Tight, compliant mode on the original file.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+
+        let bus = Bus::new(16);
+        let mut sub = bus.subscribe();
+        let collector = EventstreamCollector::new(path.clone(), ReadFrom::Start, bus.publisher())
+            .with_integrity_check(IntegrityCheck {
+                enabled: true,
+                allowed_owners: vec![],
+            });
+        let shutdown = CancellationToken::new();
+        let sd = shutdown.clone();
+        let task = tokio::spawn(async move { collector.run(sd).await });
+
+        let e1 = tokio::time::timeout(Duration::from_secs(3), sub.recv())
+            .await
+            .expect("first event timed out")
+            .expect("recv error");
+        assert_eq!(e1.source, "before-rotation");
+
+        // Rotate in a WORLD-WRITABLE file — integrity must refuse it.
+        std::fs::rename(&path, dir.path().join("events.jsonl.1")).unwrap();
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(f, "{}", event_line("from-tampered-file")).unwrap();
+        }
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)).unwrap();
+
+        // Its events must NOT be emitted while non-compliant.
+        let refused = tokio::time::timeout(Duration::from_millis(900), sub.recv()).await;
+        assert!(
+            refused.is_err(),
+            "events from a non-compliant rotated-in file must not be emitted, got {refused:?}"
+        );
+
+        // Fix the mode — the per-poll reopen retry must now accept the file
+        // (same inode; no further rotation needed).
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+        let mut got_after = false;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while !got_after && tokio::time::Instant::now() < deadline {
+            if let Ok(Ok(ev)) = tokio::time::timeout(Duration::from_secs(1), sub.recv()).await {
+                if ev.source == "from-tampered-file" {
+                    got_after = true;
+                }
+            }
+        }
+        shutdown.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), task).await;
+        assert!(
+            got_after,
+            "collector did not pick up the rotated-in file after it became compliant"
+        );
     }
 }

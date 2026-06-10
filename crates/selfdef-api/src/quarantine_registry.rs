@@ -56,6 +56,7 @@ pub(crate) async fn snapshot() -> Result<Json<QuarantineMirrorSnapshot>, (Status
 /// `POST /v1/quarantine/release` — body is the operator-signed
 /// [`OverrideRequest`].
 pub(crate) async fn release(
+    _cap: crate::control::RequireControl,
     Json(req): Json<OverrideRequest>,
 ) -> Result<Json<QuarantineMirrorSnapshot>, (StatusCode, String)> {
     let path = state_path();
@@ -75,6 +76,7 @@ pub(crate) async fn release(
 /// `POST /v1/quarantine/forfeit` — body is the operator-signed
 /// [`OverrideRequest`].
 pub(crate) async fn forfeit(
+    _cap: crate::control::RequireControl,
     Json(req): Json<OverrideRequest>,
 ) -> Result<Json<QuarantineMirrorSnapshot>, (StatusCode, String)> {
     let path = state_path();

@@ -71,6 +71,7 @@ pub(crate) async fn snapshot() -> Result<Json<TrustScoreMirrorSnapshot>, (Status
 
 /// `POST /v1/trust-scores/admit`.
 pub(crate) async fn admit(
+    _cap: crate::control::RequireControl,
     Json(req): Json<AdmitRequest>,
 ) -> Result<Json<TrustScoreMirrorSnapshot>, (StatusCode, String)> {
     if req.signature.is_empty() {
@@ -91,6 +92,7 @@ pub(crate) async fn admit(
 
 /// `POST /v1/trust-scores/operator-delta`.
 pub(crate) async fn operator_delta(
+    _cap: crate::control::RequireControl,
     Json(req): Json<OperatorDeltaRequest>,
 ) -> Result<Json<TrustScoreMirrorSnapshot>, (StatusCode, String)> {
     let path = state_path();

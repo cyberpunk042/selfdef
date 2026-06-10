@@ -182,11 +182,18 @@ impl SubstrateEgressQuota {
 
     fn in_window_bytes(&self, profile: Profile, cfg: &ProfileEgress, now_ms: u64) -> u64 {
         let cutoff = now_ms.saturating_sub(cfg.window_ms);
+        // Saturating fold, not Iterator::sum: `sum::<u64>()` is plain `+`
+        // (panic in debug, wrap in release). A single record with `bytes` near
+        // u64::MAX — e.g. a corrupt/deserialized record set — would wrap the
+        // in-window total to a small value, so `account`'s `would_total` reads
+        // BELOW the cap and admits egress the quota should deny (fail-OPEN).
+        // The companion `would = used.saturating_add(bytes)` already saturates;
+        // make the running sum match.
         self.records
             .iter()
             .filter(|r| r.profile == profile && r.ts_ms >= cutoff && r.ts_ms <= now_ms)
             .map(|r| r.bytes)
-            .sum()
+            .fold(0u64, |a, b| a.saturating_add(b))
     }
 
     /// Account for a candidate send of `bytes` at `now_ms`.
@@ -214,6 +221,16 @@ impl SubstrateEgressQuota {
                 cap: cfg.max_request_bytes,
             });
         }
+        // Self-bound the record set. account() is the per-send hot path; without
+        // this it appends a record on every accepted send and never trims, so a
+        // long-running daemon that calls account() but forgets the separate
+        // public rotate() would grow records without bound AND make
+        // in_window_bytes() (a full scan) O(n) per call — O(n²) overall — on a
+        // security-critical egress-budget path. rotate() drops only records
+        // older than the largest configured window, which lie outside every
+        // profile's per-window cutoff and so never contribute to an in_window
+        // sum: verdicts are unchanged, memory and scan cost stay bounded.
+        self.rotate(now_ms);
         let used = self.in_window_bytes(profile, &cfg, now_ms);
         let would = used.saturating_add(bytes);
         if would > cfg.window_budget_bytes {
@@ -294,6 +311,31 @@ mod tests {
     }
 
     #[test]
+    fn in_window_sum_saturates_instead_of_wrapping_to_fail_open() {
+        // A corrupt/deserialized record set whose in-window bytes sum past
+        // u64::MAX must NOT wrap the running total below the budget and admit
+        // egress the quota should deny. Plain Iterator::sum panicked in debug /
+        // wrapped in release (fail-OPEN); the saturating fold caps at u64::MAX
+        // so the budget is still seen as exhausted.
+        let mut q = SubstrateEgressQuota::canonical();
+        q.records.push(EgressRecord {
+            ts_ms: 0,
+            bytes: u64::MAX - 10,
+            profile: Profile::Fast,
+        });
+        q.records.push(EgressRecord {
+            ts_ms: 0,
+            bytes: 100,
+            profile: Profile::Fast,
+        });
+        let v = q.account(Profile::Fast, 0, 0).unwrap();
+        assert!(
+            matches!(v, EgressVerdict::BudgetExhausted { .. }),
+            "overflowing in-window sum must still exhaust the budget, got {v:?}"
+        );
+    }
+
+    #[test]
     fn unconfigured_profile() {
         let mut q = SubstrateEgressQuota::canonical();
         q.profiles.clear();
@@ -332,6 +374,26 @@ mod tests {
         q.account(Profile::Fast, 1024, 0).unwrap();
         q.rotate(10 * 60_000);
         assert!(q.records.is_empty());
+    }
+
+    #[test]
+    fn account_self_bounds_records_without_explicit_rotate() {
+        // The per-send hot path must not leak: accounting repeatedly, each call
+        // beyond the max window after the last, must keep records bounded even
+        // though the caller never invokes rotate itself.
+        let mut q = SubstrateEgressQuota::canonical();
+        for i in 0..1000u64 {
+            let now = i * (10 * 60_000); // 10 min apart > 5 min window
+            assert!(matches!(
+                q.account(Profile::Fast, 1024, now).unwrap(),
+                EgressVerdict::Accepted
+            ));
+        }
+        assert!(
+            q.records.len() < 5,
+            "records self-bounded by account (was {})",
+            q.records.len()
+        );
     }
 
     #[test]

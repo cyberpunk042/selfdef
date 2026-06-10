@@ -55,6 +55,13 @@ impl FixedInterval {
 
     /// Poll; returns count of elapsed periods.
     pub fn poll(&mut self, now_ms: u64) -> u32 {
+        // new()/validate() reject period_ms==0, but serde deserialization can
+        // set it directly; `elapsed / self.period_ms` would then panic in every
+        // build (integer div-by-zero is never masked). A zero period defines no
+        // tick cadence — report zero elapsed periods rather than crash.
+        if self.period_ms == 0 {
+            return 0;
+        }
         let elapsed = now_ms.saturating_sub(self.last_tick_ms);
         let n = (elapsed / self.period_ms) as u32;
         if n > 0 {
@@ -84,6 +91,20 @@ impl FixedInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_period_serde_bypass_does_not_panic() {
+        // new()/validate() reject period_ms==0, but serde can construct it.
+        // `elapsed / self.period_ms` would panic in every build. Guard returns
+        // 0 elapsed periods instead of crashing.
+        let mut i = FixedInterval {
+            schema_version: SCHEMA_VERSION.into(),
+            period_ms: 0,
+            last_tick_ms: 0,
+            ticks: 0,
+        };
+        assert_eq!(i.poll(10_000), 0); // must not panic
+    }
 
     #[test]
     fn no_ticks_within_period() {
