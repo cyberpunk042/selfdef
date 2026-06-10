@@ -44,6 +44,14 @@ pub enum CuckooError {
     /// Zero buckets.
     #[error("n_buckets and max_relocations must be >= 1")]
     BadConfig,
+    /// n_buckets not a power of two — the XOR-based alternate-bucket function
+    /// (`alt(i) = (i XOR h(fp)) mod n`) is only an involution when `n` is a
+    /// power of two. With any other `n`, `alt(alt(i)) != i`, so a relocated
+    /// fingerprint can land outside an item's two candidate buckets and become
+    /// unfindable — a silent FALSE NEGATIVE (a present key reported absent),
+    /// which breaks the filter's no-false-negative contract.
+    #[error("n_buckets {0} must be a power of two")]
+    NBucketsNotPowerOfTwo(u32),
     /// Geometry.
     #[error("cells length must equal n_buckets * 4")]
     BadGeometry,
@@ -73,6 +81,9 @@ impl CuckooFilter {
     pub fn new(n_buckets: u32, max_relocations: u32) -> Result<Self, CuckooError> {
         if n_buckets == 0 || max_relocations == 0 {
             return Err(CuckooError::BadConfig);
+        }
+        if !n_buckets.is_power_of_two() {
+            return Err(CuckooError::NBucketsNotPowerOfTwo(n_buckets));
         }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -178,6 +189,9 @@ impl CuckooFilter {
         if self.n_buckets == 0 || self.max_relocations == 0 {
             return Err(CuckooError::BadConfig);
         }
+        if !self.n_buckets.is_power_of_two() {
+            return Err(CuckooError::NBucketsNotPowerOfTwo(self.n_buckets));
+        }
         if self.cells.len() != (self.n_buckets as usize) * SLOTS_PER_BUCKET {
             return Err(CuckooError::BadGeometry);
         }
@@ -194,6 +208,36 @@ mod tests {
         let mut f = CuckooFilter::new(64, 100).unwrap();
         f.insert("a").unwrap();
         assert!(f.contains("a"));
+    }
+
+    #[test]
+    fn non_power_of_two_n_buckets_rejected() {
+        // The XOR-based alternate-bucket function is only an involution for a
+        // power-of-two bucket count. A non-power-of-two count silently breaks
+        // `alt(alt(i)) == i`, letting relocated fingerprints escape their
+        // candidate buckets — a false negative that defeats a replay/dedup
+        // filter. Such configs must be refused at construction, and a
+        // deserialized filter carrying one must fail validation.
+        for n in [3u32, 6, 10, 100, 1000] {
+            assert!(
+                matches!(
+                    CuckooFilter::new(n, 100).unwrap_err(),
+                    CuckooError::NBucketsNotPowerOfTwo(_)
+                ),
+                "n_buckets={n} must be rejected"
+            );
+        }
+        // Powers of two still construct fine.
+        for n in [1u32, 2, 4, 64, 256] {
+            CuckooFilter::new(n, 100).unwrap();
+        }
+        // A deserialized non-power-of-two filter fails validate().
+        let mut bad = CuckooFilter::new(4, 10).unwrap();
+        bad.n_buckets = 6;
+        assert!(matches!(
+            bad.validate().unwrap_err(),
+            CuckooError::NBucketsNotPowerOfTwo(6)
+        ));
     }
 
     #[test]
