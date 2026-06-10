@@ -165,13 +165,12 @@ fn probe_systemd_unit(unit: &'static str, component_name: &'static str) -> Netwo
     }
 }
 
-/// Build the full network response. Sequential probes; each one is
-/// O(milliseconds) and bounded by an explicit timeout where applicable.
+/// Build the full network response. Sequential SYNC probes — run this on
+/// the blocking pool, never directly on an async worker. `ping` is
+/// self-bounding (`-W 2`) but `getent` can block long on a broken NSS/DNS
+/// stack and `systemctl is-active` can hang on a wedged D-Bus; the caller
+/// (`show`) bounds what the REQUEST waits via [`PROBE_DEADLINE`].
 pub(crate) fn probe() -> NetworkResponse {
-    // 2-second hard ceiling on the whole probe path. ping already has
-    // -W 2 and the systemd checks return immediately; this is defense
-    // in depth against a future hung subprocess.
-    let _budget = Duration::from_secs(5);
     let components = vec![
         probe_internet(),
         probe_dns(),
@@ -183,9 +182,39 @@ pub(crate) fn probe() -> NetworkResponse {
     NetworkResponse { worst, components }
 }
 
+/// Hard ceiling on what one `/v1/network` request waits for the probe.
+/// The predecessor of this constant was a declared-but-unused `_budget`
+/// local — a defense that existed only in a comment (P4). It is now
+/// enforced at the request boundary: on expiry the request gets an
+/// honest `unknown` instead of hanging, and the probe itself runs on
+/// the blocking pool so a wedged subprocess can't starve the executor.
+const PROBE_DEADLINE: Duration = Duration::from_secs(10);
+
+async fn show_bounded(
+    deadline: Duration,
+    probe_fn: fn() -> NetworkResponse,
+) -> Json<NetworkResponse> {
+    let degraded = |detail: String| NetworkResponse {
+        worst: "unknown",
+        components: vec![NetworkComponent {
+            name: "probe",
+            detail,
+            state: "unknown",
+        }],
+    };
+    match tokio::time::timeout(deadline, tokio::task::spawn_blocking(probe_fn)).await {
+        Ok(Ok(resp)) => Json(resp),
+        Ok(Err(join_err)) => Json(degraded(format!("probe task failed: {join_err}"))),
+        Err(_) => Json(degraded(format!(
+            "probe timed out after {}s (hung subprocess?)",
+            deadline.as_secs()
+        ))),
+    }
+}
+
 /// `GET /v1/network` handler.
 pub(crate) async fn show() -> Json<NetworkResponse> {
-    Json(probe())
+    show_bounded(PROBE_DEADLINE, probe).await
 }
 
 #[cfg(test)]
@@ -262,5 +291,28 @@ mod tests {
             names,
             vec!["internet", "dns", "cloudflared", "tailscale", "traefik"]
         );
+    }
+
+    /// The request deadline is REAL (its predecessor was a declared-but-
+    /// unused `_budget` local): a zero deadline must deterministically take
+    /// the timeout branch and return an honest degraded `unknown` instead of
+    /// waiting on the probe.
+    #[tokio::test]
+    async fn show_bounded_returns_degraded_unknown_on_deadline() {
+        // Injected probe that wedges far past the deadline — deterministic.
+        fn stalled() -> NetworkResponse {
+            std::thread::sleep(Duration::from_secs(5));
+            probe()
+        }
+        let start = std::time::Instant::now();
+        let Json(resp) = show_bounded(Duration::from_millis(50), stalled).await;
+        assert!(
+            start.elapsed() < Duration::from_secs(4),
+            "must not wait the probe out"
+        );
+        assert_eq!(resp.worst, "unknown");
+        assert_eq!(resp.components.len(), 1);
+        assert_eq!(resp.components[0].name, "probe");
+        assert!(resp.components[0].detail.contains("timed out"));
     }
 }

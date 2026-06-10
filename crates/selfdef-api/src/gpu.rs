@@ -185,9 +185,41 @@ pub(crate) fn probe() -> GpuResponse {
     }
 }
 
+/// Hard ceiling on what one `/v1/gpu` request waits for the SYNC probe
+/// (`nvidia-smi` can wedge on a hung driver). The probe runs on the
+/// blocking pool so it can't starve async workers; on expiry the request
+/// gets an honest `unknown` (reason logged) instead of hanging.
+const PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+
+async fn show_bounded(
+    deadline: std::time::Duration,
+    probe_fn: fn() -> GpuResponse,
+) -> Json<GpuResponse> {
+    let degraded = || GpuResponse {
+        worst: "unknown",
+        policy_path: String::new(),
+        policy_present: false,
+        gpus: Vec::new(),
+    };
+    match tokio::time::timeout(deadline, tokio::task::spawn_blocking(probe_fn)).await {
+        Ok(Ok(resp)) => Json(resp),
+        Ok(Err(join_err)) => {
+            tracing::warn!(error = %join_err, "gpu probe task failed; reporting unknown");
+            Json(degraded())
+        }
+        Err(_) => {
+            tracing::warn!(
+                deadline_secs = deadline.as_secs(),
+                "gpu probe timed out (hung nvidia-smi?); reporting unknown"
+            );
+            Json(degraded())
+        }
+    }
+}
+
 /// `GET /v1/gpu` handler.
 pub(crate) async fn show() -> Json<GpuResponse> {
-    Json(probe())
+    show_bounded(PROBE_DEADLINE, probe).await
 }
 
 #[cfg(test)]
@@ -284,5 +316,24 @@ mod tests {
         assert_eq!(p.expected_power_limit_watts.get("0").copied(), Some(290));
         assert_eq!(p.expected_power_limit_watts.get("1").copied(), Some(295));
         let _ = std::fs::remove_file(&tmp);
+    }
+    /// A zero deadline deterministically takes the timeout branch: the
+    /// request must get an honest degraded `unknown`, never hang on the probe.
+    #[tokio::test]
+    async fn show_bounded_returns_degraded_unknown_on_deadline() {
+        // Injected probe that wedges far past the deadline — deterministic.
+        fn stalled() -> GpuResponse {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            probe()
+        }
+        let start = std::time::Instant::now();
+        let axum::Json(resp) = show_bounded(std::time::Duration::from_millis(50), stalled).await;
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(4),
+            "must not wait the probe out"
+        );
+        assert_eq!(resp.worst, "unknown");
+        assert!(resp.gpus.is_empty());
+        assert!(!resp.policy_present);
     }
 }
