@@ -210,17 +210,22 @@ pub enum MatchValue {
 
 impl MatchValue {
     fn matches_json(&self, v: &serde_json::Value, op: FieldOp) -> bool {
+        // Sigma compares strings case-insensitively by default (only the `|re`
+        // modifier is case-sensitive, and it carries its own `(?i)` if needed).
+        // Folding ASCII case here covers the fields these rules key on — process
+        // images, binary paths, syscall names — without which a rule written as
+        // `...|endswith: '\powershell.exe'` would silently miss `PowerShell.EXE`.
         match (self, op) {
-            (Self::String(s), FieldOp::Eq) => v.as_str() == Some(s.as_str()),
-            (Self::String(s), FieldOp::Contains) => {
-                v.as_str().is_some_and(|x| x.contains(s.as_str()))
-            }
-            (Self::String(s), FieldOp::StartsWith) => {
-                v.as_str().is_some_and(|x| x.starts_with(s.as_str()))
-            }
-            (Self::String(s), FieldOp::EndsWith) => {
-                v.as_str().is_some_and(|x| x.ends_with(s.as_str()))
-            }
+            (Self::String(s), FieldOp::Eq) => v.as_str().is_some_and(|x| x.eq_ignore_ascii_case(s)),
+            (Self::String(s), FieldOp::Contains) => v
+                .as_str()
+                .is_some_and(|x| x.to_ascii_lowercase().contains(&s.to_ascii_lowercase())),
+            (Self::String(s), FieldOp::StartsWith) => v
+                .as_str()
+                .is_some_and(|x| x.to_ascii_lowercase().starts_with(&s.to_ascii_lowercase())),
+            (Self::String(s), FieldOp::EndsWith) => v
+                .as_str()
+                .is_some_and(|x| x.to_ascii_lowercase().ends_with(&s.to_ascii_lowercase())),
             (Self::Int(n), FieldOp::Eq) => v.as_i64() == Some(*n) || v.as_u64() == Some(*n as u64),
             (Self::Bool(b), FieldOp::Eq) => v.as_bool() == Some(*b),
             (Self::Regex(r), FieldOp::Regex) => v.as_str().is_some_and(|x| r.is_match(x)),
@@ -900,6 +905,29 @@ mod tests {
         let (c, by) = parse_condition("failed_auth").unwrap();
         assert!(matches!(c, Condition::Single(ref n) if n == "failed_auth"));
         assert!(by.is_none());
+    }
+
+    #[test]
+    fn string_matching_is_case_insensitive_per_sigma() {
+        use serde_json::json;
+        // Sigma matches strings case-insensitively by default. A case-sensitive
+        // engine misses detections: a rule `Image|endswith: '\powershell.exe'`
+        // must fire on `...\PowerShell.EXE`, and an exact/contains/startswith
+        // value must match regardless of the casing in the event.
+        let ends = MatchValue::String("powershell.exe".to_string());
+        assert!(ends.matches_json(
+            &json!("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\PowerShell.EXE"),
+            FieldOp::EndsWith
+        ));
+        let eq = MatchValue::String("PowerShell.EXE".to_string());
+        assert!(eq.matches_json(&json!("powershell.exe"), FieldOp::Eq));
+        let contains = MatchValue::String("MIMIKATZ".to_string());
+        assert!(contains.matches_json(&json!("launched mimikatz.exe"), FieldOp::Contains));
+        let starts = MatchValue::String("/USR/BIN/".to_string());
+        assert!(starts.matches_json(&json!("/usr/bin/python3"), FieldOp::StartsWith));
+        // A genuine non-match still does not match.
+        let other = MatchValue::String("cmd.exe".to_string());
+        assert!(!other.matches_json(&json!("powershell.exe"), FieldOp::Eq));
     }
 
     #[test]
