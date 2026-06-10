@@ -292,6 +292,22 @@ impl ExtensionStore {
     /// Load a single manifest from disk; validate schema + content;
     /// verify detached minisign signature against trust roots.
     ///
+    /// ## Cryptographic guarantee (read before trusting "multi-sig")
+    ///
+    /// Exactly **one** detached signature is verified: `<manifest>.json.minisig`
+    /// against any `.pub` in `trust_roots_dir`. `ExtensionManifest::validate`
+    /// additionally requires `signer_kid` and `auditor_kid` to be present and
+    /// distinct, but those are **recorded metadata covered by the single
+    /// signature — NOT a second, independently-verified co-signature**. So the
+    /// enforced property is "one trusted key signed a manifest that *names* two
+    /// distinct kids", i.e. single-control with an attestation field, not
+    /// cryptographic two-person control: a holder of one trust-root key can set
+    /// both kids freely. See finding **F-2026-095** (`docs/review/99-findings-ledger.md`)
+    /// for the dual-control gap and the A/B decision (add a second
+    /// distinct-signer signature à la `selfdef-threshold-sig-store`, vs. keep
+    /// attested single-sig). Stated here so callers don't read "multi-sig" as
+    /// cryptographic dual-control.
+    ///
     /// # Errors
     /// Returns `PerimeterError::Io` on read failure,
     /// `PerimeterError::Serde` on parse failure,
