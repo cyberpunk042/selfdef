@@ -619,7 +619,7 @@ pub(crate) fn serve_tcp(
     token_env: Option<&str>,
     exit_after: Option<u32>,
 ) -> anyhow::Result<i32> {
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
 
     if framing != "line" && framing != "lsp" {
@@ -668,8 +668,17 @@ pub(crate) fn serve_tcp(
 
         // Per-connection auth preamble.
         if let Some(ref want) = expected_token {
-            let mut header = String::new();
-            if reader.read_line(&mut header).is_err() {
+            // Bound the preamble read: `read_line` grows without limit on a peer
+            // that never sends a newline — an unbounded, PRE-auth allocation
+            // over TCP (DoS). An Authorization line is tiny; cap it at 8 KiB and
+            // drop the connection if it (or a missing newline) blows the cap.
+            const MAX_AUTH_PREAMBLE: usize = 8 * 1024;
+            let mut header_buf: Vec<u8> = Vec::new();
+            let read_bounded = reader
+                .by_ref()
+                .take(MAX_AUTH_PREAMBLE as u64 + 1)
+                .read_until(b'\n', &mut header_buf);
+            if read_bounded.is_err() || header_buf.len() > MAX_AUTH_PREAMBLE {
                 handled += 1;
                 if let Some(n) = exit_after {
                     if handled >= n {
@@ -678,6 +687,7 @@ pub(crate) fn serve_tcp(
                 }
                 continue;
             }
+            let header = String::from_utf8_lossy(&header_buf);
             let trimmed = header.trim_end_matches(['\r', '\n']);
             let ok = trimmed
                 .strip_prefix("Authorization: Bearer ")
