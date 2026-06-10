@@ -112,7 +112,7 @@ move (see Adversaries above):
 
 | Watchdog | Layer | Adversary it counters |
 | --- | --- | --- |
-| friction-audit (MS046) | hardware frame | PCIe / ZFS / memory tamper before kernel even boots; refuses to start container runtimes until the hardware-integrity gates pass. Boot-ordered Before=podman/docker/containerd. |
+| friction-audit (MS046) | hardware frame | PCIe / ZFS / memory tamper before kernel even boots. Boot-**ordered** `Before=podman/docker/containerd` (`sovereign-guard.service`, oneshot); on a failed gate it exits non-zero + emits an audit event. NOTE: `Before=` is systemd *ordering*, not a hard requirement — the shipped unit shows no `Requires=`/`Requisite=` on the runtime units, so by default a failed gate does **not** itself block podman/docker/containerd from starting (it runs first + audits). Hard blocking needs an operator-added requirement dependency (drop-in). See Known gap F-2026-098. |
 | perimeter (MS047) | kernel syscall | Arbitrary-binary execution under any user; in-kernel `Sigkill` on `sys_execve` outside the verbatim sain-01 §6 allowlist `{python3, nvidia-smi, vllm, podman}`. Extensions require an MS003-signed manifest + TTL ≤ 30 days (one detached signature is cryptographically verified; the manifest's two distinct kids are attestation metadata, **not** a second verified co-signature — see Known gap F-2026-095). |
 | guardian (MS044) | supervisor tier | Tetragon-policy violations the kernel-fence catches; fans out the verbatim 3-step response (`podman kill` / atomic ZFS audit append / `/dev/console` BEL alert). Circuit breaker prevents same-target flood (5 SIGKILLs / 60s). |
 | scheduler (MS048) | routing layer | Resource-pressure-induced shortcuts: never let expensive cognition wait on cheap preparation; never let cheap speculation commit without expensive verification when risk demands it. 7-axis objective + 5 backpressure surfaces (Blackwell VRAM / RTX 3090 / CPU PSI / RAM PSI / IO PSI / human-gate queue). |
@@ -383,6 +383,24 @@ This block is intentionally short — copy it into your deployment runbook.
   sees it. The shutdown path now reports the abnormal termination
   truthfully (no more false "stopped"); live supervision + the
   warn-vs-restart-vs-exit policy is a tracked PO decision.
+- **friction-audit gate orders but doesn't hard-block runtimes
+  (F-2026-098).** `sovereign-guard.service` is `Before=podman/
+  docker/containerd` (oneshot) and `friction-audit.sh` exits
+  non-zero + emits an audit event on a failed PCIe/ZFS/memory
+  gate. But `Before=` is systemd *ordering*, not a requirement:
+  no `Requires=`/`Requisite=` is shipped on the runtime units
+  (SDD-027 documents ordering; the L3 test verifies `Before=` is
+  *honored*, i.e. ordering, not blocking), so a tampered host
+  that fails the gate still starts its container runtimes — the
+  failure is audited, not enforced. The honest guarantee is
+  "runs first + audits on failure". Hard pre-boot blocking needs
+  an operator-added `Requires=sovereign-guard.service` (or
+  `Requisite=`) drop-in on podman/docker/containerd, or an
+  event-driven responder action that stops the runtime when the
+  gate-fail audit event fires. Which mechanism to ship by default
+  (and whether hard-fail-at-boot is even desirable vs. audit-only,
+  given it could brick a host on a false-positive hardware
+  reading) is a PO decision.
 
 ## Reporting
 
