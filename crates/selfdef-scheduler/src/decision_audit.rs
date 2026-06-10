@@ -345,16 +345,25 @@ pub fn verify_chain(audit_log: &Path) -> Result<ChainStats, DriverAuditError> {
         path: audit_log.to_path_buf(),
         source,
     })?;
-    verify_chain_text(&text, None)
+    verify_chain_text(&text, None, false)
 }
 
 /// Internal: verify the chain in `text`, expecting the FIRST entry's
 /// `prev_event_sha256` to equal `expected_first_prev_sha`. Used by
 /// `verify_chain` (with `None`) and by `verify_chain_across_generations`
 /// (with the prior file's last_sha256).
+///
+/// `accept_first_prev`: when true, the FIRST entry's `prev_event_sha256` is
+/// accepted as the chain anchor regardless of its value — used for the
+/// OLDEST SURVIVING generation of a rotated log, whose genesis may have been
+/// pruned past `max_generations`, so its first entry legitimately points at
+/// history that no longer exists on disk. Continuity is still verified from
+/// that entry forward. When false the genesis rule applies: a first entry
+/// carrying a `prev` while none is expected is a break.
 fn verify_chain_text(
     text: &str,
     expected_first_prev_sha: Option<&str>,
+    accept_first_prev: bool,
 ) -> Result<ChainStats, DriverAuditError> {
     let mut last_sha: Option<String> = expected_first_prev_sha.map(str::to_owned);
     let mut first_ts: Option<u128> = None;
@@ -388,7 +397,7 @@ fn verify_chain_text(
                     detail: "prev_event_sha256 missing from non-genesis entry".into(),
                 });
             }
-            (None, Some(_)) if is_first => {
+            (None, Some(_)) if is_first && !accept_first_prev => {
                 return Err(DriverAuditError::ChainBreak {
                     line: line_no,
                     detail: "prev_event_sha256 present on genesis entry (expected None)".into(),
@@ -440,12 +449,17 @@ pub fn verify_chain_across_generations(
     if base_path.exists() {
         files.push(base_path.to_path_buf());
     }
+    // The oldest SURVIVING file anchors the chain: its first entry's prev may
+    // point at a genesis generation already pruned past `max_generations`, so
+    // we accept it as-is and verify continuity forward. Every later file is
+    // threaded against the prior file's last_sha256 (strict).
+    let mut anchored = false;
     for path in files {
         let text = fs::read_to_string(&path).map_err(|source| DriverAuditError::Io {
             path: path.clone(),
             source,
         })?;
-        let stats = verify_chain_text(&text, expected_prev.as_deref())?;
+        let stats = verify_chain_text(&text, expected_prev.as_deref(), !anchored)?;
         if stats.event_count == 0 {
             continue;
         }
@@ -456,6 +470,7 @@ pub fn verify_chain_across_generations(
         overall.last_ts_unix_micros = stats.last_ts_unix_micros;
         overall.last_sha256 = stats.last_sha256.clone();
         expected_prev = stats.last_sha256;
+        anchored = true;
     }
     Ok(overall)
 }
@@ -676,6 +691,47 @@ mod tests {
         assert_eq!(stats.event_count, 5);
         assert_eq!(stats.first_ts_unix_micros, Some(100));
         assert_eq!(stats.last_ts_unix_micros, Some(500));
+    }
+
+    #[test]
+    fn cross_generation_continuous_after_genesis_is_pruned() {
+        // Rotate enough that the genesis generation is dropped past
+        // max_generations=2. The oldest SURVIVING file's first entry then
+        // carries a prev_event_sha256 pointing at the pruned genesis — a
+        // dangling-but-legitimate anchor. The verifier must report the
+        // surviving chain as CONTINUOUS, not fabricate a ChainBreak.
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("audit.jsonl");
+        // Each emit+rotate(1, 2) pushes one entry into a generation and drops
+        // the oldest once we exceed 2 kept generations.
+        let _ = emit_driver_reading(&path, &reading(100), None).unwrap(); // A (genesis)
+        let _ = rotate_audit_log(&path, 1, 2).unwrap();
+        let _ = emit_driver_reading(&path, &reading(200), None).unwrap(); // B
+        let _ = rotate_audit_log(&path, 1, 2).unwrap();
+        let _ = emit_driver_reading(&path, &reading(300), None).unwrap(); // C
+        let _ = rotate_audit_log(&path, 1, 2).unwrap(); // drops .2 == [A] (genesis)
+        let _ = emit_driver_reading(&path, &reading(400), None).unwrap(); // D
+
+        // Surviving: .2=[B], .1=[C], base=[D]; B.prev points at pruned A.
+        let stats = verify_chain_across_generations(&path, 2).unwrap();
+        assert_eq!(
+            stats.event_count, 3,
+            "B + C + D survive as a continuous chain"
+        );
+        assert_eq!(
+            stats.first_ts_unix_micros,
+            Some(200),
+            "oldest surviving = B"
+        );
+        assert_eq!(stats.last_ts_unix_micros, Some(400));
+
+        // A genuine tamper of a NON-anchor entry must still be caught: the
+        // anchor only relaxes the FIRST surviving entry, not the rest.
+        let body = fs::read_to_string(&path).unwrap();
+        let tampered = body.replace(&extract_prev_sha(body.trim()), "deadbeef00");
+        fs::write(&path, tampered).unwrap();
+        let err = verify_chain_across_generations(&path, 2).unwrap_err();
+        assert!(matches!(err, DriverAuditError::ChainBreak { .. }));
     }
 
     #[test]
