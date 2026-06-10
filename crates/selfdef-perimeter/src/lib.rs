@@ -603,6 +603,20 @@ pub fn audit_chain_check(ocsf_jsonl: &Path) -> Result<usize, PerimeterError> {
                     detail: "prev_event_sha256 missing from non-first event".into(),
                 });
             }
+            (None, Some(got)) => {
+                // First event of the file. `emit_ocsf_detection_2004` always
+                // writes a null prev for the opening event (last_line_sha256
+                // returns None on an empty file), so a first line that claims a
+                // predecessor means the genuine opening events were deleted —
+                // prefix/head truncation. A pure forward walk would accept it;
+                // flag it as a chain break per MS047 R11104.
+                return Err(PerimeterError::AuditChainBreak {
+                    line: idx + 1,
+                    detail: format!(
+                        "first event claims predecessor prev_event_sha256={got} (head truncated)"
+                    ),
+                });
+            }
             _ => {}
         }
         let mut hasher = Sha256::new();
@@ -1013,6 +1027,48 @@ mod tests {
             err,
             PerimeterError::AuditChainBreak { line: 2, .. }
         ));
+    }
+
+    #[test]
+    fn audit_chain_check_detects_head_truncation() {
+        // A legitimate chain's first event carries a null prev (no
+        // predecessor). If the genuine opening events are deleted, the new
+        // first line still carries a real prev hash referencing a now-absent
+        // line. A forward-only walk would accept it; the chain check must flag
+        // a first event that claims a predecessor as a break (prefix-deletion
+        // tamper). Build a real 3-event chain, then drop the first line and
+        // confirm the orphaned tail no longer validates.
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("p.jsonl");
+        for i in 0..3 {
+            let v = Verdict::new(
+                Outcome::Sigkill,
+                "/x",
+                i,
+                0,
+                "/",
+                "",
+                "x",
+                1_700_000_000_000 + u64::from(i),
+                "h",
+                "k",
+            );
+            emit_ocsf_detection_2004(&path, &v).unwrap();
+        }
+        // Intact chain validates.
+        assert_eq!(audit_chain_check(&path).unwrap(), 3);
+        // Delete the genuine first event; the remaining tail now opens with a
+        // line that claims a predecessor.
+        let text = fs::read_to_string(&path).unwrap();
+        let mut lines = text.lines();
+        let _dropped = lines.next();
+        let tail: String = lines.collect::<Vec<_>>().join("\n");
+        fs::write(&path, format!("{tail}\n")).unwrap();
+        let err = audit_chain_check(&path).unwrap_err();
+        assert!(
+            matches!(err, PerimeterError::AuditChainBreak { line: 1, .. }),
+            "head-truncated chain must break at line 1, got {err:?}"
+        );
     }
 
     #[test]
