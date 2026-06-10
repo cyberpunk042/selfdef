@@ -83,6 +83,13 @@ pub fn parse_map_spec(spec: &str) -> Option<(MapSpecKind, &str)> {
             && rest
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '/' || c == '.' || c == '-')
+            // A bpffs pin path must stay under the /sys/fs/bpf/ mount. The
+            // charset above admits '.' and '/', so a ".." component slips
+            // through and the validator would bless an escaping spec like
+            // `/sys/fs/bpf/../../etc/foo` as well-formed — handing a future
+            // BPF_OBJ_GET a path that resolves outside bpffs. Reject any
+            // parent-traversal component (defense-in-depth at parse time).
+            && !rest.split('/').any(|seg| seg == "..")
         {
             return Some((MapSpecKind::Path, trimmed));
         }
