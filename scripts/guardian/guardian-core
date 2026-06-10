@@ -64,6 +64,31 @@ LOG_PREFIX_STARTUP = "[*] Guardian Native Event Loop Active. Monitoring Sovereig
 # Action keywords detected in event stream per dump 547-551 (MS044 R10362-R10367)
 ACTION_KEYWORDS = ("SIGKILL", "process")
 
+# Exit codes per MS044 R10545 (0 = graceful shutdown, 1 = init failure).
+# _SOURCE_LOST is an INTERNAL sentinel used between main_loop and the
+# supervised reconnect loop — it is never returned to the OS.
+EXIT_OK = 0
+EXIT_INIT_FAILURE = 1
+_SOURCE_LOST = 2
+
+# Supervised-reconnect cadence. Provenance: operator audit 2026-06-10 named
+# the "OPNsense / SD-WAN boundary contract — ... the firewall interface +
+# Tetragon-socket-dropout gotcha" as an uncovered seam: a firewall/VLAN
+# reconfiguration (or a Tetragon restart/upgrade) removes the event pipe for
+# a window. The previous behavior — exit 1 the moment the socket was absent
+# or the stream dropped — combined with Restart=always + RestartSec=1 and
+# systemd's DEFAULT start-limit (5 starts / 10s) meant any socket gap longer
+# than ~5 seconds permanently failed the unit: the Ring 0 last-line
+# containment dead (fail-open) until a manual `systemctl reset-failed`.
+# The guardian now rides out the gap in-process; systemd Restart=always
+# remains the outer backstop for true process death.
+RECONNECT_DELAY_SECS = 2.0
+
+# Rate-limit for the "still waiting for the event pipe" log line — one line
+# per this many retry cycles (≈ every 60s at the 2s default cadence), so a
+# long Tetragon outage doesn't flood the journal at the retry frequency.
+_WAIT_LOG_EVERY_CYCLES = 30
+
 # ---------- module-level singletons ----------
 
 _shutdown_requested = threading.Event()
@@ -342,8 +367,12 @@ def handle_shutdown(signum: int, _frame: Any) -> None:
 def main_loop(socket_path: str, audit_log_path: str, console_device: str) -> int:
     """Main Tetragon event loop per dump 538-562 + MS044 R10350-R10408.
 
-    Returns exit code: 0 on graceful shutdown, 1 on init failure per
-    MS044 R10545.
+    Returns EXIT_OK on graceful (signal-driven) shutdown per MS044 R10545,
+    or the internal _SOURCE_LOST sentinel when the event pipe is absent or
+    the stream drops (writer EOF / OSError) — the supervised caller
+    (`run_supervised`) waits and re-opens instead of letting the process
+    die into the systemd start-limit (Tetragon-socket-dropout gotcha,
+    operator audit 2026-06-10).
     """
     global _log
     log = _log
@@ -354,7 +383,7 @@ def main_loop(socket_path: str, audit_log_path: str, console_device: str) -> int
         msg = f"Error: Tetragon event pipe not initialized at {socket_path}"
         log.error(msg)
         print(msg, file=sys.stderr, flush=True)
-        return 1
+        return _SOURCE_LOST
 
     # Startup banner verbatim per dump 538 + MS044 R10401
     log.info(LOG_PREFIX_STARTUP)
@@ -396,17 +425,72 @@ def main_loop(socket_path: str, audit_log_path: str, console_device: str) -> int
                 responses_emitted += 1
 
     except OSError as exc:
-        # Socket disappeared mid-stream — systemd Restart=always will reconnect
+        # Socket dropped mid-stream — report source-lost so the supervised
+        # loop re-opens in-process (systemd restart is only the backstop).
         log.error("socket read failed (events_seen=%d, responses=%d): %s",
                   events_seen, responses_emitted, exc)
-        return 1
+        return _SOURCE_LOST
     except KeyboardInterrupt:
         log.info("shutdown via KeyboardInterrupt (events_seen=%d, responses=%d)",
                  events_seen, responses_emitted)
-        return 0
+        return EXIT_OK
 
-    log.info("clean shutdown (events_seen=%d, responses=%d)", events_seen, responses_emitted)
-    return 0
+    if _shutdown_requested.is_set():
+        log.info("clean shutdown (events_seen=%d, responses=%d)",
+                 events_seen, responses_emitted)
+        return EXIT_OK
+
+    # EOF WITHOUT a shutdown request: the writer (Tetragon) closed the pipe —
+    # e.g. a Tetragon restart during a firewall/VLAN reconfiguration. This is
+    # a lost source, NOT a clean shutdown; the previous exit-0-here let a
+    # routine Tetragon restart silently terminate the guardian's pass and
+    # depend entirely on the systemd restart cycle (start-limit fail-open).
+    log.warning("event stream EOF without shutdown (events_seen=%d, responses=%d) — source lost",
+                events_seen, responses_emitted)
+    return _SOURCE_LOST
+
+
+def run_supervised(
+    socket_path: str,
+    audit_log_path: str,
+    console_device: str,
+    reconnect_delay_secs: float = RECONNECT_DELAY_SECS,
+) -> int:
+    """Supervised wrapper around `main_loop` — closes the Tetragon-socket-
+    dropout gotcha (operator audit 2026-06-10).
+
+    When the event pipe is absent, or the stream drops (writer EOF /
+    OSError), wait `reconnect_delay_secs` and re-open instead of exiting.
+    Without this, a socket gap longer than ~5s (firewall/VLAN reconfig,
+    Tetragon upgrade) drove the unit into systemd's default start-limit and
+    permanently killed the Ring 0 containment. Exits EXIT_OK only on a
+    signal-driven shutdown.
+    """
+    log = _log
+    assert log is not None
+    waited_cycles = 0
+    while not _shutdown_requested.is_set():
+        if not Path(socket_path).exists():
+            # Rate-limited waiting line — first miss, then every
+            # _WAIT_LOG_EVERY_CYCLES retries (≈ once a minute at defaults).
+            if waited_cycles % _WAIT_LOG_EVERY_CYCLES == 0:
+                log.warning(
+                    "Tetragon event pipe absent at %s — waiting (%.1fs cadence, cycle %d)",
+                    socket_path, reconnect_delay_secs, waited_cycles,
+                )
+            waited_cycles += 1
+        else:
+            rc = main_loop(socket_path, audit_log_path, console_device)
+            if rc != _SOURCE_LOST:
+                return rc
+            waited_cycles = 0  # fresh outage → log the first wait line again
+        # Sleep in small slices so SIGTERM during the wait exits promptly.
+        deadline = time.monotonic() + reconnect_delay_secs
+        while time.monotonic() < deadline:
+            if _shutdown_requested.is_set():
+                return EXIT_OK
+            time.sleep(min(0.1, reconnect_delay_secs))
+    return EXIT_OK
 
 
 # ---------- CLI ----------
@@ -462,9 +546,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         ok = Path(args.socket).exists()
         _log.info("dry-run: socket exists=%s — exiting", ok)
-        return 0 if ok else 1
+        return EXIT_OK if ok else EXIT_INIT_FAILURE
 
-    return main_loop(args.socket, args.audit_log, args.console)
+    return run_supervised(args.socket, args.audit_log, args.console)
 
 
 if __name__ == "__main__":

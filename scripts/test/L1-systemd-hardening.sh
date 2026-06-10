@@ -75,6 +75,11 @@ assert_grep "R10416 Restart=always (dump 582)" \
     "^Restart=always"
 assert_grep "R10417 RestartSec=1 (dump 583)" \
     "^RestartSec=1"
+# Tetragon-socket-dropout backstop (operator audit 2026-06-10): the default
+# start-limit (5 starts/10s) + RestartSec=1 permanently failed the unit on
+# any >~5s socket gap — Ring 0 containment dead until manual reset-failed.
+assert_grep "StartLimitIntervalSec=0 (socket-dropout backstop, audit 2026-06-10)" \
+    "^StartLimitIntervalSec=0"
 assert_grep "R10418 WantedBy=multi-user.target (dump 586)" \
     "^WantedBy=multi-user\\.target"
 

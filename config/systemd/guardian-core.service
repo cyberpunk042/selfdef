@@ -11,6 +11,15 @@ Description=Sovereign Guardian Core eBPF Supervisor
 Documentation=https://github.com/cyberpunk042/selfdef/blob/main/backlog/milestones/MS044-guardian-daemon-tetragon-ebpf-supervisor.md
 After=tetragon.service
 Requires=tetragon.service
+# Tetragon-socket-dropout backstop (operator audit 2026-06-10): with
+# Restart=always + RestartSec=1 and systemd's DEFAULT start-limit
+# (5 starts / 10s), any Tetragon socket gap >~5s (firewall/VLAN reconfig,
+# Tetragon upgrade) permanently failed this unit — the Ring 0 last-line
+# containment dead until a manual `systemctl reset-failed`. guardian-core
+# now also rides out socket gaps in-process (supervised reconnect loop);
+# this disables the start-limit so the unit can NEVER be permanently
+# killed by restart cycling (fail-open is worse than restart churn here).
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
