@@ -52,6 +52,16 @@ pub enum FallbackError {
     /// Unknown.
     #[error("unknown provider: {0}")]
     Unknown(String),
+    /// Index map points outside the providers list (corrupt/serde-bypassed state).
+    #[error("index for {id:?} = {idx} is out of range (providers len {len})")]
+    InconsistentIndex {
+        /// Offending id.
+        id: String,
+        /// Mapped index.
+        idx: usize,
+        /// providers length.
+        len: usize,
+    },
 }
 
 impl FallbackChain {
@@ -89,7 +99,14 @@ impl FallbackChain {
             .get(id)
             .copied()
             .ok_or_else(|| FallbackError::Unknown(id.into()))?;
-        let p = &mut self.providers[idx];
+        // `.get_mut` not `[idx]`: append() keeps the index map consistent with
+        // providers, but serde deserialization can desync them so a mapped idx
+        // points past providers.len() — a direct index would panic (OOB, every
+        // build). Treat a corrupt mapping as a not-found provider (fail-safe).
+        let p = self
+            .providers
+            .get_mut(idx)
+            .ok_or_else(|| FallbackError::Unknown(id.into()))?;
         p.healthy = false;
         p.failures = p.failures.saturating_add(1);
         Ok(())
@@ -102,7 +119,12 @@ impl FallbackChain {
             .get(id)
             .copied()
             .ok_or_else(|| FallbackError::Unknown(id.into()))?;
-        self.providers[idx].healthy = true;
+        // get_mut, not [idx]: see mark_unhealthy — a serde-desynced index map
+        // could point past providers.len() and panic on a direct index.
+        self.providers
+            .get_mut(idx)
+            .ok_or_else(|| FallbackError::Unknown(id.into()))?
+            .healthy = true;
         Ok(())
     }
 
@@ -133,6 +155,15 @@ impl FallbackChain {
                 return Err(FallbackError::EmptyId);
             }
         }
+        for (id, &idx) in &self.index {
+            if idx >= self.providers.len() {
+                return Err(FallbackError::InconsistentIndex {
+                    id: id.clone(),
+                    idx,
+                    len: self.providers.len(),
+                });
+            }
+        }
         Ok(())
     }
 }
@@ -146,6 +177,30 @@ impl Default for FallbackChain {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desynced_index_serde_bypass_does_not_panic() {
+        // append() keeps `index` consistent with `providers`; serde can desync
+        // them. mark_unhealthy/mark_healthy looked up the idx then did
+        // providers[idx] — a serde-bypassed idx >= providers.len() panicked
+        // (OOB). get_mut makes it a fail-safe Unknown; validate() rejects it.
+        let mut c = FallbackChain::new();
+        c.append("primary").unwrap();
+        // Desync: point the map past the providers vec.
+        c.index.insert("ghost".into(), 99);
+        assert!(matches!(
+            c.mark_unhealthy("ghost").unwrap_err(),
+            FallbackError::Unknown(_)
+        )); // must not panic
+        assert!(matches!(
+            c.mark_healthy("ghost").unwrap_err(),
+            FallbackError::Unknown(_)
+        ));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            FallbackError::InconsistentIndex { idx: 99, .. }
+        ));
+    }
 
     #[test]
     fn pick_first_healthy() {
