@@ -39,6 +39,18 @@ pub struct NtfyNotifier {
     client: reqwest::Client,
 }
 
+/// Make a value safe to place in an HTTP header. `http`'s `HeaderValue`
+/// rejects control characters, which would fail the whole POST — so a control
+/// char (notably CR/LF) reaching the Title/Tags header from alert content
+/// would silently suppress the notification on every retry. Replace any
+/// control character with a space so the alert is never suppressible by its
+/// own text; ordinary single-line titles are unchanged.
+fn header_safe(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
+}
+
 // Custom `Debug` impl elides the bearer token so it never leaks
 // through `tracing::error!("{notifier:?}", …)` or a panic backtrace.
 // Matches the secret-elision posture of the slack/discord/twilio/smtp
@@ -137,9 +149,9 @@ impl NtfyNotifier {
             let mut req = self
                 .client
                 .post(&endpoint)
-                .header("Title", title)
+                .header("Title", header_safe(title))
                 .header("Priority", priority.to_string())
-                .header("Tags", tags)
+                .header("Tags", header_safe(tags))
                 .body(body.to_owned());
             if let Some(t) = &self.token {
                 req = req.bearer_auth(t);
@@ -438,6 +450,32 @@ mod tests {
             let n = NtfyNotifier::new(server.uri(), "selfdef-test", None);
             let r = <NtfyNotifier as Channel>::send(&n, &payload()).await;
             assert!(r.is_ok(), "{r:?}");
+        }
+
+        #[tokio::test]
+        async fn control_chars_in_title_are_sanitized_so_alert_still_delivers() {
+            // SECURITY/availability: a control char (e.g. a newline smuggled in
+            // via a malicious command's args, which now decode through to the
+            // alert text) in the Title header would make the `http` crate reject
+            // the value and fail the entire request on every retry — silently
+            // suppressing the security alert. The title/tags must be sanitized to
+            // a single line so the alert is never suppressible by its own text.
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/selfdef-test"))
+                // CR and LF each become a space -> the request is built + sent.
+                .and(header("title", "evil  cmd here"))
+                .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+                .mount(&server)
+                .await;
+            let n = NtfyNotifier::new(server.uri(), "selfdef-test", None);
+            let mut p = payload();
+            p.title = "evil\r\ncmd here".into();
+            let r = <NtfyNotifier as Channel>::send(&n, &p).await;
+            assert!(
+                r.is_ok(),
+                "alert with a control-char title must still deliver: {r:?}"
+            );
         }
 
         #[tokio::test]
