@@ -236,7 +236,12 @@ pub fn assert_path_inside_workspace(
     if candidate.contains("/../") || candidate.starts_with("../") || candidate.ends_with("/..") {
         return Err(FsBoundaryError::PathEscapesWorkspace(candidate.into()));
     }
-    if !candidate.starts_with(workspace) {
+    // Component-boundary prefix check: the candidate must BE the workspace root
+    // or lie strictly under it (`<workspace>/…`). A raw `starts_with` would
+    // wrongly admit a sibling that merely shares the prefix string, e.g.
+    // `/workspace-evil` under `/workspace`.
+    let ws = workspace.trim_end_matches('/');
+    if candidate != ws && !candidate.starts_with(&format!("{ws}/")) {
         return Err(FsBoundaryError::PathEscapesWorkspace(candidate.into()));
     }
     Ok(())
@@ -443,6 +448,26 @@ mod tests {
                 "bad: {bad}"
             );
         }
+    }
+
+    #[test]
+    fn sibling_workspace_prefix_refused() {
+        // SECURITY: a sibling directory that merely shares a textual prefix
+        // with the workspace must NOT count as inside it — the boundary is a
+        // path COMPONENT, not a raw substring. `/workspace-evil` is not under
+        // `/workspace`.
+        for bad in ["/workspace-evil/secret", "/workspacefoo", "/workspace2/x"] {
+            let err = assert_path_inside_workspace("/workspace", bad).unwrap_err();
+            assert!(
+                matches!(err, FsBoundaryError::PathEscapesWorkspace(_)),
+                "bad: {bad}"
+            );
+        }
+        // The workspace root itself and genuine children stay allowed, with or
+        // without a trailing slash on the root.
+        assert_path_inside_workspace("/workspace", "/workspace").unwrap();
+        assert_path_inside_workspace("/workspace", "/workspace/src/x.rs").unwrap();
+        assert_path_inside_workspace("/workspace/", "/workspace/src/x.rs").unwrap();
     }
 
     #[test]
