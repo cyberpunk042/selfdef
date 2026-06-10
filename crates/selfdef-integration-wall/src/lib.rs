@@ -32,6 +32,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use selfdef_core::Event;
@@ -50,11 +51,20 @@ pub const DEFAULT_WALL_BINARY: &str = "/usr/bin/wall";
 /// for an Informational event is wrong.
 pub const DEFAULT_SEVERITY_FLOOR: SeverityId = SeverityId::High;
 
+/// Hard ceiling on one wall(1) broadcast. wall writes to every logged-in
+/// TTY, and a write(2) to a flow-controlled TTY (an operator pressed
+/// Ctrl-S on a console — the classic jam) blocks INDEFINITELY. The
+/// notifier chain awaits channels sequentially, so an unbounded wall
+/// would let one jammed console silence every later channel. On expiry
+/// the child is killed (`kill_on_drop`) and the chain moves on.
+pub const DEFAULT_SEND_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// wall(1) session-attention channel.
 #[derive(Debug, Clone)]
 pub struct WallChannel {
     binary: PathBuf,
     severity_floor: SeverityId,
+    send_timeout: Duration,
 }
 
 impl WallChannel {
@@ -66,7 +76,17 @@ impl WallChannel {
         Self {
             binary: PathBuf::from(DEFAULT_WALL_BINARY),
             severity_floor: DEFAULT_SEVERITY_FLOOR,
+            send_timeout: DEFAULT_SEND_TIMEOUT,
         }
+    }
+
+    /// Builder: override the per-broadcast subprocess deadline
+    /// ([`DEFAULT_SEND_TIMEOUT`]). Tests use a short value with a slow
+    /// stand-in binary to lock the no-hang contract.
+    #[must_use]
+    pub fn with_send_timeout(mut self, timeout: Duration) -> Self {
+        self.send_timeout = timeout;
+        self
     }
 
     /// Builder: override the `wall` binary path. Use for tests
@@ -107,6 +127,7 @@ impl WallChannel {
         Ok(Self {
             binary: binary.to_path_buf(),
             severity_floor: floor,
+            send_timeout: DEFAULT_SEND_TIMEOUT,
         })
     }
 
@@ -122,37 +143,54 @@ impl WallChannel {
             return Ok(false); // below floor → quietly skipped
         }
         use tokio::io::AsyncWriteExt as _;
+        // kill_on_drop: when the deadline below fires, the dropped future
+        // takes the child with it instead of leaking a wall(1) wedged on a
+        // flow-controlled TTY.
         let mut child = tokio::process::Command::new(&self.binary)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
             .spawn()
             .map_err(|e| WallDeliveryError::Spawn(e.to_string()))?;
-        if let Some(stdin) = child.stdin.as_mut() {
-            // EPIPE on write means the child has already exited (or
-            // closed its stdin) before we finished delivering the
-            // message. Don't fail eagerly — the wait below will
-            // surface the child's actual exit status, which is what
-            // callers act on. A real wall(1) with no logged-in TTYs
-            // can plausibly hit this path; in tests, fast stand-ins
-            // like /bin/true and /bin/false exhibit the same race.
-            if let Err(e) = stdin.write_all(message.as_bytes()).await
-                && e.kind() != std::io::ErrorKind::BrokenPipe
-            {
-                return Err(WallDeliveryError::WriteStdin(e.to_string()));
+        // The stdin writes AND the wait are all inside the deadline: a TTY
+        // jam can park the child (and, through the full pipe, our writes)
+        // at any of these points.
+        let work = async move {
+            if let Some(stdin) = child.stdin.as_mut() {
+                // EPIPE on write means the child has already exited (or
+                // closed its stdin) before we finished delivering the
+                // message. Don't fail eagerly — the wait below will
+                // surface the child's actual exit status, which is what
+                // callers act on. A real wall(1) with no logged-in TTYs
+                // can plausibly hit this path; in tests, fast stand-ins
+                // like /bin/true and /bin/false exhibit the same race.
+                if let Err(e) = stdin.write_all(message.as_bytes()).await
+                    && e.kind() != std::io::ErrorKind::BrokenPipe
+                {
+                    return Err(WallDeliveryError::WriteStdin(e.to_string()));
+                }
+                // Drop stdin so wall sees EOF and starts broadcasting.
+                // Same EPIPE tolerance as the write above.
+                if let Err(e) = stdin.shutdown().await
+                    && e.kind() != std::io::ErrorKind::BrokenPipe
+                {
+                    return Err(WallDeliveryError::WriteStdin(e.to_string()));
+                }
             }
-            // Drop stdin so wall sees EOF and starts broadcasting.
-            // Same EPIPE tolerance as the write above.
-            if let Err(e) = stdin.shutdown().await
-                && e.kind() != std::io::ErrorKind::BrokenPipe
-            {
-                return Err(WallDeliveryError::WriteStdin(e.to_string()));
+            child
+                .wait_with_output()
+                .await
+                .map_err(|e| WallDeliveryError::Wait(e.to_string()))
+        };
+        let output = match tokio::time::timeout(self.send_timeout, work).await {
+            Ok(r) => r?,
+            Err(_) => {
+                return Err(WallDeliveryError::Timeout {
+                    secs: self.send_timeout.as_secs_f64(),
+                });
             }
-        }
-        let output = child
-            .wait_with_output()
-            .await
-            .map_err(|e| WallDeliveryError::Wait(e.to_string()))?;
+        };
         if output.status.success() {
             Ok(true)
         } else {
@@ -194,6 +232,8 @@ enum WallDeliveryError {
     Wait(String),
     #[error("wall exited with status {status}: {stderr}")]
     Subprocess { status: i32, stderr: String },
+    #[error("wall broadcast timed out after {secs}s (child killed; jammed TTY?)")]
+    Timeout { secs: f64 },
 }
 
 impl From<WallDeliveryError> for NotifierError {
@@ -402,10 +442,9 @@ mod tests {
 
     #[tokio::test]
     async fn notify_with_empty_binary_returns_not_configured() {
-        let w = WallChannel {
-            binary: PathBuf::new(),
-            severity_floor: SeverityId::High,
-        };
+        let w = WallChannel::new()
+            .with_binary(PathBuf::new())
+            .with_severity_floor(SeverityId::High);
         let e = finding_event();
         assert!(matches!(
             <WallChannel as Notifier>::notify(&w, &e).await,
@@ -415,10 +454,9 @@ mod tests {
 
     #[tokio::test]
     async fn channel_send_with_empty_binary_returns_other() {
-        let w = WallChannel {
-            binary: PathBuf::new(),
-            severity_floor: SeverityId::High,
-        };
+        let w = WallChannel::new()
+            .with_binary(PathBuf::new())
+            .with_severity_floor(SeverityId::High);
         let p = mk_payload_with_severity(SeverityId::High);
         match <WallChannel as Channel>::send(&w, &p).await {
             Err(ChannelError::Other(_)) => {}
@@ -491,5 +529,45 @@ mod tests {
             Err(ChannelError::Transport(_)) => {} // spawn fails
             other => panic!("expected Transport error, got {other:?}"),
         }
+    }
+
+    /// The no-hang contract: a wall(1) wedged on a flow-controlled TTY
+    /// (stand-in: a script that swallows stdin and sleeps past the
+    /// deadline) must surface a timeout error within the configured
+    /// deadline — NOT hang. The notifier chain awaits channels
+    /// sequentially, so a hang here would let one jammed console silence
+    /// every later channel.
+    #[tokio::test]
+    async fn jammed_wall_times_out_instead_of_blocking_forever() {
+        use std::io::Write as _;
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("jammed-wall");
+        {
+            let mut f = std::fs::File::create(&script).unwrap();
+            // Reads stdin (so our writes complete), then wedges like a
+            // wall blocked on a ^S'd console.
+            f.write_all(b"#!/bin/sh\ncat >/dev/null\nsleep 60\n")
+                .unwrap();
+        }
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let w = WallChannel::new()
+            .with_binary(&script)
+            .with_severity_floor(SeverityId::High)
+            .with_send_timeout(std::time::Duration::from_millis(200));
+
+        let start = std::time::Instant::now();
+        let result = <WallChannel as Notifier>::notify(&w, &finding_event()).await;
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err(), "jammed wall must error, got {result:?}");
+        let msg = format!("{}", result.unwrap_err());
+        assert!(msg.contains("timed out"), "expected timeout error: {msg}");
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "must return promptly after the deadline, took {elapsed:?}"
+        );
     }
 }
