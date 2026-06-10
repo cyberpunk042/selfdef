@@ -36,19 +36,36 @@ use tracing::{debug, info, warn};
 /// one tick of either loop.
 const RULES_COLLECT_INTERVAL_SECS: u64 = 30;
 
+/// Hard ceiling on one `nft` invocation. nft talks to the kernel over
+/// netlink; a wedged netlink socket would otherwise park this loop's
+/// future forever and D-12 would silently stop refreshing while the
+/// daemon reports healthy. On expiry the child is killed
+/// (`kill_on_drop`) and the tick is treated like any other failure.
+const NFT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Run one collect pass: shell to `nft -j list ruleset`, project,
 /// persist. Best-effort — all failure paths log + return rather than
 /// propagate; the loop ticks again. The boolean indicates whether nft
 /// succeeded (true) or was unavailable (false) — used by the loop to
 /// suppress repeated identical INFO lines.
 async fn collect_once(store: &Path) -> bool {
-    let output = match Command::new("nft")
+    let pending = Command::new("nft")
         .arg("-j")
         .arg("list")
         .arg("ruleset")
-        .output()
-        .await
-    {
+        .kill_on_drop(true)
+        .output();
+    let bounded = match tokio::time::timeout(NFT_DEADLINE, pending).await {
+        Ok(r) => r,
+        Err(_) => {
+            warn!(
+                deadline_secs = NFT_DEADLINE.as_secs(),
+                "rules collector: `nft` timed out (child killed); will retry next tick"
+            );
+            return false;
+        }
+    };
+    let output = match bounded {
         Ok(out) => out,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // nft not installed — honest offline. The mirror-export loop

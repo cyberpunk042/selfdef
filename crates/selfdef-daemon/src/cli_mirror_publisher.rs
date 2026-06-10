@@ -140,14 +140,31 @@ fn resident_snapshot_bytes() -> Option<Vec<u8>> {
     Some(fresh)
 }
 
+/// Hard ceiling on one `selfdefctl cli-mirror snapshot` invocation — a
+/// wedged child would otherwise park this publisher loop forever and
+/// cli.json would silently stop refreshing while the daemon reports
+/// healthy. On expiry the child is killed (`kill_on_drop`) and the tick
+/// is treated as offline.
+const SNAPSHOT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
+
 async fn fetch_snapshot_bytes() -> Option<Vec<u8>> {
-    let output = match Command::new("selfdefctl")
+    let pending = Command::new("selfdefctl")
         .arg("cli-mirror")
         .arg("snapshot")
         .arg("--json")
-        .output()
-        .await
-    {
+        .kill_on_drop(true)
+        .output();
+    let bounded = match tokio::time::timeout(SNAPSHOT_DEADLINE, pending).await {
+        Ok(r) => r,
+        Err(_) => {
+            warn!(
+                deadline_secs = SNAPSHOT_DEADLINE.as_secs(),
+                "cli-mirror publisher: `selfdefctl` timed out (child killed); cli.json stays offline this tick"
+            );
+            return None;
+        }
+    };
+    let output = match bounded {
         Ok(o) => o,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             debug!(
