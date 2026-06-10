@@ -80,6 +80,50 @@ async fn relative_mount_point_is_rejected() {
 }
 
 #[tokio::test]
+async fn traversal_mount_point_is_rejected() {
+    // umount2() VFS-resolves the path: a ".." component walks the unbind to a
+    // different mount than named (e.g. `/mnt/data/../../proc` -> `/proc`). A
+    // kernel-canonical mount point never contains "..", so every traversal
+    // form must be rejected before this destructive op runs.
+    let b = InMemoryBackend::new();
+    for mp in [
+        "/mnt/data/../../proc",
+        "/mnt/../proc",
+        "/..",
+        "/a/b/../../../sys",
+    ] {
+        let r = req(
+            mp,
+            60,
+            AuthorityTier::Operator,
+            UnbindScope::Bind,
+            "traversal probe",
+            true,
+        );
+        let err = b
+            .unbind_mount(r)
+            .await
+            .expect_err("traversal mount-point must error");
+        assert!(
+            matches!(err, MountBindingUnbindError::InvalidRequest(_)),
+            "{mp:?} should be InvalidRequest"
+        );
+    }
+    // A legitimate deep absolute path with no traversal still works.
+    let ok = b
+        .unbind_mount(req(
+            "/mnt/data/bind/leak",
+            60,
+            AuthorityTier::Operator,
+            UnbindScope::Bind,
+            "legit",
+            true,
+        ))
+        .await;
+    assert!(ok.is_ok(), "clean absolute path must still be accepted");
+}
+
+#[tokio::test]
 async fn empty_reason_is_rejected() {
     let b = InMemoryBackend::new();
     let r = req(

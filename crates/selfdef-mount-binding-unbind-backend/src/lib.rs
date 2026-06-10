@@ -160,6 +160,18 @@ fn validate(req: &UnbindMountRequest) -> Result<(), MountBindingUnbindError> {
             req.mount_point
         )));
     }
+    // umount2() VFS-resolves the path, so a ".." component would walk the
+    // unbind to a DIFFERENT mount than named: `/mnt/data/../../proc` resolves
+    // to `/proc` and would unmount it. A real, kernel-canonical mount point
+    // never contains a ".." component, so reject parent-traversal outright —
+    // this is a destructive host operation and must act only on the mount the
+    // caller literally named.
+    if req.mount_point.split('/').any(|seg| seg == "..") {
+        return Err(MountBindingUnbindError::InvalidRequest(format!(
+            "mount_point must not contain a '..' component, got {:?}",
+            req.mount_point
+        )));
+    }
     if req.reason.trim().is_empty() {
         return Err(MountBindingUnbindError::InvalidRequest(
             "reason must be non-empty".into(),
