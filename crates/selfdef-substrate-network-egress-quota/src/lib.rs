@@ -182,11 +182,18 @@ impl SubstrateEgressQuota {
 
     fn in_window_bytes(&self, profile: Profile, cfg: &ProfileEgress, now_ms: u64) -> u64 {
         let cutoff = now_ms.saturating_sub(cfg.window_ms);
+        // Saturating fold, not Iterator::sum: `sum::<u64>()` is plain `+`
+        // (panic in debug, wrap in release). A single record with `bytes` near
+        // u64::MAX — e.g. a corrupt/deserialized record set — would wrap the
+        // in-window total to a small value, so `account`'s `would_total` reads
+        // BELOW the cap and admits egress the quota should deny (fail-OPEN).
+        // The companion `would = used.saturating_add(bytes)` already saturates;
+        // make the running sum match.
         self.records
             .iter()
             .filter(|r| r.profile == profile && r.ts_ms >= cutoff && r.ts_ms <= now_ms)
             .map(|r| r.bytes)
-            .sum()
+            .fold(0u64, |a, b| a.saturating_add(b))
     }
 
     /// Account for a candidate send of `bytes` at `now_ms`.
@@ -301,6 +308,31 @@ mod tests {
             q.account(Profile::Production, 1, 0).unwrap(),
             EgressVerdict::BudgetExhausted { .. }
         ));
+    }
+
+    #[test]
+    fn in_window_sum_saturates_instead_of_wrapping_to_fail_open() {
+        // A corrupt/deserialized record set whose in-window bytes sum past
+        // u64::MAX must NOT wrap the running total below the budget and admit
+        // egress the quota should deny. Plain Iterator::sum panicked in debug /
+        // wrapped in release (fail-OPEN); the saturating fold caps at u64::MAX
+        // so the budget is still seen as exhausted.
+        let mut q = SubstrateEgressQuota::canonical();
+        q.records.push(EgressRecord {
+            ts_ms: 0,
+            bytes: u64::MAX - 10,
+            profile: Profile::Fast,
+        });
+        q.records.push(EgressRecord {
+            ts_ms: 0,
+            bytes: 100,
+            profile: Profile::Fast,
+        });
+        let v = q.account(Profile::Fast, 0, 0).unwrap();
+        assert!(
+            matches!(v, EgressVerdict::BudgetExhausted { .. }),
+            "overflowing in-window sum must still exhaust the budget, got {v:?}"
+        );
     }
 
     #[test]
