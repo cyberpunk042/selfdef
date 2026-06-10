@@ -132,7 +132,15 @@ impl SloBudgetTracker {
         let total = s.successes.saturating_add(s.failures);
         // allowed = total × (10000 - target_bp) / 10000
         // (integer math — floor toward 0)
-        let error_bp = (10000 - s.target_bp) as u64;
+        //
+        // saturating_sub, not `-`: serde bypasses register()/validate(), so a
+        // restored or corrupt state can carry target_bp > 10000 that never passed
+        // the 1..=10000 gate. A plain subtraction underflows there — debug-panics
+        // (DoS on this snapshot path) and in release wraps to a huge error_bp,
+        // inflating `allowed` so the SLO never reports exhaustion (silent
+        // fail-open). saturating_sub fails closed: an impossible >100% target
+        // yields error_bp = 0 → zero budget → first failure exhausts.
+        let error_bp = 10000u32.saturating_sub(s.target_bp) as u64;
         let allowed = (total.saturating_mul(error_bp)) / 10000;
         let actual = s.failures;
         let remaining = allowed.saturating_sub(actual);
@@ -314,5 +322,39 @@ mod tests {
         let j = serde_json::to_string(&t).unwrap();
         let back: SloBudgetTracker = serde_json::from_str(&j).unwrap();
         assert_eq!(t, back);
+    }
+
+    #[test]
+    fn budget_self_defends_against_deserialized_oversized_target() {
+        // serde-bypass-defense: `register()`/`validate()` reject target_bp > 10000,
+        // but `Slo` has public fields and derives Deserialize, so a restored or
+        // corrupt persisted state can carry an out-of-range target_bp that never
+        // passed the constructor. `budget()` computes `10000 - target_bp`; for
+        // target_bp > 10000 that subtraction underflows — debug-panics (DoS on the
+        // snapshot path) and in release wraps to a huge error_bp, inflating
+        // `allowed` so the SLO can never report exhaustion (silent fail-open,
+        // infinite error budget). `budget()` must self-defend fail-closed rather
+        // than trust the invariant: an impossible >100% target grants ZERO error
+        // budget, so the first failure exhausts.
+        let corrupt = r#"{"schema_version":"1.0.0",
+            "slos":{"api":{"target_bp":20000,"successes":100,"failures":1}}}"#;
+        let t: SloBudgetTracker = serde_json::from_str(corrupt).unwrap();
+
+        // Must not panic, and must fail closed.
+        let b = t.budget("api").expect("budget present");
+        assert_eq!(b.total, 101);
+        assert_eq!(
+            b.allowed_failures, 0,
+            "an impossible >100% target must grant zero error budget (fail-closed)"
+        );
+        assert!(
+            b.exhausted,
+            "any failure against a zero budget must report exhausted"
+        );
+        assert_eq!(
+            b.burn_ratio_bp,
+            u32::MAX,
+            "non-zero failures against a zero budget burn at the clamp ceiling"
+        );
     }
 }
