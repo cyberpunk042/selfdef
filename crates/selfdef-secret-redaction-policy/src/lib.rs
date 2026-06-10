@@ -111,11 +111,17 @@ fn char_at(s: &str, i: usize) -> char {
 
 fn match_secret(input: &str, i: usize) -> Option<(SecretClass, usize)> {
     let rest = &input[i..];
-    // PEM block.
+    // PEM block. The closing dashes must be searched for AFTER the
+    // "-----END " marker itself — searching from `end` would match the
+    // marker's OWN leading five dashes (position 0), truncating the span
+    // so the whole "-----END <TYPE>-----" line leaks into the output and
+    // `original_len` is recorded short by the entire end marker.
     if rest.starts_with("-----BEGIN ") {
-        if let Some(end) = rest.find("-----END ") {
-            if let Some(after) = rest[end..].find("-----") {
-                let total = end + after + "-----".len();
+        const END_MARKER: &str = "-----END ";
+        if let Some(end) = rest.find(END_MARKER) {
+            let after_marker = end + END_MARKER.len();
+            if let Some(after) = rest[after_marker..].find("-----") {
+                let total = after_marker + after + "-----".len();
                 return Some((SecretClass::PemBlock, total));
             }
         }
@@ -286,6 +292,40 @@ mod tests {
         let pem = "-----BEGIN PRIVATE KEY-----\nMIIBVQIBADANBgkqhkiG\n-----END PRIVATE KEY-----";
         let r = SecretRedactor::redact(pem);
         assert!(r.events.iter().any(|e| e.class == SecretClass::PemBlock));
+    }
+
+    #[test]
+    fn pem_block_redacts_through_end_marker() {
+        // The whole PEM block — including the closing "-----END <TYPE>-----"
+        // line — must be replaced. A previous off-by-marker bug searched for
+        // the trailing dashes starting AT the "-----END " marker, matching its
+        // own leading dashes (position 0) and stopping the span there. That
+        // left "END PRIVATE KEY-----" dangling in the output and recorded an
+        // `original_len` short by the entire end marker.
+        let pem = "-----BEGIN PRIVATE KEY-----\nMIIBVQIBADANBgkqhkiG\n-----END PRIVATE KEY-----";
+        let r = SecretRedactor::redact(pem);
+        let ev = r
+            .events
+            .iter()
+            .find(|e| e.class == SecretClass::PemBlock)
+            .expect("PEM event");
+        // Span covers the ENTIRE block, end marker included.
+        assert_eq!(
+            ev.original_len,
+            pem.len(),
+            "PEM span must cover the END line"
+        );
+        // Nothing from the END marker leaks into the redacted output.
+        assert!(
+            !r.redacted.contains("END"),
+            "redacted output leaked end marker: {:?}",
+            r.redacted
+        );
+        assert!(!r.redacted.contains("PRIVATE KEY"));
+        // Trailing context after a complete block is still preserved.
+        let with_tail = format!("{pem} trailing");
+        let r2 = SecretRedactor::redact(&with_tail);
+        assert!(r2.redacted.ends_with(" trailing"));
     }
 
     #[test]
