@@ -122,6 +122,12 @@ impl CuckooFilter {
 
     /// Insert.
     pub fn insert(&mut self, key: &str) -> Result<(), CuckooError> {
+        // i1()/alt() compute `% self.n_buckets`; a serde-bypassed zero
+        // n_buckets (new()/validate() reject it) would panic that modulo in
+        // every build. A zero-bucket filter can hold nothing — refuse.
+        if self.n_buckets == 0 {
+            return Err(CuckooError::Full);
+        }
         let fp = fp_byte(key);
         let i1 = self.i1(key);
         if self.try_insert_into(i1, fp) {
@@ -155,6 +161,11 @@ impl CuckooFilter {
 
     /// Contains.
     pub fn contains(&self, key: &str) -> bool {
+        // Same serde-bypass guard as insert(): a zero-bucket filter holds
+        // nothing, so report absent rather than panic in i1()/alt()'s modulo.
+        if self.n_buckets == 0 {
+            return false;
+        }
         let fp = fp_byte(key);
         let i1 = self.i1(key);
         let i2 = self.alt(i1, fp);
@@ -167,6 +178,11 @@ impl CuckooFilter {
 
     /// Remove.
     pub fn remove(&mut self, key: &str) -> bool {
+        // Same serde-bypass guard as insert(): nothing to remove from a
+        // zero-bucket filter, and the modulo would otherwise panic.
+        if self.n_buckets == 0 {
+            return false;
+        }
         let fp = fp_byte(key);
         let i1 = self.i1(key);
         if let Some(slot) = self.bucket(i1).iter_mut().find(|s| **s == fp) {
@@ -202,6 +218,22 @@ impl CuckooFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_buckets_serde_bypass_does_not_panic() {
+        // new()/validate() reject n_buckets==0, but serde can construct it.
+        // i1()/alt()'s `% self.n_buckets` would panic in every build. Guard
+        // makes the ops fail-closed (refuse / absent) instead of crashing.
+        let mut c = CuckooFilter {
+            schema_version: SCHEMA_VERSION.into(),
+            n_buckets: 0,
+            max_relocations: 8,
+            cells: Vec::new(),
+        };
+        assert!(c.insert("k").is_err()); // must not panic
+        assert!(!c.contains("k")); // must not panic
+        assert!(!c.remove("k")); // must not panic
+    }
 
     #[test]
     fn insert_then_contains() {

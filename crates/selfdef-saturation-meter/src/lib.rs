@@ -92,6 +92,14 @@ impl SaturationMeter {
 
     /// Utilization in basis points (may exceed 10000 if held > capacity).
     pub fn utilization_bp(&self) -> u32 {
+        // new()/validate() reject capacity==0, but serde deserialization can
+        // set it directly; the division below would then panic in every build
+        // (integer div-by-zero is never masked). A zero-capacity meter admits
+        // nothing, so any state is fully saturated — report max (fail-CLOSED,
+        // drives backpressure / classify()->Saturated) rather than crash.
+        if self.capacity == 0 {
+            return u32::MAX;
+        }
         let ratio = (self.held as u64 * 10_000) / self.capacity as u64;
         ratio.min(u32::MAX as u64) as u32
     }
@@ -128,6 +136,23 @@ impl SaturationMeter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_capacity_serde_bypass_does_not_panic() {
+        // new()/validate() reject capacity==0, but serde can construct it. The
+        // `/ self.capacity` would panic in every build. Guard reports fully
+        // saturated (fail-closed) instead of crashing.
+        let m = SaturationMeter {
+            schema_version: SCHEMA_VERSION.into(),
+            capacity: 0,
+            held: 5,
+            medium_bp: 5000,
+            high_bp: 8000,
+            saturated_bp: 9500,
+        };
+        assert_eq!(m.utilization_bp(), u32::MAX); // must not panic
+        assert_eq!(m.classify(), Level::Saturated);
+    }
 
     fn meter() -> SaturationMeter {
         // Thresholds at 25%, 50%, 75%.

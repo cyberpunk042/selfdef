@@ -85,11 +85,23 @@ impl ByteBudget {
 
     /// Bytes available.
     pub fn available(&self) -> u64 {
-        self.capacity - self.in_use
+        // saturating: a serde-bypassed in_use > capacity (charge() keeps the
+        // invariant, but deserialization can violate it) would otherwise
+        // underflow — a debug panic and, in release, a wrap to a huge bogus
+        // "available" (fail-OPEN). Saturate to 0: an over-budget state has
+        // nothing available (fail-CLOSED).
+        self.capacity.saturating_sub(self.in_use)
     }
 
     /// Fraction in use, in basis points.
     pub fn used_bp(&self) -> u32 {
+        // new()/validate() reject capacity==0, but serde can set it directly;
+        // the division would then panic in every build (integer div-by-zero is
+        // never masked). A zero-capacity budget has no room — report fully
+        // used (fail-CLOSED) rather than crash.
+        if self.capacity == 0 {
+            return 10_000;
+        }
         ((self.in_use as u128 * 10_000) / self.capacity as u128) as u32
     }
 
@@ -119,6 +131,22 @@ impl ByteBudget {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_capacity_and_overuse_serde_bypass_do_not_panic() {
+        // new()/validate() reject capacity==0 and keep in_use<=capacity, but
+        // serde can violate both. used_bp()'s `/ self.capacity` would panic and
+        // available()'s `capacity - in_use` would underflow. Guards make them
+        // fail-closed (0 available, 100% used) instead of crashing/wrapping.
+        let b = ByteBudget {
+            schema_version: SCHEMA_VERSION.into(),
+            capacity: 0,
+            in_use: 100,
+            high_watermark: 100,
+        };
+        assert_eq!(b.available(), 0); // saturating, no underflow
+        assert_eq!(b.used_bp(), 10_000); // no div-by-zero
+    }
 
     #[test]
     fn reserve_and_release() {
