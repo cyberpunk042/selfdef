@@ -87,6 +87,14 @@ impl FixedWindowCounter {
 
     /// Reset.
     pub fn reset(&mut self, now_ms: u64) {
+        // Same div-by-zero defense as realign() (serde bypasses new()/validate(),
+        // so window_ms can be 0): `now_ms / self.window_ms` would panic in EVERY
+        // build. Fail-closed: a corrupt counter is NOT silently cleared to a
+        // permissive state (zeroing the count would open a rate limiter); the
+        // reset is a no-op rather than a crash or a fail-open clear.
+        if self.window_ms == 0 {
+            return;
+        }
         self.bucket_start_ms = (now_ms / self.window_ms) * self.window_ms;
         self.current_count = 0;
     }
@@ -146,6 +154,26 @@ mod tests {
         c.observe(3, 1000); // must not panic
         // No realign happened (window 0) → count accrues, never silently resets.
         assert_eq!(c.count(9_999_999), 8);
+    }
+
+    #[test]
+    fn zero_window_reset_does_not_divide_by_zero() {
+        // Sibling of zero_window_does_not_divide_by_zero, for reset(): new()/
+        // validate() reject window_ms==0, but serde can construct one directly.
+        // reset() computes `now_ms / self.window_ms` just like realign() — it
+        // must not divide by zero (div-by-zero panics in EVERY build, not just
+        // debug). Fail-closed like realign: a corrupt counter is NOT silently
+        // cleared to a permissive state (which would open a rate limiter); the
+        // reset is a no-op rather than a crash or a fail-open clear.
+        let mut c = FixedWindowCounter {
+            schema_version: SCHEMA_VERSION.into(),
+            window_ms: 0,
+            bucket_start_ms: 0,
+            current_count: 5,
+        };
+        c.reset(1000); // must not panic
+        // Fail-closed: the over-limit count is retained, not reset to 0.
+        assert_eq!(c.current_count, 5);
     }
 
     #[test]
