@@ -68,6 +68,13 @@ impl RingBuffer {
         if (self.buf.len() as u32) < self.capacity {
             self.buf.push(x);
         } else {
+            // head is advanced only via `% capacity`, so it stays < buf.len()
+            // under normal use — but serde can persist head >= buf.len(). The
+            // index below would then panic (out-of-bounds, every build).
+            // Normalize a corrupt head back to 0 before indexing.
+            if self.head as usize >= self.buf.len() {
+                self.head = 0;
+            }
             let idx = self.head as usize;
             self.buf[idx] = x;
             self.head = (self.head + 1) % self.capacity;
@@ -148,6 +155,22 @@ impl RingBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn out_of_range_head_serde_bypass_does_not_panic() {
+        // head is advanced only via `% capacity`, staying < buf.len(); serde can
+        // persist head >= buf.len(). push()'s wrap branch indexes self.buf[head]
+        // — an OOB panic in every build. The normalize-to-0 guard prevents it.
+        let mut b = RingBuffer {
+            schema_version: SCHEMA_VERSION.into(),
+            capacity: 3,
+            buf: vec![1, 2, 3], // full → push takes the wrap branch
+            head: 99,           // serde-bypassed, way past buf.len()
+            pushes: 3,
+        };
+        b.push(7); // must not panic
+        assert!(b.samples().contains(&7));
+    }
 
     #[test]
     fn zero_capacity_serde_bypass_does_not_panic() {
