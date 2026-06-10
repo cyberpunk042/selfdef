@@ -468,6 +468,13 @@ where
     Ok(0)
 }
 
+/// Upper bound on a single LSP-framed JSON-RPC message body. The
+/// `Content-Length` header is attacker-controlled (the MCP server is reachable
+/// over TCP), so it must not be allowed to drive an unbounded `vec![0u8; len]`
+/// allocation — an over-large value would OOM/abort the process. 16 MiB is far
+/// larger than any real MCP request yet bounds the worst-case allocation.
+const MAX_CONTENT_LENGTH: usize = 16 * 1024 * 1024;
+
 /// SD-R92 — LSP-style Content-Length framing (real MCP wire format).
 ///
 /// Per the JSON-RPC base protocol used by LSP + MCP, each message is
@@ -515,7 +522,20 @@ where
             // emit application/vscode-jsonrpc; charset=utf-8.
         }
         let len = match content_length {
-            Some(v) => v,
+            Some(v) if v <= MAX_CONTENT_LENGTH => v,
+            Some(_) => {
+                // An attacker-controlled Content-Length must not drive an
+                // unbounded `vec![0u8; len]` allocation (OOM DoS). Reject the
+                // over-large frame and close the stream — we cannot safely
+                // resync past a body we refuse to read.
+                let resp = error_response(
+                    serde_json::Value::Null,
+                    -32700,
+                    "Parse error: Content-Length exceeds maximum",
+                );
+                write_lsp_message(&mut writer, &resp)?;
+                break;
+            }
             None => {
                 // Bad framing — emit a parse-error response per LSP.
                 let resp = error_response(
@@ -927,6 +947,28 @@ fn scalar_to_string(v: &serde_json::Value) -> Result<String, (i64, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lsp_oversized_content_length_is_rejected_not_allocated() {
+        use std::io::Cursor;
+        // A malicious Content-Length far above the cap must NOT drive a
+        // `vec![0u8; len]` allocation; it must be rejected with a parse error
+        // and the stream closed. If the bound regressed, this test would
+        // OOM/abort the test process instead of returning.
+        let reader = Cursor::new(b"Content-Length: 999999999999999\r\n\r\n".to_vec());
+        let mut out: Vec<u8> = Vec::new();
+        let rc = serve_stdio_lsp(None, reader, &mut out).expect("serves without OOM");
+        assert_eq!(rc, 0);
+        let s = String::from_utf8_lossy(&out);
+        assert!(
+            s.contains("Content-Length exceeds maximum"),
+            "expected over-large rejection, got: {s}"
+        );
+        assert!(
+            s.contains("-32700"),
+            "expected JSON-RPC parse-error code: {s}"
+        );
+    }
 
     #[test]
     fn sdr84_json_manifest_round_trips() {
