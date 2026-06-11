@@ -8,11 +8,15 @@
 //! forward_agent = false
 //! forward_x11 = false
 //! port_forwarding = false
+//! permit_command_execution = false   # strip -o ProxyCommand/LocalCommand/...
 //! strict_host_key = "accept-new"
 //! exit_on_forward_failure = true
 //!
 //! [hosts."myserver.example.com"]
 //! forward_agent = true   # override: trusted host
+//!
+//! [hosts."bastion.example.com"]
+//! permit_command_execution = true   # legitimate ProxyCommand bastion
 //!
 //! [hosts."*.internal"]
 //! port_forwarding = true
@@ -49,6 +53,15 @@ pub struct HostPolicy {
     pub forward_agent: Option<bool>,
     pub forward_x11: Option<bool>,
     pub port_forwarding: Option<bool>,
+    /// Permit ssh options that execute a command (`ProxyCommand`,
+    /// `LocalCommand`+`PermitLocalCommand`, `KnownHostsCommand`). `false`
+    /// (the secure default) strips them from the user's argv, so a restricted
+    /// ssh-wrap deployment can't be turned into arbitrary local command
+    /// execution / a per-host-policy bypass via `-o ProxyCommand=...`. Set
+    /// `true` per-host for legitimate old-style bastions. `ProxyJump`/`-J` is
+    /// NOT affected — it routes through a jump host without running an
+    /// arbitrary command, so it stays available. (F-2026-115.)
+    pub permit_command_execution: Option<bool>,
     pub strict_host_key: Option<String>, // "yes" | "accept-new" | "no"
     pub exit_on_forward_failure: Option<bool>,
     pub connect_timeout_secs: Option<u32>,
@@ -61,6 +74,7 @@ impl Default for HostPolicy {
             forward_agent: None,
             forward_x11: None,
             port_forwarding: None,
+            permit_command_execution: None,
             strict_host_key: None,
             exit_on_forward_failure: None,
             connect_timeout_secs: None,
@@ -76,6 +90,10 @@ impl HostPolicy {
             forward_agent: Some(false),
             forward_x11: Some(false),
             port_forwarding: Some(false),
+            // Paranoid client: no command-executing ssh options unless a host
+            // is explicitly opted in. Consistent with the deny-by-default
+            // posture of every other field here.
+            permit_command_execution: Some(false),
             strict_host_key: Some("accept-new".into()),
             exit_on_forward_failure: Some(true),
             connect_timeout_secs: Some(20),
@@ -88,6 +106,9 @@ impl HostPolicy {
             forward_agent: self.forward_agent.or(base.forward_agent),
             forward_x11: self.forward_x11.or(base.forward_x11),
             port_forwarding: self.port_forwarding.or(base.port_forwarding),
+            permit_command_execution: self
+                .permit_command_execution
+                .or(base.permit_command_execution),
             strict_host_key: self
                 .strict_host_key
                 .clone()
@@ -109,6 +130,7 @@ pub struct ResolvedPolicy {
     pub forward_agent: bool,
     pub forward_x11: bool,
     pub port_forwarding: bool,
+    pub permit_command_execution: bool,
     pub strict_host_key: String,
     pub exit_on_forward_failure: bool,
     pub connect_timeout_secs: u32,
@@ -170,6 +192,9 @@ impl ResolvedPolicy {
             port_forwarding: merged
                 .port_forwarding
                 .unwrap_or_else(|| fb.port_forwarding.unwrap()),
+            permit_command_execution: merged
+                .permit_command_execution
+                .unwrap_or_else(|| fb.permit_command_execution.unwrap()),
             strict_host_key: merged
                 .strict_host_key
                 .unwrap_or_else(|| fb.strict_host_key.unwrap()),
@@ -262,6 +287,18 @@ impl ResolvedPolicy {
             out.push("RemoteForward");
             out.push("DynamicForward");
         }
+        if !self.permit_command_execution {
+            // Options that run a command (F-2026-115). ProxyCommand runs an
+            // arbitrary command for the connection and can also route around
+            // the per-host policy; LocalCommand (gated by PermitLocalCommand)
+            // runs a local command post-connect; KnownHostsCommand runs a
+            // command to source host keys. ProxyJump/-J is deliberately NOT
+            // here — it uses a jump host without an arbitrary command.
+            out.push("ProxyCommand");
+            out.push("LocalCommand");
+            out.push("PermitLocalCommand");
+            out.push("KnownHostsCommand");
+        }
         out
     }
 }
@@ -329,7 +366,41 @@ mod tests {
         assert!(!policy.forward_agent);
         assert!(!policy.forward_x11);
         assert!(!policy.port_forwarding);
+        assert!(!policy.permit_command_execution);
         assert_eq!(policy.strict_host_key, "accept-new");
+    }
+
+    #[test]
+    fn command_executing_o_keys_denied_by_default_and_opt_in_per_host() {
+        // F-2026-115: ProxyCommand & friends are stripped by default (paranoid
+        // client), so `ssh -o ProxyCommand=...` can't smuggle command execution
+        // or a per-host-policy bypass through the wrapper.
+        let default = ResolvedPolicy::resolve(&PolicyFile::default(), "any.example.com");
+        let denied = default.denied_o_keys();
+        for k in [
+            "ProxyCommand",
+            "LocalCommand",
+            "PermitLocalCommand",
+            "KnownHostsCommand",
+        ] {
+            assert!(denied.contains(&k), "{k} must be denied by default");
+        }
+
+        // A legitimate bastion host can opt back in.
+        let toml_str = r#"
+            [hosts."bastion.example.com"]
+            permit_command_execution = true
+        "#;
+        let file: PolicyFile = toml::from_str(toml_str).unwrap();
+        let bastion = ResolvedPolicy::resolve(&file, "bastion.example.com");
+        assert!(bastion.permit_command_execution);
+        assert!(
+            !bastion.denied_o_keys().contains(&"ProxyCommand"),
+            "an opted-in host must allow ProxyCommand"
+        );
+        // ...but only for that host.
+        let other = ResolvedPolicy::resolve(&file, "other.example.com");
+        assert!(other.denied_o_keys().contains(&"ProxyCommand"));
     }
 
     #[test]

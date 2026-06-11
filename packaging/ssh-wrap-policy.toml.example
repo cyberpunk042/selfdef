@@ -2,8 +2,8 @@
 #
 # Copy to ~/.config/selfdef/ssh-wrap.toml (or set $SELFDEF_SSH_POLICY).
 # Built-in secure defaults already deny agent forwarding, X11 forwarding,
-# and port forwarding for every host. This file lets you opt specific
-# hosts back in.
+# port forwarding, and command-executing options for every host. This file
+# lets you opt specific hosts back in.
 
 [defaults]
 # Set to true if you want to relax the defaults globally. Recommended: leave
@@ -11,6 +11,14 @@
 forward_agent = false
 forward_x11 = false
 port_forwarding = false
+# Strip ssh options that run a command: ProxyCommand (arbitrary command for the
+# connection — also a way to bypass this per-host policy), LocalCommand /
+# PermitLocalCommand (run a local command post-connect), KnownHostsCommand.
+# false = stripped from your argv (the secure default). ProxyJump / -J is NOT
+# affected (it uses a jump host without running an arbitrary command), so modern
+# bastion hops keep working; only opt this back on for old-style ProxyCommand
+# bastions (see the bastion example below).
+permit_command_execution = false
 # StrictHostKeyChecking: "yes" (refuse new hosts), "accept-new" (auto-add new,
 # refuse changed), or "no" (dangerous; never use).
 strict_host_key = "accept-new"
@@ -31,3 +39,8 @@ server_alive_interval_secs = 30
 # Example: a host you connect to from a CI runner that needs X11 for a GUI test.
 # [hosts."ci.example.com"]
 # forward_x11 = true
+
+# Example: an old-style bastion reached via `ssh -o ProxyCommand=...`. Only
+# opt this host back in; everywhere else ProxyCommand stays stripped.
+# [hosts."bastion.example.com"]
+# permit_command_execution = true
