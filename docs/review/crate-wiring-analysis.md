@@ -53,3 +53,26 @@ quarantine-ledger, source-taxonomy, arming-state), not event sources.
   daemon should enforce and *how they compose*, not a mechanical sweep.
 - Security posture is unaffected: the attacker-reachable surface is the 89
   wired crates, which are the ones audited this cycle.
+
+## Caveat: orphaned ≠ missing capability (verify before wiring)
+
+A chunk of the 471 orphans are **alternative implementations of capabilities
+the daemon already provides via a different (often stronger) mechanism** —
+not missing functionality. Concrete example found 2026-06-10:
+
+- `selfdef-action-denylist` (default-allow except denied) looks like an
+  obvious "wire it into the responder's pre-action gate." But the
+  `Responder` already holds `allowed_actions: HashSet<String>` — an
+  **allowlist** (default-deny: only explicitly-allowed actions fire), which
+  is *stricter*. Wiring the denylist would be redundant at best, and a
+  regression if it displaced the allowlist (default-allow is weaker than
+  default-deny for a destructive IPS).
+
+**Implication for the integration roadmap:** closing the catalog→code gap is
+NOT a mechanical "wire every orphan" sweep. Each orphan needs a per-crate
+judgment — *is this a genuinely missing capability, or a catalogued
+alternative to something already wired?* — before integration. The headline
+"84% orphaned" therefore overstates missing functionality; the true
+"missing capability" subset is smaller and must be identified case-by-case.
+This is design work that needs operator direction on which capabilities are
+wanted, not an autonomous bulk wiring.
