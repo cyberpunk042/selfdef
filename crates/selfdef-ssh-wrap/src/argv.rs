@@ -47,39 +47,37 @@ pub fn classify(args: &[String]) -> Vec<Token<'_>> {
             continue;
         }
 
-        // Multi-char form like "-pPORT" or "-oFoo=bar".
-        let bytes = arg.as_bytes();
-        if bytes.len() >= 2 {
-            let c = bytes[1] as char;
-            if VALUE_OPTIONS.contains(&c) {
-                if bytes.len() == 2 {
-                    // "-o" then value in next argv slot
+        // Option cluster like "-pPORT", "-oFoo=bar", "-Aq", or "-qoFoo=bar".
+        // ssh uses getopt: walk the cluster left-to-right; leading non-value
+        // letters are bare flags, and the FIRST value-option letter consumes
+        // the REST of the cluster as its attached value — or, if it is the last
+        // letter, the next argv element. Classifying every cluster letter as a
+        // bare flag (the pre-fix behavior) let `-qo ProxyCommand=…` smuggle a
+        // denied `-o` option past the key-denylist, because the embedded `o`
+        // was never seen as Token::Option. (`-` alone and `--` are handled
+        // above, so the cluster here is always at least one char.)
+        let cluster = &arg[1..];
+        let mut consumed_next = false;
+        for (off, ch) in cluster.char_indices() {
+            if VALUE_OPTIONS.contains(&ch) {
+                let rest = &cluster[off + ch.len_utf8()..];
+                if rest.is_empty() {
+                    // value is the next argv element (`-o VALUE`, `-qo VALUE`)
                     if let Some(val) = args.get(i + 1) {
-                        out.push(Token::Option(c, val.as_str()));
-                        i += 2;
-                        continue;
+                        out.push(Token::Option(ch, val.as_str()));
+                        consumed_next = true;
+                    } else {
+                        out.push(Token::Flag(ch));
                     }
-                    // Trailing -o with no value; treat as flag.
-                    out.push(Token::Flag(c));
-                    i += 1;
-                    continue;
+                } else {
+                    // value attached in the cluster (`-oVALUE`, `-qoVALUE`)
+                    out.push(Token::AttachedOption(ch, rest));
                 }
-                let val = &arg[2..];
-                out.push(Token::AttachedOption(c, val));
-                i += 1;
-                continue;
+                break;
             }
-
-            // Combined flags like "-Aq" or "-vvv".
-            for ch in arg[1..].chars() {
-                out.push(Token::Flag(ch));
-            }
-            i += 1;
-            continue;
+            out.push(Token::Flag(ch));
         }
-        // "-" alone is positional (stdin).
-        out.push(Token::Positional(arg));
-        i += 1;
+        i += if consumed_next { 2 } else { 1 };
     }
     out
 }
@@ -199,6 +197,35 @@ mod tests {
         let argv = s(&["-p2222", "host"]);
         let toks = classify(&argv);
         assert!(matches!(toks[0], Token::AttachedOption('p', "2222")));
+    }
+
+    #[test]
+    fn filter_strips_denied_o_smuggled_in_combined_flag_cluster() {
+        // BYPASS (F-2026-108): ssh uses getopt, so `-qo ProxyCommand=…` means
+        // `-q -o ProxyCommand=…` — the `o` inside the cluster consumes the next
+        // argv element as its value. The pre-fix classifier split `-qo` into
+        // bare Flag('q')+Flag('o'), so the `-o` KEY denylist (which only fires
+        // on Token::Option('o',..)/AttachedOption('o',..)) never saw it and
+        // run() re-emitted the denied ProxyCommand — a client-side policy bypass
+        // of the entire `-o` denylist (ProxyCommand pivot, StrictHostKeyChecking
+        // MITM, agent-forward re-enable). classify must treat the embedded `o`
+        // as the value-option it is.
+        let argv = s(&["-qo", "ProxyCommand=/evil"]);
+        let filtered = filter(&classify(&argv), &[], &["ProxyCommand"]);
+        assert!(
+            !filtered.iter().any(|x| x.contains("ProxyCommand")),
+            "denied ProxyCommand smuggled through a combined-flag cluster: {filtered:?}"
+        );
+        assert!(filtered.iter().any(|x| x == "-q"), "got {filtered:?}");
+
+        // Attached form: `-voProxyCommand=…` => `-v -oProxyCommand=…`.
+        let argv = s(&["-voProxyCommand=/evil"]);
+        let filtered = filter(&classify(&argv), &[], &["ProxyCommand"]);
+        assert!(
+            !filtered.iter().any(|x| x.contains("ProxyCommand")),
+            "attached cluster smuggled ProxyCommand: {filtered:?}"
+        );
+        assert!(filtered.iter().any(|x| x == "-v"), "got {filtered:?}");
     }
 
     #[test]
