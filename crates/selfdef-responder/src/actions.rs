@@ -81,7 +81,16 @@ fn pid_from_event(event: &Event) -> Option<i32> {
         // actions own the policy for it (most refuse it; apparmor propagates a
         // "sacrosanct" pid), so that decision lives in the per-action guard, not
         // in this shared extractor.
-        .filter(|p| *p > 0)
+        //
+        // SELF-PRESERVATION (F-2026-120): selfdef's OWN daemon pid is filtered
+        // here so NO pid-targeting destructive action (kill / quarantine /
+        // freeze / netns-isolate / cap-drop / env-scrub / …) can ever target the
+        // process the responder runs in. The pid comes from an event the
+        // collectors observed, so a crafted or misattributed event naming
+        // selfdefd's pid would otherwise let the IPS SIGTERM / freeze / isolate
+        // ITSELF — disabling all protection. Universally invalid (unlike init,
+        // which one action propagates), so it belongs in the shared extractor.
+        .filter(|p| *p > 0 && *p != std::process::id() as i32)
 }
 
 // ================================================================ NotifyAction
@@ -2104,6 +2113,25 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(outcome.status, Status::DryRun);
+    }
+
+    #[tokio::test]
+    async fn kill_pid_refuses_selfdef_own_daemon_pid() {
+        // F-2026-120 self-preservation: an event naming selfdef's OWN pid (the
+        // responder runs inside selfdefd) must NEVER reach `kill` — otherwise a
+        // crafted/misattributed event would make the IPS SIGTERM itself and
+        // disable all protection. Run with dry_run = false to prove no signal.
+        let action = KillPidAction::new();
+        let self_pid = std::process::id() as i32;
+        let outcome = action
+            .execute(&finding_with_pid(self_pid), false)
+            .await
+            .unwrap();
+        assert_eq!(
+            outcome.status,
+            Status::Skipped,
+            "the IPS must refuse to signal its own daemon pid"
+        );
     }
 
     #[tokio::test]
