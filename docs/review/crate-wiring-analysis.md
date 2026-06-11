@@ -145,3 +145,28 @@ fail-safe-direction integration (the discipline only ever *restricts* the
 verbs). The per-family classification above is the prioritization input; the
 remaining families (`policy-*` 36, `substrate-*` 23, `actor-*` 12, …) follow
 the same verb-vs-discipline split and can be triaged the same way.
+
+## Precise scope for the #1 target (code-verified at the responder)
+
+Correcting the earlier shorthand: the `Responder` is *not* discipline-free —
+`handle_finding` (the dispatch chokepoint) already applies a per-action
+**deadline** (no-hang), a **severity floor** (F-2026-092: only High+ findings
+auto-fire), and the `allowed_actions` **allowlist**. The specific missing
+discipline is **rate-limiting: throttle / repeat-dedup / per-profile budget /
+cool-off** — nothing stops the same destructive action re-firing on the same
+target across a burst of findings.
+
+Wiring detail (the real cost, verified): `handle_finding(&self)` runs shared
+from the bus consumer loop, so a throttle/dedup cache needs **interior-mutable
+state** (`Mutex<HashMap<Key, Instant/Count>>` on `Responder`), plus a
+**dedup-key design** — the meaningful key is `(action.name(), target)` where
+`target` is the event's pid / src-ip / user, i.e. per-action target
+extraction (the same fields each action pulls internally). Default window /
+budget are sensible-default + opt-in-config. Fail-safe direction holds
+(suppression only skips a *duplicate*; the first action already fired).
+
+So the #1 integration is: `decision-throttle` + `decision-cache` (or the
+composite `decision-router`) wired at `handle_finding`, keyed on
+`(action, event-target)`, with interior-mutable state. Concrete, fail-safe,
+and now precisely located — but a real change (concurrency + key design +
+tests), not a tail-end increment.
