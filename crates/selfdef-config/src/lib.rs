@@ -710,6 +710,18 @@ pub struct NatsBridgeConfig {
     /// Subject prefix. Default `selfdef.events`.
     pub subject_prefix: String,
     pub jetstream: NatsJetStreamConfig,
+    /// F-2026-111 (c): per-event federation signing. Path to this daemon's
+    /// UNENCRYPTED minisign secret key (`minisign -G -W`). When non-empty,
+    /// outbound events are wrapped in a signed envelope, and inbound events are
+    /// verified against `peer_keys`. A signature-verified federated finding
+    /// bypasses the responder's fail-closed `act_on_federated` gate. Empty
+    /// (default) ⇒ raw, unauthenticated events as before.
+    pub signing_key_file: String,
+    /// Trusted-peer public keys: sender `host_tag` → minisign `.pub` file path.
+    /// A federated event is only `federation_verified` if its envelope verifies
+    /// against the key mapped to its sender host_tag here. Empty ⇒ no peer is
+    /// verifiable (every federated event stays unverified).
+    pub peer_keys: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for NatsBridgeConfig {
@@ -719,6 +731,8 @@ impl Default for NatsBridgeConfig {
             url: String::new(),
             subject_prefix: "selfdef.events".into(),
             jetstream: NatsJetStreamConfig::default(),
+            signing_key_file: String::new(),
+            peer_keys: std::collections::BTreeMap::new(),
         }
     }
 }

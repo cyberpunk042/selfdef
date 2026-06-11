@@ -62,6 +62,25 @@ enabled = false
 url = ""                                   # e.g. "nats://nats.lan:4222"
 subject_prefix = "selfdef.events"
 
+# F-2026-111 (c) per-event federation signing. When `signing_key_file` is set,
+# this daemon signs every outbound event and verifies inbound events against the
+# trusted-peer keys below. A signature-verified federated finding may then drive
+# destructive response even when `[responder].act_on_federated = false` (an
+# authenticated peer is trusted like a local source); unsigned/forged/unknown-
+# peer events stay refused under fail-closed. Empty (default) = raw,
+# unauthenticated events (prior behavior).
+#
+# The key MUST be an UNENCRYPTED minisign secret key (generate with
+# `minisign -G -W`), since the daemon signs unattended.
+# signing_key_file = "/etc/selfdef/keys/federation.key"
+#
+# Trusted peers: each remote daemon's host_tag → its minisign public key file.
+# A federated event is only verified if its sender host_tag appears here AND its
+# signature checks out. Watch selfdef_nats_inbound_federated_verified_total.
+# [bus.nats.peer_keys]
+# "peer-host-a" = "/etc/selfdef/keys/peer-host-a.pub"
+# "peer-host-b" = "/etc/selfdef/keys/peer-host-b.pub"
+
 # Optional JetStream durability. With this off, the bridge uses plain
 # NATS Core pub/sub — events that pass while a daemon is offline are
 # lost. With it on, publishes go to a JetStream stream, inbound reads

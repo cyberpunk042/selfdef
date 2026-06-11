@@ -439,6 +439,7 @@ async fn main() -> Result<()> {
     let responder_ratecap_tripped = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let responder_federated_refused = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let nats_federated_inbound = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let nats_federated_verified = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
     // The shared Metrics handle. Constructed here (before the retention +
     // mirror loops) so every producer records into the SAME Arc that the
@@ -477,6 +478,8 @@ async fn main() -> Result<()> {
         m.set_responder_ratecap_tripped_source(Arc::clone(&responder_ratecap_tripped));
         // Cross-host federated-event ingress into the local response path.
         m.set_nats_federated_inbound_source(Arc::clone(&nats_federated_inbound));
+        // F-2026-111 (c): inbound federated events whose signature verified.
+        m.set_nats_federated_verified_source(Arc::clone(&nats_federated_verified));
         // Destructive actions refused by the fail-closed federation boundary.
         m.set_responder_federated_refused_source(Arc::clone(&responder_federated_refused));
     }
@@ -864,7 +867,36 @@ async fn main() -> Result<()> {
         let ht = host_tag.clone();
         let sd = shutdown.clone();
         let fed_inbound = Arc::clone(&nats_federated_inbound);
-        info!(url = %nats_cfg.url, "nats bridge: starting");
+        let fed_verified = Arc::clone(&nats_federated_verified);
+        // F-2026-111 (c): build per-event federation signing if a key is set.
+        // A load failure logs + runs UNSIGNED (raw) rather than killing the
+        // bridge — fan-out availability beats a hard fail on a key typo.
+        let federation_signing: Option<Arc<selfdef_nats::FederationSigning>> =
+            if cfg.bus.nats.signing_key_file.is_empty() {
+                None
+            } else {
+                let peers: std::collections::HashMap<String, std::path::PathBuf> = cfg
+                    .bus
+                    .nats
+                    .peer_keys
+                    .iter()
+                    .map(|(h, p)| (h.clone(), std::path::PathBuf::from(p)))
+                    .collect();
+                match selfdef_nats::FederationSigning::load(
+                    std::path::Path::new(&cfg.bus.nats.signing_key_file),
+                    &peers,
+                ) {
+                    Ok(fs) => {
+                        info!(peers = peers.len(), "nats federation signing enabled (F-2026-111 c)");
+                        Some(Arc::new(fs))
+                    }
+                    Err(e) => {
+                        error!(error = %e, "nats federation signing key load failed; bridge runs UNSIGNED");
+                        None
+                    }
+                }
+            };
+        info!(url = %nats_cfg.url, signed = federation_signing.is_some(), "nats bridge: starting");
         Some(tokio::spawn(async move {
             // Supervised retry loop. A single failed run previously killed the
             // multi-host fan-out for the daemon's whole lifetime — most
@@ -890,10 +922,8 @@ async fn main() -> Result<()> {
                     sub,
                     sd.clone(),
                     Some(Arc::clone(&fed_inbound)),
-                    // F-2026-111 (c) signing material + verified-counter wired in
-                    // a follow-up (config plumbing); None ⇒ raw events as today.
-                    None,
-                    None,
+                    federation_signing.clone(),
+                    Some(Arc::clone(&fed_verified)),
                 )
                 .await
                 {

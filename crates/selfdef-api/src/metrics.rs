@@ -99,6 +99,10 @@ pub struct Metrics {
     /// the bridge's `Arc<AtomicU64>`; unset until the daemon wires it. Surfaces
     /// the otherwise-invisible cross-host ingress (see F-2026-111).
     nats_federated_inbound: OnceLock<Arc<AtomicU64>>,
+    /// Inbound federated events whose envelope SIGNATURE verified against a
+    /// configured trusted-peer key (F-2026-111 c) — the subset of
+    /// `nats_federated_inbound` that may bypass the responder's fail-closed gate.
+    nats_federated_verified: OnceLock<Arc<AtomicU64>>,
 
     /// M060 mirror-export per-artifact publish counters. Keys are the
     /// canonical artifact filename (e.g. `"grants.json"`); values are
@@ -138,6 +142,7 @@ impl Metrics {
             responder_ratecap_tripped: OnceLock::new(),
             responder_federated_refused: OnceLock::new(),
             nats_federated_inbound: OnceLock::new(),
+            nats_federated_verified: OnceLock::new(),
             m060_publish_counts: Mutex::new(HashMap::new()),
             m060_last_publish_unix: Mutex::new(HashMap::new()),
         }
@@ -270,6 +275,14 @@ impl Metrics {
     /// startup; when unset the series is not emitted. Idempotent (`OnceLock`).
     pub fn set_nats_federated_inbound_source(&self, federated: Arc<AtomicU64>) {
         let _ = self.nats_federated_inbound.set(federated);
+    }
+
+    /// Wire the verified-federation counter shared with the NATS bridge (the
+    /// same `Arc` handed to `run_bridge`). Exposes
+    /// `selfdef_nats_inbound_federated_verified_total` — the signature-verified
+    /// subset of cross-host ingress (F-2026-111 c). Idempotent (`OnceLock`).
+    pub fn set_nats_federated_verified_source(&self, verified: Arc<AtomicU64>) {
+        let _ = self.nats_federated_verified.set(verified);
     }
 
     /// Wire the federation-refusal counter shared with the responder (the same
@@ -511,6 +524,18 @@ impl Metrics {
             writeln!(
                 out,
                 "selfdef_nats_inbound_federated_events_total {}",
+                c.load(Ordering::Relaxed)
+            )
+            .unwrap();
+        }
+        if let Some(c) = self.nats_federated_verified.get() {
+            out.push_str(
+                "# HELP selfdef_nats_inbound_federated_verified_total Inbound federated events whose envelope signature verified against a configured trusted-peer key (F-2026-111 c) — the subset that may bypass the responder fail-closed gate.\n",
+            );
+            out.push_str("# TYPE selfdef_nats_inbound_federated_verified_total counter\n");
+            writeln!(
+                out,
+                "selfdef_nats_inbound_federated_verified_total {}",
                 c.load(Ordering::Relaxed)
             )
             .unwrap();
@@ -965,6 +990,29 @@ mod tests {
         );
         assert!(
             wired.contains("selfdef_nats_inbound_federated_events_total 5"),
+            "{wired}"
+        );
+    }
+
+    #[test]
+    fn nats_federated_verified_series_appears_only_when_wired_and_reads_live() {
+        // F-2026-111 (c): the signature-verified subset is absent until wired,
+        // then reads the shared Arc live.
+        let m = Metrics::new("h");
+        assert!(
+            !m.render(0).contains("selfdef_nats_inbound_federated_verified_total"),
+            "verified series must be absent until wired"
+        );
+        let verified = Arc::new(AtomicU64::new(0));
+        m.set_nats_federated_verified_source(Arc::clone(&verified));
+        verified.fetch_add(2, Ordering::Relaxed);
+        let wired = m.render(0);
+        assert!(
+            wired.contains("# TYPE selfdef_nats_inbound_federated_verified_total counter"),
+            "{wired}"
+        );
+        assert!(
+            wired.contains("selfdef_nats_inbound_federated_verified_total 2"),
             "{wired}"
         );
     }

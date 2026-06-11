@@ -543,6 +543,41 @@ impl FederationSigning {
         Self { secret, peer_keys }
     }
 
+    /// Load from files: `secret_key_path` is an UNENCRYPTED minisign secret key
+    /// (the daemon signs unattended, so the event key can't be password-gated);
+    /// `peers` maps each trusted sender `host_tag` to its minisign `.pub` file.
+    ///
+    /// # Errors
+    /// [`NatsError::KeyLoad`] if any key file is missing or malformed, or if the
+    /// secret key is password-encrypted (unsupported for unattended signing).
+    pub fn load(
+        secret_key_path: &std::path::Path,
+        peers: &std::collections::HashMap<String, std::path::PathBuf>,
+    ) -> Result<Self, NatsError> {
+        let sk_str = std::fs::read_to_string(secret_key_path).map_err(|e| {
+            NatsError::KeyLoad(format!("read secret {}: {e}", secret_key_path.display()))
+        })?;
+        let sk_box = minisign::SecretKeyBox::from_string(&sk_str)
+            .map_err(|e| NatsError::KeyLoad(format!("parse secret key: {e}")))?;
+        // Unattended daemon signing requires an UNENCRYPTED key (`minisign -G -W`
+        // or generate_unencrypted_keypair). `from_unencrypted_box` is the correct
+        // loader; the password path (`from_box`) errors on an unencrypted key and
+        // would otherwise block at an interactive prompt.
+        let secret = minisign::SecretKey::from_unencrypted_box(sk_box).map_err(|e| {
+            NatsError::KeyLoad(format!("load unencrypted secret key (use `minisign -G -W`): {e}"))
+        })?;
+        let mut peer_keys = std::collections::HashMap::new();
+        for (host, path) in peers {
+            let pk_str = std::fs::read_to_string(path).map_err(|e| {
+                NatsError::KeyLoad(format!("read peer {host} key {}: {e}", path.display()))
+            })?;
+            let pk = minisign_verify::PublicKey::decode(pk_str.trim())
+                .map_err(|e| NatsError::KeyLoad(format!("parse peer {host} key: {e}")))?;
+            peer_keys.insert(host.clone(), pk);
+        }
+        Ok(Self::new(secret, peer_keys))
+    }
+
     /// Sign `event_bytes` (sent by `host_tag`) into a `SignedEnvelope` payload.
     fn sign(&self, host_tag: &str, event_bytes: &[u8]) -> Result<Vec<u8>, NatsError> {
         let sig = minisign::sign(None, &self.secret, event_bytes, None, None)
@@ -907,6 +942,34 @@ mod tests {
         assert_eq!(vc.load(Ordering::Relaxed), 0);
         let mut sub = sub;
         assert!(matches!(sub.try_recv(), Ok(None)), "a tampered event must fail verification");
+    }
+
+    #[test]
+    fn federation_signing_loads_from_key_files_and_roundtrips() {
+        // Lock the file-loading path: write an unencrypted secret + a peer pub,
+        // load via FederationSigning::load, and confirm a sign→verify roundtrip.
+        let dir = tempfile::tempdir().unwrap();
+        let kp = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
+        let sk_path = dir.path().join("event.key");
+        let pub_path = dir.path().join("peer-a.pub");
+        std::fs::write(&sk_path, kp.sk.to_box(None).unwrap().to_string()).unwrap();
+        std::fs::write(&pub_path, kp.pk.to_box().unwrap().to_string()).unwrap();
+
+        let peers = HashMap::from([("peer-a".to_string(), pub_path.clone())]);
+        // Sender loads its own key (peers irrelevant for signing); receiver loads
+        // the same — here one instance plays both, signing as "peer-a" and
+        // trusting "peer-a"'s pub.
+        let fs = FederationSigning::load(&sk_path, &peers).unwrap();
+
+        let env = encode_outbound(&synth_event("peer-a"), "peer-a", Some(&fs)).unwrap();
+        let bus = selfdef_bus::Bus::new(8);
+        let sub = bus.subscribe();
+        let publisher = bus.publisher();
+        let (fc, vc) = (AtomicU64::new(0), AtomicU64::new(0));
+        republish_inbound(&env, "this-host", &publisher, Some(&fc), Some(&fs), Some(&vc));
+        assert_eq!(vc.load(Ordering::Relaxed), 1, "loaded keys must verify a roundtrip");
+        let mut sub = sub;
+        assert!(sub.try_recv().unwrap().unwrap().federation_verified);
     }
 
     #[test]
