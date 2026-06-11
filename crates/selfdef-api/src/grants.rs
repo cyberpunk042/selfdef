@@ -58,8 +58,15 @@ pub(crate) struct RevokeRequest {
 
 /// `GET /v1/grants` — current resident grant snapshot (the same wire
 /// type the mirror publishes). Absent store → empty-but-valid snapshot.
+///
+/// Applies presentation-time TTL expiry (in-memory, not persisted — the
+/// durable store is selfdefctl's) so this surface never reports a past-TTL
+/// grant as `Active`, matching the sovereign-os mirror's already-established
+/// hygiene (`mirror_export_loop::publish_grants`). Without this the two grant
+/// read surfaces disagreed on an expired grant's state.
 pub(crate) async fn show() -> Result<Json<GrantsMirrorSnapshot>, (StatusCode, String)> {
-    let reg = load(&state_path())?;
+    let mut reg = load(&state_path())?;
+    let _ = reg.expire_due(OffsetDateTime::now_utc());
     Ok(Json(reg.snapshot().clone()))
 }
 
@@ -153,6 +160,36 @@ mod tests {
         assert_eq!(
             GrantRegistry::load(&path).unwrap().grants()[0].state,
             GrantState::Revoked
+        );
+    }
+
+    /// The `show` handler applies presentation-time expiry: a grant whose TTL
+    /// has elapsed must read as `Expired`, not `Active`, matching the mirror.
+    /// Drives the same load → expire_due → snapshot path the handler uses.
+    #[test]
+    fn show_path_expires_past_ttl_grants_for_presentation() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("grants.json");
+        let issued = OffsetDateTime::now_utc();
+
+        let mut reg = GrantRegistry::load(&path).unwrap();
+        // 1s TTL.
+        let mut r = req(GrantKind::Filesystem);
+        r.ttl_seconds = 1;
+        let id = reg.issue(&r, "gr-ttl", "tr-ttl", issued).unwrap();
+        reg.activate(&id, issued).unwrap();
+        save(&reg, &path).unwrap();
+
+        // The durable store still holds it Active (selfdefctl owns durable
+        // expiry); but the show path applies presentation-time expiry.
+        let mut shown = GrantRegistry::load(&path).unwrap();
+        assert_eq!(shown.grants()[0].state, GrantState::Active, "stored Active");
+        let later = issued + time::Duration::seconds(5);
+        let _ = shown.expire_due(later);
+        assert_eq!(
+            shown.snapshot().grants[0].state,
+            GrantState::Expired,
+            "show must present a past-TTL grant as Expired"
         );
     }
 
