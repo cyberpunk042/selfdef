@@ -666,8 +666,37 @@ async fn main() -> Result<()> {
     // to the M4 NotifierChain — no persistence, no escalation.
     let (notifier_arc, wake_task_handle, escalation_engine_for_api) =
         build_notifier_path(&cfg, &shutdown);
+    // block_ip effector — the REAL nftables backend (the one orphaned effector
+    // with a real, hardened impl; F-2026-116). Registered so it's AVAILABLE,
+    // but inert unless the operator adds "block_ip" to [responder].allowed_actions
+    // (default is just "notify"). Only when allowlisted do we touch nft: ensure
+    // the `inet selfdef-blocks` table + hooked drop chain exist (best-effort —
+    // a failure logs and blocks would error; needs nft + CAP_NET_ADMIN).
+    let block_ip_action = {
+        use selfdef_blockset_backend::AuthorityTier as BsTier;
+        let backend = Arc::new(selfdef_blockset_backend::nftables::NftablesBackend::new(
+            cfg.responder.block_ip_nft_path.clone(),
+        ));
+        if cfg.responder.allowed_actions.iter().any(|a| a == "block_ip") {
+            match backend.ensure_table().await {
+                Ok(()) => info!("block_ip enabled: nft `inet selfdef-blocks` table ensured"),
+                Err(e) => error!(
+                    error = %e,
+                    "block_ip is allowlisted but the nft bootstrap failed; blocks will error until \
+                     nft + CAP_NET_ADMIN are available"
+                ),
+            }
+        }
+        selfdef_responder::actions::BlockIpAction::new(
+            backend,
+            BsTier::Responder,
+            BsTier::Responder.max_duration(),
+            "selfdef-autonomous-block",
+        )
+    };
     let actions: Vec<Arc<dyn selfdef_responder::actions::Action>> = vec![
         Arc::new(selfdef_responder::actions::NotifyAction::new(notifier_arc)),
+        Arc::new(block_ip_action),
         Arc::new(selfdef_responder::actions::SnapshotProcAction::new(
             cfg.responder.snapshot_dir.clone(),
         )),

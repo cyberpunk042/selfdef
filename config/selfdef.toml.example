@@ -524,6 +524,13 @@ allowed_actions = ["notify"]
 # Powerful actions, opt-in only after you've tested:
 # allowed_actions = ["notify", "snapshot_proc", "lockdown_egress", "kill_pid",
 #                    "revoke_session", "forensics_bundle", "velociraptor_escalate"]
+#
+# `block_ip` drops the source IP via a real nftables set (table
+# `inet selfdef-blocks`, kernel-TTL'd at the Responder tier = 1h). When you add
+# it here, the daemon ensures the table+hooked-drop-chain at startup, so the
+# daemon needs CAP_NET_ADMIN + the `nft` binary (block_ip_nft_path below).
+# Special/infrastructure addresses (loopback, link-local, …) are always refused.
+# block_ip_nft_path = "/usr/sbin/nft"
 
 # Autonomous-response severity floor. Findings graded below this are NOT
 # auto-dispatched on the bus path — a guard so an allow-listed aggressive

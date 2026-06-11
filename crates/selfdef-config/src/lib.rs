@@ -1822,6 +1822,11 @@ pub struct ResponderConfig {
     /// Argv passed to the Velociraptor CLI. The placeholders `{event_id}`
     /// and `{host_tag}` are substituted before invocation.
     pub velociraptor_args: Vec<String>,
+    /// `nft` binary path for the `block_ip` effector (real nftables backend).
+    /// Only used when `block_ip` is in `allowed_actions`; at startup the daemon
+    /// then ensures the `inet selfdef-blocks` table + hooked drop chain exist.
+    /// Requires CAP_NET_ADMIN. Default `/usr/sbin/nft`.
+    pub block_ip_nft_path: String,
 }
 
 impl Default for ResponderConfig {
@@ -1846,6 +1851,7 @@ impl Default for ResponderConfig {
             forensics_dir: PathBuf::from("/var/lib/selfdef/forensics"),
             velociraptor_binary: PathBuf::from("/usr/local/bin/velociraptor"),
             velociraptor_args: Vec::new(),
+            block_ip_nft_path: "/usr/sbin/nft".to_string(),
         }
     }
 }

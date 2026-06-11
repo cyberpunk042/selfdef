@@ -27,6 +27,9 @@ selfdef-bus = { workspace = true }
 selfdef-store = { workspace = true }
 selfdef-correlator = { workspace = true }
 selfdef-signing = { workspace = true }
+# block_ip effector: the REAL nftables backend (feature-gated). Wired into the
+# responder action vec but inert unless the operator allowlists "block_ip".
+selfdef-blockset-backend = { path = "../selfdef-blockset-backend", features = ["nftables-backend"] }
 selfdef-notifier = { workspace = true }
 selfdef-notifier-engine = { workspace = true }
 selfdef-notifier-orchestrator = { workspace = true }

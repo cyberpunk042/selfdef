@@ -393,6 +393,43 @@ pub mod nftables {
                 nft_path: nft_path.into(),
             }
         }
+
+        /// Idempotently create the `inet selfdef-blocks` table + hooked drop
+        /// chain + v4/v6 timeout sets (the [`nft_bootstrap_script`]). Call once
+        /// at startup before any `block_ip` — `nft add element` fails if the set
+        /// doesn't exist. Requires `nft` + CAP_NET_ADMIN; returns
+        /// `BackendUnreachable` otherwise (caller logs + runs degraded).
+        ///
+        /// # Errors
+        /// `BackendError::BackendUnreachable` if `nft` can't be spawned or the
+        /// bootstrap script is rejected.
+        pub async fn ensure_table(&self) -> Result<(), BackendError> {
+            use tokio::io::AsyncWriteExt as _;
+            let mut child = tokio::process::Command::new(&self.nft_path)
+                .args(["-f", "-"])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| BackendError::BackendUnreachable(format!("spawn nft -f -: {e}")))?;
+            if let Some(mut stdin) = child.stdin.take() {
+                stdin
+                    .write_all(nft_bootstrap_script().as_bytes())
+                    .await
+                    .map_err(|e| BackendError::BackendUnreachable(format!("write nft script: {e}")))?;
+                // Drop stdin to signal EOF.
+            }
+            let out = child
+                .wait_with_output()
+                .await
+                .map_err(|e| BackendError::BackendUnreachable(format!("wait nft: {e}")))?;
+            if !out.status.success() {
+                return Err(BackendError::BackendUnreachable(
+                    String::from_utf8_lossy(&out.stderr).into_owned(),
+                ));
+            }
+            Ok(())
+        }
     }
 
     #[async_trait]

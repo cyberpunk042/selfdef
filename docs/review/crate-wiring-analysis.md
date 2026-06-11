@@ -214,3 +214,28 @@ while the rate-cap (still counting attempts) bounds any hammering. Failing-first
 test-locked (`dedup_does_not_suppress_retry_of_a_failed_destructive_action`). This
 is the kind of per-gate correctness audit each discipline layer needs after wiring,
 not just the initial integration.
+
+## Update (2026-06-11): block_ip effector wired into the running daemon
+
+First effector wired from the orphaned lattice into the responder action vec.
+Of the unwired destructive effectors, `block_ip` is the ONLY one with a real
+(non-simulated) backend — `selfdef-blockset-backend`'s `NftablesBackend` (real
+`nft` calls; the rest — quarantine / netns / freeze / cap-drop / env-scrub /
+socket-fd — are `InMemory` simulations awaiting their MS5a production adapters).
+
+What landed:
+- `selfdef-daemon` now depends on `selfdef-blockset-backend` with the
+  `nftables-backend` feature, constructs `NftablesBackend` + `BlockIpAction`
+  (Responder tier, 1h kernel-TTL), and registers it in the action vec.
+- `NftablesBackend::ensure_table()` (new) idempotently creates the
+  `inet selfdef-blocks` table + hooked `input` drop chain + v4/v6 timeout sets.
+- **Non-behavior-changing**: `allowed_actions` defaults to `["notify"]`, so
+  `block_ip` is registered-but-inert. Only when an operator allowlists it does
+  the daemon run the bootstrap (best-effort; needs `nft` + CAP_NET_ADMIN) and
+  the action fire. Special/infra addresses are refused (F-2026-116).
+
+This is the concrete shape of "wire a verb into running code" for an effector
+that actually does real work. The remaining effector-wiring is **blocked on the
+real backends existing** — the simulations can't be meaningfully wired until
+their MS5a production adapters (real cgroup-freeze, real netns, …) are built.
+That backend-implementation effort, not glue-wiring, is the next real-depth step.

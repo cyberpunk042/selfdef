@@ -3440,6 +3440,7 @@ dependencies = [
  "sd-notify",
  "selfdef-api",
  "selfdef-audit-registry",
+ "selfdef-blockset-backend",
  "selfdef-bus",
  "selfdef-capability-registry",
  "selfdef-cli-mirror",
