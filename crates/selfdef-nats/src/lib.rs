@@ -78,6 +78,10 @@ pub enum NatsError {
     JsPublish(String),
     #[error("serde: {0}")]
     Serde(#[from] serde_json::Error),
+    #[error("federation signing: {0}")]
+    Sign(String),
+    #[error("federation key load: {0}")]
+    KeyLoad(String),
 }
 
 /// Bridge configuration. Mirrors `[bus.nats]` in `selfdef.toml`.
@@ -188,6 +192,7 @@ pub fn durable_consumer_name(prefix: &str, host_tag: &str) -> String {
 /// Run the NATS bridge until `shutdown` is cancelled. Dispatches to
 /// core pub/sub or the JetStream durable path based on
 /// `cfg.jetstream.enabled`.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_bridge(
     cfg: NatsConfig,
     host_tag: String,
@@ -195,17 +200,20 @@ pub async fn run_bridge(
     subscriber: Subscriber,
     shutdown: CancellationToken,
     federated_inbound: Option<Arc<AtomicU64>>,
+    signing: Option<Arc<FederationSigning>>,
+    verified_inbound: Option<Arc<AtomicU64>>,
 ) -> Result<(), NatsError> {
     let client = async_nats::connect(&cfg.url).await?;
-    info!(url = %cfg.url, prefix = %cfg.subject_prefix, "nats: connected");
+    info!(url = %cfg.url, prefix = %cfg.subject_prefix, signed = signing.is_some(), "nats: connected");
 
     if cfg.jetstream.enabled {
-        run_jetstream_bridge(client, cfg, host_tag, publisher, subscriber, shutdown, federated_inbound).await
+        run_jetstream_bridge(client, cfg, host_tag, publisher, subscriber, shutdown, federated_inbound, signing, verified_inbound).await
     } else {
-        run_core_bridge(client, cfg, host_tag, publisher, subscriber, shutdown, federated_inbound).await
+        run_core_bridge(client, cfg, host_tag, publisher, subscriber, shutdown, federated_inbound, signing, verified_inbound).await
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_core_bridge(
     client: async_nats::Client,
     cfg: NatsConfig,
@@ -214,6 +222,8 @@ async fn run_core_bridge(
     subscriber: Subscriber,
     shutdown: CancellationToken,
     federated_inbound: Option<Arc<AtomicU64>>,
+    signing: Option<Arc<FederationSigning>>,
+    verified_inbound: Option<Arc<AtomicU64>>,
 ) -> Result<(), NatsError> {
     let out_subject = outbound_subject(&cfg.subject_prefix, &host_tag);
     let in_subject = inbound_subject(&cfg.subject_prefix);
@@ -229,8 +239,9 @@ async fn run_core_bridge(
         let host_tag = host_tag.clone();
         let out_subject = out_subject.clone();
         let sd = shutdown.clone();
+        let signing = signing.clone();
         tokio::spawn(async move {
-            run_outbound(client, subscriber, host_tag, out_subject, sd).await;
+            run_outbound(client, subscriber, host_tag, out_subject, sd, signing).await;
         })
     };
 
@@ -240,6 +251,8 @@ async fn run_core_bridge(
         let host_tag = host_tag.clone();
         let sd = shutdown.clone();
         let federated_inbound = federated_inbound.clone();
+        let signing = signing.clone();
+        let verified_inbound = verified_inbound.clone();
         tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -257,6 +270,8 @@ async fn run_core_bridge(
                             &host_tag,
                             &publisher,
                             federated_inbound.as_deref(),
+                            signing.as_deref(),
+                            verified_inbound.as_deref(),
                         );
                     }
                 }
@@ -272,6 +287,7 @@ async fn run_core_bridge(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_jetstream_bridge(
     client: async_nats::Client,
     cfg: NatsConfig,
@@ -280,6 +296,8 @@ async fn run_jetstream_bridge(
     subscriber: Subscriber,
     shutdown: CancellationToken,
     federated_inbound: Option<Arc<AtomicU64>>,
+    signing: Option<Arc<FederationSigning>>,
+    verified_inbound: Option<Arc<AtomicU64>>,
 ) -> Result<(), NatsError> {
     let js = jetstream::new(client);
 
@@ -333,8 +351,9 @@ async fn run_jetstream_bridge(
         let host_tag = host_tag.clone();
         let out_subject = out_subject.clone();
         let sd = shutdown.clone();
+        let signing = signing.clone();
         tokio::spawn(async move {
-            run_jetstream_outbound(js_for_out, subscriber, host_tag, out_subject, sd).await;
+            run_jetstream_outbound(js_for_out, subscriber, host_tag, out_subject, sd, signing).await;
         })
     };
 
@@ -344,6 +363,8 @@ async fn run_jetstream_bridge(
         let host_tag = host_tag.clone();
         let sd = shutdown.clone();
         let federated_inbound = federated_inbound.clone();
+        let signing = signing.clone();
+        let verified_inbound = verified_inbound.clone();
         tokio::spawn(async move {
             let mut messages = match consumer.messages().await {
                 Ok(s) => s,
@@ -375,6 +396,8 @@ async fn run_jetstream_bridge(
                             &host_tag,
                             &publisher,
                             federated_inbound.as_deref(),
+                            signing.as_deref(),
+                            verified_inbound.as_deref(),
                         );
                         // Ack regardless of local outcome. publish_lossy
                         // never fails; a redelivery would just re-push
@@ -401,6 +424,7 @@ async fn run_jetstream_outbound(
     host_tag: String,
     subject: String,
     shutdown: CancellationToken,
+    signing: Option<Arc<FederationSigning>>,
 ) {
     loop {
         tokio::select! {
@@ -413,12 +437,8 @@ async fn run_jetstream_outbound(
                     if !is_local_originated(&event, &host_tag) {
                         continue;
                     }
-                    let bytes = match serde_json::to_vec(&event) {
-                        Ok(b) => b,
-                        Err(e) => {
-                            warn!(error = %e, "jetstream outbound: serialize failed");
-                            continue;
-                        }
+                    let Some(bytes) = encode_outbound(&event, &host_tag, signing.as_deref()) else {
+                        continue;
                     };
                     // Wait for the server ack so an outage stalls
                     // publishes rather than silently dropping them.
@@ -453,6 +473,7 @@ async fn run_outbound(
     host_tag: String,
     subject: String,
     shutdown: CancellationToken,
+    signing: Option<Arc<FederationSigning>>,
 ) {
     loop {
         tokio::select! {
@@ -467,12 +488,8 @@ async fn run_outbound(
                         // Not ours to republish.
                         continue;
                     }
-                    let bytes = match serde_json::to_vec(&event) {
-                        Ok(b) => b,
-                        Err(e) => {
-                            warn!(error = %e, "nats outbound: serialize failed");
-                            continue;
-                        }
+                    let Some(bytes) = encode_outbound(&event, &host_tag, signing.as_deref()) else {
+                        continue;
                     };
                     if let Err(e) = client.publish(subject.clone(), bytes.into()).await {
                         warn!(error = %e, "nats outbound: publish failed");
@@ -489,6 +506,102 @@ async fn run_outbound(
                 }
             }
         }
+    }
+}
+
+/// F-2026-111 (c): per-event federation signing material. `secret` signs every
+/// outbound event into a [`SignedEnvelope`]; `peer_keys` (sender `host_tag` →
+/// minisign public key) verify inbound envelopes. Absent on the bridge ⇒ raw
+/// events (the prior, unauthenticated behavior). Held behind an `Arc` so the
+/// inbound + outbound tasks share one instance.
+pub struct FederationSigning {
+    secret: minisign::SecretKey,
+    peer_keys: std::collections::HashMap<String, minisign_verify::PublicKey>,
+}
+
+/// Wire envelope carrying a signed event (only used when signing is enabled).
+/// A raw event lacks these fields, so [`parse_signed_envelope`] returns `None`
+/// for it — letting a signing-mode bridge still classify an unsigned peer event
+/// as federated-but-unverified rather than reject it outright.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SignedEnvelope {
+    /// Sending host's key id — its `host_tag`. Selects the peer key.
+    kid: String,
+    /// The exact event JSON (the bytes that were signed), as a UTF-8 string.
+    event: String,
+    /// minisign detached signature over `event`'s bytes.
+    sig: String,
+}
+
+impl FederationSigning {
+    /// Construct from an in-memory secret key + the trusted-peer key map.
+    #[must_use]
+    pub fn new(
+        secret: minisign::SecretKey,
+        peer_keys: std::collections::HashMap<String, minisign_verify::PublicKey>,
+    ) -> Self {
+        Self { secret, peer_keys }
+    }
+
+    /// Sign `event_bytes` (sent by `host_tag`) into a `SignedEnvelope` payload.
+    fn sign(&self, host_tag: &str, event_bytes: &[u8]) -> Result<Vec<u8>, NatsError> {
+        let sig = minisign::sign(None, &self.secret, event_bytes, None, None)
+            .map_err(|e| NatsError::Sign(e.to_string()))?;
+        let env = SignedEnvelope {
+            kid: host_tag.to_string(),
+            event: String::from_utf8_lossy(event_bytes).into_owned(),
+            sig: sig.to_string(),
+        };
+        Ok(serde_json::to_vec(&env)?)
+    }
+
+    /// Verify a `SignedEnvelope` against the named peer's key. On success returns
+    /// the inner event bytes. Fails (drop the message) if the peer is unknown or
+    /// the signature does not verify — a forged/untrusted federated event.
+    fn verify(&self, env: &SignedEnvelope) -> Result<Vec<u8>, String> {
+        let pk = self
+            .peer_keys
+            .get(&env.kid)
+            .ok_or_else(|| format!("no trusted key for peer kid {:?}", env.kid))?;
+        let signature = minisign_verify::Signature::decode(&env.sig)
+            .map_err(|e| format!("decode sig: {e}"))?;
+        let event_bytes = env.event.as_bytes();
+        pk.verify(event_bytes, &signature, false)
+            .map_err(|e| format!("signature invalid for peer {:?}: {e}", env.kid))?;
+        Ok(event_bytes.to_vec())
+    }
+}
+
+/// Try to parse a payload as a [`SignedEnvelope`]. Returns `None` for a raw
+/// (unsigned) event, which lacks the `kid`/`event`/`sig` fields.
+fn parse_signed_envelope(payload: &[u8]) -> Option<SignedEnvelope> {
+    serde_json::from_slice::<SignedEnvelope>(payload).ok()
+}
+
+/// Serialize an event for the wire — raw JSON, or a [`SignedEnvelope`] when
+/// federation signing is enabled. `None` on serialize/sign failure (logged; the
+/// event is skipped, same posture as the prior serialize-failure path).
+fn encode_outbound(
+    event: &Event,
+    host_tag: &str,
+    signing: Option<&FederationSigning>,
+) -> Option<Vec<u8>> {
+    let bytes = match serde_json::to_vec(event) {
+        Ok(b) => b,
+        Err(e) => {
+            warn!(error = %e, "nats outbound: serialize failed");
+            return None;
+        }
+    };
+    match signing {
+        None => Some(bytes),
+        Some(fs) => match fs.sign(host_tag, &bytes) {
+            Ok(env) => Some(env),
+            Err(e) => {
+                warn!(error = %e, "nats outbound: signing failed");
+                None
+            }
+        },
     }
 }
 
@@ -512,8 +625,29 @@ fn republish_inbound(
     local_host_tag: &str,
     publisher: &Publisher,
     federated_inbound: Option<&AtomicU64>,
+    signing: Option<&FederationSigning>,
+    verified_inbound: Option<&AtomicU64>,
 ) {
-    match decode_event(payload) {
+    // Resolve the event bytes + whether they're signature-verified to a trusted
+    // peer (F-2026-111 c). With signing enabled, a SignedEnvelope whose sig
+    // verifies → verified; a raw (unsigned) peer event → federated-but-unverified
+    // (still subject to the responder's fail-closed gate); a forged/unknown-peer
+    // envelope → DROPPED. With signing disabled → raw, unverified (prior path).
+    let (event_bytes, verified): (std::borrow::Cow<'_, [u8]>, bool) = match signing {
+        Some(fs) => match parse_signed_envelope(payload) {
+            Some(env) => match fs.verify(&env) {
+                Ok(inner) => (std::borrow::Cow::Owned(inner), true),
+                Err(e) => {
+                    warn!(error = %e, "nats inbound: rejecting forged/untrusted signed envelope");
+                    return;
+                }
+            },
+            None => (std::borrow::Cow::Borrowed(payload), false),
+        },
+        None => (std::borrow::Cow::Borrowed(payload), false),
+    };
+
+    match decode_event(&event_bytes) {
         Ok(mut event) => {
             if event.host_tag == local_host_tag {
                 debug!(id = %event.id, "nats inbound: dropping self-echo");
@@ -528,9 +662,17 @@ fn republish_inbound(
             // federation trust-boundary policy (F-2026-111). `federated` is
             // `#[serde(skip)]`, so a peer can't preset it — it's stamped here.
             event.federated = true;
+            if verified {
+                // Authenticated to a configured trusted peer: the responder may
+                // act on it even when fail-closed (it bypasses act_on_federated).
+                event.federation_verified = true;
+                if let Some(c) = verified_inbound {
+                    c.fetch_add(1, Ordering::Relaxed);
+                }
+            }
             publisher.publish_lossy(event);
         }
-        Err(e) => warn!(error = %e, len = payload.len(), "nats inbound: decode failed"),
+        Err(e) => warn!(error = %e, len = event_bytes.len(), "nats inbound: decode failed"),
     }
 }
 
@@ -622,7 +764,7 @@ mod tests {
         let counter = AtomicU64::new(0);
         let bytes = serde_json::to_vec(&synth_event("other-host")).unwrap();
 
-        republish_inbound(&bytes, "this-host", &publisher, Some(&counter));
+        republish_inbound(&bytes, "this-host", &publisher, Some(&counter), None, None);
 
         assert_eq!(counter.load(Ordering::Relaxed), 1, "federated event must be counted");
         // The event reached the local bus.
@@ -648,7 +790,7 @@ mod tests {
         let counter = AtomicU64::new(0);
         let bytes = serde_json::to_vec(&synth_event("this-host")).unwrap();
 
-        republish_inbound(&bytes, "this-host", &publisher, Some(&counter));
+        republish_inbound(&bytes, "this-host", &publisher, Some(&counter), None, None);
 
         assert_eq!(counter.load(Ordering::Relaxed), 0, "self-echo must not count as federated");
         let mut sub = sub;
@@ -663,7 +805,7 @@ mod tests {
         let publisher = bus.publisher();
         let counter = AtomicU64::new(0);
 
-        republish_inbound(b"not json", "this-host", &publisher, Some(&counter));
+        republish_inbound(b"not json", "this-host", &publisher, Some(&counter), None, None);
 
         assert_eq!(counter.load(Ordering::Relaxed), 0);
         let mut sub = sub;
@@ -679,5 +821,113 @@ mod tests {
         assert_eq!(js.max_age_secs, 7 * 24 * 3600);
         assert_eq!(js.max_bytes, -1);
         assert_eq!(js.max_msgs, -1);
+    }
+
+    // ---- F-2026-111 (c): per-event federation signing ----
+
+    use std::collections::HashMap;
+
+    /// Generate a fresh keypair: minisign secret (for signing) + the matching
+    /// minisign-verify public key (for the peer-key map).
+    fn gen_key() -> (minisign::SecretKey, minisign_verify::PublicKey) {
+        let kp = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
+        let pub_str = kp.pk.to_box().unwrap().to_string();
+        let pv = minisign_verify::PublicKey::decode(pub_str.trim()).unwrap();
+        (kp.sk, pv)
+    }
+
+    #[test]
+    fn signed_envelope_roundtrips_and_marks_verified() {
+        let (sk_a, pk_a) = gen_key();
+        let sender = FederationSigning::new(sk_a, HashMap::new());
+        let (sk_r, _) = gen_key();
+        let receiver =
+            FederationSigning::new(sk_r, HashMap::from([("peer-a".to_string(), pk_a)]));
+
+        let env = encode_outbound(&synth_event("peer-a"), "peer-a", Some(&sender)).unwrap();
+
+        let bus = selfdef_bus::Bus::new(8);
+        let sub = bus.subscribe();
+        let publisher = bus.publisher();
+        let (fc, vc) = (AtomicU64::new(0), AtomicU64::new(0));
+        republish_inbound(&env, "this-host", &publisher, Some(&fc), Some(&receiver), Some(&vc));
+
+        assert_eq!(fc.load(Ordering::Relaxed), 1);
+        assert_eq!(vc.load(Ordering::Relaxed), 1, "a valid peer signature marks verified");
+        let mut sub = sub;
+        let got = sub.try_recv().unwrap().expect("verified event reaches the bus");
+        assert!(got.federated && got.federation_verified);
+    }
+
+    #[test]
+    fn unknown_peer_signed_envelope_is_dropped() {
+        let (sk_a, _pk_a) = gen_key();
+        let sender = FederationSigning::new(sk_a, HashMap::new());
+        let (sk_r, _) = gen_key();
+        // Receiver trusts a DIFFERENT peer name — "peer-a" is unknown.
+        let (_sk_b, pk_b) = gen_key();
+        let receiver =
+            FederationSigning::new(sk_r, HashMap::from([("peer-b".to_string(), pk_b)]));
+
+        let env = encode_outbound(&synth_event("peer-a"), "peer-a", Some(&sender)).unwrap();
+
+        let bus = selfdef_bus::Bus::new(8);
+        let sub = bus.subscribe();
+        let publisher = bus.publisher();
+        let (fc, vc) = (AtomicU64::new(0), AtomicU64::new(0));
+        republish_inbound(&env, "this-host", &publisher, Some(&fc), Some(&receiver), Some(&vc));
+
+        assert_eq!(fc.load(Ordering::Relaxed), 0);
+        assert_eq!(vc.load(Ordering::Relaxed), 0);
+        let mut sub = sub;
+        assert!(matches!(sub.try_recv(), Ok(None)), "untrusted-peer envelope must be dropped");
+    }
+
+    #[test]
+    fn tampered_signed_envelope_is_dropped() {
+        let (sk_a, pk_a) = gen_key();
+        let sender = FederationSigning::new(sk_a, HashMap::new());
+        let (sk_r, _) = gen_key();
+        let receiver =
+            FederationSigning::new(sk_r, HashMap::from([("peer-a".to_string(), pk_a)]));
+
+        let env = encode_outbound(&synth_event("peer-a"), "peer-a", Some(&sender)).unwrap();
+        // Tamper: swap the inner event for a different one, keeping the old sig.
+        let mut parsed: SignedEnvelope = serde_json::from_slice(&env).unwrap();
+        parsed.event =
+            String::from_utf8(serde_json::to_vec(&synth_event("peer-a")).unwrap()).unwrap();
+        let tampered = serde_json::to_vec(&parsed).unwrap();
+
+        let bus = selfdef_bus::Bus::new(8);
+        let sub = bus.subscribe();
+        let publisher = bus.publisher();
+        let (fc, vc) = (AtomicU64::new(0), AtomicU64::new(0));
+        republish_inbound(&tampered, "this-host", &publisher, Some(&fc), Some(&receiver), Some(&vc));
+
+        assert_eq!(vc.load(Ordering::Relaxed), 0);
+        let mut sub = sub;
+        assert!(matches!(sub.try_recv(), Ok(None)), "a tampered event must fail verification");
+    }
+
+    #[test]
+    fn raw_event_under_signing_is_federated_but_unverified() {
+        // With signing enabled, a RAW (unsigned) peer event is still accepted as
+        // federated — but NOT verified, so the responder's fail-closed gate
+        // still applies to it.
+        let (sk_r, _) = gen_key();
+        let receiver = FederationSigning::new(sk_r, HashMap::new());
+        let raw = serde_json::to_vec(&synth_event("peer-a")).unwrap();
+
+        let bus = selfdef_bus::Bus::new(8);
+        let sub = bus.subscribe();
+        let publisher = bus.publisher();
+        let (fc, vc) = (AtomicU64::new(0), AtomicU64::new(0));
+        republish_inbound(&raw, "this-host", &publisher, Some(&fc), Some(&receiver), Some(&vc));
+
+        assert_eq!(fc.load(Ordering::Relaxed), 1);
+        assert_eq!(vc.load(Ordering::Relaxed), 0);
+        let mut sub = sub;
+        let got = sub.try_recv().unwrap().unwrap();
+        assert!(got.federated && !got.federation_verified);
     }
 }

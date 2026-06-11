@@ -19,9 +19,15 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 futures = { workspace = true }
 async-nats = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+# F-2026-111 (c): per-event federation signing. minisign signs outbound events;
+# minisign-verify checks inbound envelopes against configured trusted-peer keys.
+# Same toolchain as rule/perimeter signing.
+minisign = "0.9"
+minisign-verify = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

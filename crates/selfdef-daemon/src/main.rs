@@ -890,6 +890,10 @@ async fn main() -> Result<()> {
                     sub,
                     sd.clone(),
                     Some(Arc::clone(&fed_inbound)),
+                    // F-2026-111 (c) signing material + verified-counter wired in
+                    // a follow-up (config plumbing); None ⇒ raw events as today.
+                    None,
+                    None,
                 )
                 .await
                 {

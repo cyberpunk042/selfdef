@@ -5370,8 +5370,11 @@ version = "0.1.0"
 dependencies = [
  "async-nats",
  "futures",
+ "minisign",
+ "minisign-verify",
  "selfdef-bus",
  "selfdef-core",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",

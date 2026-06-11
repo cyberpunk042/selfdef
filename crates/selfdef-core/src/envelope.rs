@@ -93,6 +93,18 @@ pub struct Event {
     /// host_tag laundering the remote origin.
     #[serde(skip)]
     pub federated: bool,
+
+    /// Local provenance marker: `true` when this federated event arrived inside
+    /// a NATS envelope whose detached signature verified against a CONFIGURED
+    /// TRUSTED-PEER key (F-2026-111 option c). Like `federated`, it is a
+    /// per-receiving-daemon view, never on the wire (`#[serde(skip)]`), and the
+    /// correlator propagates it onto derived findings. A verified federated
+    /// finding is authenticated to a trusted peer, so the responder treats it
+    /// like a local finding (it bypasses the fail-closed `act_on_federated`
+    /// refusal); an UNverified federated finding stays refused when fail-closed.
+    /// Always `false` unless inbound signature verification set it.
+    #[serde(skip)]
+    pub federation_verified: bool,
 }
 
 impl Event {
@@ -130,6 +142,7 @@ impl Event {
             metadata: Metadata::now(sequence),
             raw: None,
             federated: false,
+            federation_verified: false,
         }
     }
 
@@ -199,6 +212,15 @@ impl Event {
     #[must_use]
     pub fn with_federated(mut self, federated: bool) -> Self {
         self.federated = federated;
+        self
+    }
+
+    /// Mark this federated event as signature-verified to a trusted peer
+    /// (F-2026-111 c). Set at inbound only after the envelope signature checked
+    /// out; propagated onto correlator findings. See `federation_verified`.
+    #[must_use]
+    pub fn with_federation_verified(mut self, verified: bool) -> Self {
+        self.federation_verified = verified;
         self
     }
 
