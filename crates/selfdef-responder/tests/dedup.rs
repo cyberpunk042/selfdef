@@ -45,6 +45,34 @@ fn action(name: &'static str) -> (Arc<dyn Action>, Arc<AtomicUsize>) {
     (a, calls)
 }
 
+/// Counts dispatch attempts but always fails — models a `kill_pid` that
+/// can't reap its target (race, permission, vanished pid). Used to pin that
+/// a FAILED destructive action stays retryable (not dedup-suppressed).
+struct FailingAction {
+    name: &'static str,
+    calls: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl Action for FailingAction {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+    async fn execute(&self, _event: &Event, _dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Err(ActionError::Exec("could not reap target".into()))
+    }
+}
+
+fn failing_action(name: &'static str) -> (Arc<dyn Action>, Arc<AtomicUsize>) {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let a: Arc<dyn Action> = Arc::new(FailingAction {
+        name,
+        calls: calls.clone(),
+    });
+    (a, calls)
+}
+
 fn finding(seq: u64) -> Event {
     Event::new(ClassUid::DETECTION_FINDING, 1, SeverityId::High, "host", "test", seq)
 }
@@ -95,6 +123,26 @@ async fn dedup_disabled_by_default_runs_every_time() {
         calls.load(Ordering::SeqCst),
         2,
         "default (disabled) must preserve the pre-dedup behavior"
+    );
+}
+
+#[tokio::test]
+async fn dedup_does_not_suppress_retry_of_a_failed_destructive_action() {
+    // A destructive action that FAILED (e.g. kill_pid lost the race / the pid
+    // had vanished) must remain retryable on the next finding — dedup is meant
+    // to suppress a redundant *successful* repeat, not to permanently shield an
+    // attacker process because the first kill attempt errored. The dedup record
+    // is therefore committed only on Success; a failed attempt leaves no entry.
+    let (a, calls) = failing_action("kill_pid");
+    let r = Arc::new(
+        Responder::new(vec![a], vec!["kill_pid".into()], false)
+            .with_dedup_window(Duration::from_secs(60)),
+    );
+    run_findings(r, vec![finding(1), finding(2)]).await;
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        2,
+        "a failed destructive action must be retried, not dedup-suppressed"
     );
 }
 

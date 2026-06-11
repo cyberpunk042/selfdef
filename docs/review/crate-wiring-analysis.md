@@ -204,3 +204,13 @@ config → metric → alert → docs → test.* The remaining decision-disciplin
 these gates) and the analogous **grant-governance** layer (cooldown / overlap /
 spend onto the already-wired grants verb) each extend this same proven
 foundation; each is a clean next increment.
+
+**Correctness follow-up (2026-06-11, F-2026-112):** code-review of the shipped
+burst-dedup gate found it recorded the dedup entry *before* executing the action,
+so a FAILED destructive action (e.g. `kill_pid` that lost the race) was wrongly
+dedup-suppressed on retry — shielding a surviving target. Fixed: the dedup record
+is committed only on `Status::Success`; failed/timed-out actions stay retryable,
+while the rate-cap (still counting attempts) bounds any hammering. Failing-first
+test-locked (`dedup_does_not_suppress_retry_of_a_failed_destructive_action`). This
+is the kind of per-gate correctness audit each discipline layer needs after wiring,
+not just the initial integration.

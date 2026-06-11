@@ -405,7 +405,16 @@ impl Responder {
             // default). Suppress a DESTRUCTIVE action already fired on the same
             // target within the window — guards against a finding burst hammering
             // the same kill/quarantine. The lock is held only for the synchronous
-            // prune + check + insert, and dropped before the `.await` below.
+            // prune + check, and dropped before the `.await` below.
+            //
+            // The record is committed only when the action SUCCEEDS (see the
+            // dispatch match below), not optimistically here: a destructive
+            // action that failed or timed out must stay retryable on the next
+            // finding — otherwise a kill_pid that lost the race would be
+            // dedup-suppressed forever within the window and the attacker process
+            // would survive. The rate-cap below still counts the *attempt*, so a
+            // permanently-failing action can't hammer unbounded.
+            let mut dedup_key_to_record: Option<String> = None;
             if autonomous && !self.dedup_window.is_zero() && is_destructive_action(name) {
                 let key = format!("{name}|{}", event_target_sig(event));
                 let now = Instant::now();
@@ -426,8 +435,9 @@ impl Responder {
                     }
                     continue;
                 }
-                recent.insert(key, now);
                 drop(recent);
+                // Defer the insert until the action actually succeeds.
+                dedup_key_to_record = Some(key);
             }
             // Rate-cap circuit-breaker (opt-in; disabled when cap == 0). Once
             // `cap` destructive actions have fired in the last 60s, suppress
@@ -467,6 +477,15 @@ impl Responder {
             match tokio::time::timeout(self.action_deadline, run).await {
                 Ok(Ok(outcome)) => match outcome.status {
                     actions::Status::Success => {
+                        // Commit the dedup record now that the destructive
+                        // action has actually fired — a later identical finding
+                        // on the same target is suppressed within the window.
+                        if let Some(key) = dedup_key_to_record {
+                            self.recent_fires
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                                .insert(key, Instant::now());
+                        }
                         info!(action = name, notes = outcome.notes, "action ran")
                     }
                     actions::Status::DryRun => {
