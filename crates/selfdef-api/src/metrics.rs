@@ -77,6 +77,10 @@ pub struct Metrics {
     /// metrics task under-counting. Unset until the daemon wires them.
     responder_lag: OnceLock<Arc<AtomicU64>>,
     correlator_lag: OnceLock<Arc<AtomicU64>>,
+    /// Cumulative destructive actions suppressed by the responder's dedup /
+    /// rate-cap circuit-breakers. Shares the responder's `Arc<AtomicU64>`; unset
+    /// (no series emitted) until the daemon wires it.
+    responder_suppressed: OnceLock<Arc<AtomicU64>>,
 
     /// M060 mirror-export per-artifact publish counters. Keys are the
     /// canonical artifact filename (e.g. `"grants.json"`); values are
@@ -112,6 +116,7 @@ impl Metrics {
             responder_min_severity_floor: AtomicU64::new(0),
             responder_lag: OnceLock::new(),
             correlator_lag: OnceLock::new(),
+            responder_suppressed: OnceLock::new(),
             m060_publish_counts: Mutex::new(HashMap::new()),
             m060_last_publish_unix: Mutex::new(HashMap::new()),
         }
@@ -219,6 +224,14 @@ impl Metrics {
     pub fn set_lag_sources(&self, responder: Arc<AtomicU64>, correlator: Arc<AtomicU64>) {
         let _ = self.responder_lag.set(responder);
         let _ = self.correlator_lag.set(correlator);
+    }
+
+    /// Wire the destructive-action suppression counter shared with the responder
+    /// (the same `Arc` handed to `Responder::with_suppressed_counter`). Call once
+    /// at daemon startup; when unset the `*_suppressed_destructive_total` series
+    /// is not emitted. Idempotent (`OnceLock`).
+    pub fn set_responder_suppressed_source(&self, suppressed: Arc<AtomicU64>) {
+        let _ = self.responder_suppressed.set(suppressed);
     }
 
     /// Render the current counters as a Prometheus exposition-format
@@ -403,6 +416,18 @@ impl Metrics {
             writeln!(
                 out,
                 "selfdef_responder_lag_events_total {}",
+                c.load(Ordering::Relaxed)
+            )
+            .unwrap();
+        }
+        if let Some(c) = self.responder_suppressed.get() {
+            out.push_str(
+                "# HELP selfdef_responder_suppressed_destructive_total Destructive actions suppressed by the responder dedup / rate-cap circuit-breakers.\n",
+            );
+            out.push_str("# TYPE selfdef_responder_suppressed_destructive_total counter\n");
+            writeln!(
+                out,
+                "selfdef_responder_suppressed_destructive_total {}",
                 c.load(Ordering::Relaxed)
             )
             .unwrap();

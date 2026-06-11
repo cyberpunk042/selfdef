@@ -103,6 +103,12 @@ pub struct Responder {
     /// Synchronously locked (prune + count + push), never across an `.await`;
     /// pruned to the last 60s so it stays bounded.
     destructive_fire_log: Mutex<Vec<Instant>>,
+    /// Optional cumulative counter of destructive actions SUPPRESSED by the
+    /// dedup or rate-cap gates. The daemon wires this to a `/metrics` counter
+    /// (`selfdef_responder_suppressed_destructive_total`) so circuit-breaker
+    /// trips are observable + alertable — a spike means a flood/attack or a
+    /// mis-tuned window. `None` ⇒ not metered (e.g. in tests).
+    suppressed_counter: Option<Arc<std::sync::atomic::AtomicU64>>,
 }
 
 /// Default per-action execution ceiling. Generous — a forensics bundle
@@ -195,7 +201,20 @@ impl Responder {
             recent_fires: Mutex::new(HashMap::new()),
             destructive_cap_per_min: 0,
             destructive_fire_log: Mutex::new(Vec::new()),
+            suppressed_counter: None,
         }
+    }
+
+    /// Attach a cumulative counter bumped each time a destructive action is
+    /// suppressed by the dedup or rate-cap gate. The daemon wires it to
+    /// `selfdef_responder_suppressed_destructive_total`. Chainable.
+    #[must_use]
+    pub fn with_suppressed_counter(
+        mut self,
+        counter: Arc<std::sync::atomic::AtomicU64>,
+    ) -> Self {
+        self.suppressed_counter = Some(counter);
+        self
     }
 
     /// Enable destructive-action burst-dedup with the given window (opt-in;
@@ -393,6 +412,9 @@ impl Responder {
                         target = %event_target_sig(event),
                         "suppressed duplicate destructive action within dedup window"
                     );
+                    if let Some(c) = &self.suppressed_counter {
+                        c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
                     continue;
                 }
                 recent.insert(key, now);
@@ -418,6 +440,9 @@ impl Responder {
                         "destructive-action rate cap reached (circuit breaker) — \
                          suppressing further destructive actions until the 60s window drains"
                     );
+                    if let Some(c) = &self.suppressed_counter {
+                        c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
                     continue;
                 }
                 log.push(now);

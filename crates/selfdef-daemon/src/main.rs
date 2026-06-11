@@ -435,6 +435,7 @@ async fn main() -> Result<()> {
     // correlator + responder constructions further down can clone them.
     let responder_lag = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let correlator_lag = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let responder_suppressed = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
     // The shared Metrics handle. Constructed here (before the retention +
     // mirror loops) so every producer records into the SAME Arc that the
@@ -466,6 +467,8 @@ async fn main() -> Result<()> {
         m.set_responder_min_severity_floor(floor_repr);
         // F-2026-094: hand the consumers' live lag counters to /metrics.
         m.set_lag_sources(Arc::clone(&responder_lag), Arc::clone(&correlator_lag));
+        // Expose the responder's circuit-breaker suppression counter to /metrics.
+        m.set_responder_suppressed_source(Arc::clone(&responder_suppressed));
     }
 
     // SD-R retention sweep (SDD-081): enforce StoreConfig::hot_retention_days.
@@ -676,7 +679,8 @@ async fn main() -> Result<()> {
             cfg.responder.allowed_actions.clone(),
             cfg.responder.dry_run,
         )
-        .with_lag_counter(Arc::clone(&responder_lag));
+        .with_lag_counter(Arc::clone(&responder_lag))
+        .with_suppressed_counter(Arc::clone(&responder_suppressed));
         // Opt-in destructive-action burst-dedup: suppress a destructive action
         // repeated on the same target within the configured window. Default 0 =
         // disabled (no behavior change). Notify/snapshot/forensic never deduped.
