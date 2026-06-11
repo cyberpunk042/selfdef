@@ -519,6 +519,26 @@ min_severity = "none"
 # Example: only High/Critical/Fatal findings trigger autonomous actions:
 # min_severity = "high"
 
+# Decision-discipline circuit-breakers for DESTRUCTIVE actions (kill_pid,
+# lockdown_egress, revoke_session, and the SDD-065+ block/quarantine/isolate
+# backends). Notify / snapshot / forensic actions are NEVER suppressed by
+# these — every alert and evidence capture is preserved. Both default to 0
+# (disabled = exact historical behavior). When a circuit-breaker suppresses an
+# action it bumps `selfdef_responder_suppressed_destructive_total` on /metrics
+# and fires the `SelfdefResponderCircuitBreakerTripped` alert.
+#
+# Burst-dedup: suppress the SAME destructive action on the SAME target
+# (pid|src-ip|user) if it already fired within this many seconds — stops a
+# finding burst from hammering one target. 0 = off. Try 5–10 once you enable
+# powerful actions.
+dedup_window_secs = 0
+# Rate-cap circuit-breaker: at most this many destructive actions per rolling
+# 60s across ALL targets — catches an event FLOOD (many distinct targets, which
+# per-target dedup can't catch) driving the IPS into mass destruction. Once the
+# cap is hit, further destructive actions are suppressed until the window
+# drains. 0 = no cap.
+max_destructive_actions_per_min = 0
+
 # Where snapshot_proc writes per-event directories.
 snapshot_dir = "/var/lib/selfdef/snapshots"
 
