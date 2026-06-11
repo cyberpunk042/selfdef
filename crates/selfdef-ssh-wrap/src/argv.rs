@@ -96,6 +96,23 @@ pub fn extract_target<'a>(tokens: &[Token<'a>]) -> Option<&'a str> {
     None
 }
 
+/// Extract the option KEY from an `-o` value for denylist matching.
+///
+/// `ssh_config(5)` separates a keyword from its argument with EITHER `=` OR
+/// whitespace, so `StrictHostKeyChecking=no` and `StrictHostKeyChecking no`
+/// denote the SAME option and `ssh -o` honours both. Splitting on `=` alone
+/// (the pre-fix behaviour) made the whitespace form (`-o "StrictHostKeyChecking
+/// no"`) produce the key `"StrictHostKeyChecking no"`, which never matched the
+/// denied `"StrictHostKeyChecking"` and slipped past the policy — a client-side
+/// defense bypass (an agent could re-enable a denied option ssh would apply).
+/// Split on the first `=` or whitespace run so both forms collapse to one key.
+pub fn o_option_key(val: &str) -> &str {
+    val.trim_start()
+        .split(|c: char| c == '=' || c.is_whitespace())
+        .next()
+        .unwrap_or("")
+}
+
 /// Filter user-supplied flags. Returns a new argv (excluding argv[0]) with
 /// `denied_flags` removed and `-o` overrides matching `denied_o_keys` (case-
 /// insensitive on the key) removed.
@@ -110,7 +127,7 @@ pub fn filter(tokens: &[Token<'_>], denied_flags: &[char], denied_o_keys: &[&str
                 out.push(format!("-{c}"));
             }
             Token::Option('o', val) => {
-                let key = val.split('=').next().unwrap_or("").trim();
+                let key = o_option_key(val);
                 if denied_o_keys.iter().any(|k| key.eq_ignore_ascii_case(k)) {
                     continue;
                 }
@@ -132,7 +149,7 @@ pub fn filter(tokens: &[Token<'_>], denied_flags: &[char], denied_o_keys: &[&str
                 out.push((*val).to_string());
             }
             Token::AttachedOption('o', val) => {
-                let key = val.split('=').next().unwrap_or("").trim();
+                let key = o_option_key(val);
                 if denied_o_keys.iter().any(|k| key.eq_ignore_ascii_case(k)) {
                     continue;
                 }
@@ -308,5 +325,41 @@ mod tests {
         let filtered = filter(&toks, &[], &["ForwardAgent"]);
         assert!(!filtered.iter().any(|s| s == "ForwardAgent=yes"));
         assert!(filtered.iter().any(|s| s == "BatchMode=yes"));
+    }
+
+    #[test]
+    fn o_option_key_handles_both_separators() {
+        // ssh_config accepts `Key=Val` AND `Key Val` (whitespace).
+        assert_eq!(o_option_key("StrictHostKeyChecking=no"), "StrictHostKeyChecking");
+        assert_eq!(o_option_key("StrictHostKeyChecking no"), "StrictHostKeyChecking");
+        assert_eq!(o_option_key("  StrictHostKeyChecking   no"), "StrictHostKeyChecking");
+        assert_eq!(o_option_key("StrictHostKeyChecking\tno"), "StrictHostKeyChecking");
+    }
+
+    #[test]
+    fn filter_strips_denied_o_via_whitespace_form() {
+        // BYPASS: ssh honours `-o "StrictHostKeyChecking no"` (space, not '=').
+        // Splitting the key on '=' alone let it slip the denylist and ssh would
+        // then disable host-key checking despite the policy. Both spaced-value
+        // and attached forms of the whitespace variant must be stripped.
+        let denied = ["StrictHostKeyChecking"];
+        let f = filter(&classify(&s(&["-o", "StrictHostKeyChecking no", "host"])), &[], &denied);
+        assert!(
+            !f.iter().any(|x| x.contains("StrictHostKeyChecking")),
+            "whitespace-form -o must be stripped, got {f:?}"
+        );
+        let f = filter(&classify(&s(&["-oStrictHostKeyChecking no", "host"])), &[], &denied);
+        assert!(
+            !f.iter().any(|x| x.contains("StrictHostKeyChecking")),
+            "attached whitespace-form -o must be stripped, got {f:?}"
+        );
+        let f = filter(&classify(&s(&["-o", "stricthostkeychecking no", "host"])), &[], &denied);
+        assert!(!f.iter().any(|x| x.to_lowercase().contains("stricthostkeychecking")));
+        // The `=` form still strips (regression) ...
+        let f = filter(&classify(&s(&["-o", "StrictHostKeyChecking=no", "host"])), &[], &denied);
+        assert!(!f.iter().any(|x| x.contains("StrictHostKeyChecking")));
+        // ... and an unrelated option is preserved (no over-strip).
+        let f = filter(&classify(&s(&["-o", "ServerAliveInterval 30", "host"])), &[], &denied);
+        assert!(f.iter().any(|x| x.contains("ServerAliveInterval")), "got {f:?}");
     }
 }

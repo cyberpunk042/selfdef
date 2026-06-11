@@ -143,7 +143,7 @@ fn compute_stripped(
                 out.push(format!("-{c}"));
             }
             argv::Token::Option('o', v) | argv::Token::AttachedOption('o', v) => {
-                let key = v.split('=').next().unwrap_or("").trim();
+                let key = argv::o_option_key(v);
                 if denied_o.iter().any(|k| key.eq_ignore_ascii_case(k)) {
                     out.push(format!("-o {v}"));
                 }
