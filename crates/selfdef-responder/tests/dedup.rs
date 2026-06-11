@@ -82,6 +82,12 @@ fn federated_finding(seq: u64) -> Event {
     finding(seq).with_federated(true)
 }
 
+/// A federated finding whose trigger carried a valid trusted-peer signature
+/// (F-2026-111 c) — authenticated, so it bypasses the fail-closed gate.
+fn verified_federated_finding(seq: u64) -> Event {
+    finding(seq).with_federated(true).with_federation_verified(true)
+}
+
 /// Drive findings through the autonomous bus path and let the responder drain.
 /// The subscriber is created before `run` is spawned, so events published
 /// afterward are received.
@@ -277,6 +283,23 @@ async fn fail_closed_refuses_destructive_action_for_a_federated_finding() {
     run_findings(r, vec![federated_finding(1)]).await;
     assert_eq!(calls.load(Ordering::SeqCst), 0, "federated destructive action must be refused");
     assert_eq!(refused.load(Ordering::SeqCst), 1, "the refusal must bump the counter");
+}
+
+#[tokio::test]
+async fn fail_closed_acts_on_a_signature_verified_federated_finding() {
+    // F-2026-111 (c): even fail-closed, a federated finding authenticated to a
+    // trusted peer (federation_verified) bypasses the refusal and fires — an
+    // authenticated peer is trusted like a local source.
+    let (a, calls) = action("kill_pid");
+    let refused = Arc::new(AtomicU64::new(0));
+    let r = Arc::new(
+        Responder::new(vec![a], vec!["kill_pid".into()], false)
+            .with_act_on_federated(false)
+            .with_federated_refused_counter(refused.clone()),
+    );
+    run_findings(r, vec![verified_federated_finding(1)]).await;
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "a verified federated finding must be acted on");
+    assert_eq!(refused.load(Ordering::SeqCst), 0, "a verified finding is not a refusal");
 }
 
 #[tokio::test]

@@ -486,9 +486,16 @@ impl Responder {
             // circuit-breakers (a refused action need not consume dedup/cap
             // budget). Autonomous path only; non-destructive actions (alert /
             // evidence / escalation) are always delivered.
+            //
+            // EXCEPTION (option c): a finding whose triggering event carried a
+            // valid signature from a CONFIGURED TRUSTED PEER (`federation_verified`)
+            // is authenticated — it bypasses the fail-closed refusal and is acted
+            // on like a local finding. Unverified (raw / forged / unknown-peer)
+            // federated findings stay refused.
             if autonomous
                 && !self.act_on_federated
                 && event.federated
+                && !event.federation_verified
                 && is_destructive_action(name)
             {
                 warn!(

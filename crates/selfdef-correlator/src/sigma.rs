@@ -832,6 +832,12 @@ fn build_finding(
     // remote-driven finding from a local one (F-2026-111).
     if triggering.federated {
         ev = ev.with_federated(true);
+        // Carry the trusted-peer-verified marker too (option c) so a finding
+        // derived from a signature-verified remote event is itself treated as
+        // verified by the responder (bypasses the fail-closed gate).
+        if triggering.federation_verified {
+            ev = ev.with_federation_verified(true);
+        }
     }
 
     ev
@@ -1036,6 +1042,19 @@ level: medium
             findings[0].federated,
             "a finding from a federated trigger must inherit the taint"
         );
+        assert!(
+            !findings[0].federation_verified,
+            "an unsigned federated trigger yields an UNverified finding"
+        );
+
+        // F-2026-111 (c): a signature-verified federated trigger yields a
+        // verified finding (so the responder may act on it when fail-closed).
+        let verified_trigger = ssh_failure_event()
+            .with_federated(true)
+            .with_federation_verified(true);
+        let vf = engine.process(&verified_trigger, "host", &AtomicU64::new(0));
+        assert_eq!(vf.len(), 1);
+        assert!(vf[0].federated && vf[0].federation_verified);
     }
 
     #[test]
