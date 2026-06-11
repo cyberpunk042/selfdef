@@ -87,6 +87,11 @@ pub enum BackendError {
     },
     #[error("ipv6 link-local address refused: {0}")]
     LinkLocalRefused(Ipv6Addr),
+    /// A special / infrastructure address (loopback, unspecified, multicast,
+    /// v4 link-local, broadcast) was refused — blocking it would self-DoS the
+    /// host or is nonsensical, so the IPS must never add it to the blockset.
+    #[error("special address refused ({kind}): {addr}")]
+    SpecialAddrRefused { addr: IpAddr, kind: &'static str },
     #[error("backend unreachable: {0}")]
     BackendUnreachable(String),
 }
@@ -177,11 +182,50 @@ fn validate(req: &BlockIpRequest) -> Result<(), BackendError> {
             requested_secs: req.duration.as_secs(),
         });
     }
-    if let IpAddr::V6(v6) = req.addr {
-        // fe80::/10 — link-local, never block.
-        let octets = v6.octets();
-        if octets[0] == 0xfe && (octets[1] & 0xc0) == 0x80 {
-            return Err(BackendError::LinkLocalRefused(v6));
+    // Never block special / infrastructure addresses. An attacker-crafted (or
+    // misattributed) event naming such a src must not turn the IPS against its
+    // own host networking — blocking loopback self-DoSes local services, and
+    // unspecified / broadcast / multicast are nonsensical block targets.
+    if req.addr.is_loopback() {
+        return Err(BackendError::SpecialAddrRefused {
+            addr: req.addr,
+            kind: "loopback",
+        });
+    }
+    if req.addr.is_unspecified() {
+        return Err(BackendError::SpecialAddrRefused {
+            addr: req.addr,
+            kind: "unspecified",
+        });
+    }
+    if req.addr.is_multicast() {
+        return Err(BackendError::SpecialAddrRefused {
+            addr: req.addr,
+            kind: "multicast",
+        });
+    }
+    match req.addr {
+        IpAddr::V4(v4) => {
+            if v4.is_link_local() {
+                // 169.254.0.0/16.
+                return Err(BackendError::SpecialAddrRefused {
+                    addr: req.addr,
+                    kind: "link-local",
+                });
+            }
+            if v4.is_broadcast() {
+                return Err(BackendError::SpecialAddrRefused {
+                    addr: req.addr,
+                    kind: "broadcast",
+                });
+            }
+        }
+        IpAddr::V6(v6) => {
+            // fe80::/10 — link-local, never block. Kept as its specific variant.
+            let octets = v6.octets();
+            if octets[0] == 0xfe && (octets[1] & 0xc0) == 0x80 {
+                return Err(BackendError::LinkLocalRefused(v6));
+            }
         }
     }
     Ok(())

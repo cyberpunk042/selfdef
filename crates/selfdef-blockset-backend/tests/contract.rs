@@ -195,6 +195,45 @@ async fn ipv6_link_local_is_never_blocked() {
     assert!(matches!(err, BackendError::LinkLocalRefused(_)));
 }
 
+#[tokio::test]
+async fn special_addresses_are_never_blocked_self_dos_guard() {
+    // An attacker-crafted (or misattributed) event naming a special address
+    // must not make the IPS block its own host networking. Blocking loopback
+    // self-DoSes local services; unspecified / broadcast / multicast / v4
+    // link-local are nonsensical block targets.
+    let b = InMemoryBackend::new();
+    let cases: &[(IpAddr, &str)] = &[
+        ("127.0.0.1".parse().unwrap(), "v4 loopback"),
+        ("::1".parse().unwrap(), "v6 loopback"),
+        ("0.0.0.0".parse().unwrap(), "v4 unspecified"),
+        ("::".parse().unwrap(), "v6 unspecified"),
+        ("169.254.0.5".parse().unwrap(), "v4 link-local"),
+        ("255.255.255.255".parse().unwrap(), "v4 broadcast"),
+        ("224.0.0.1".parse().unwrap(), "v4 multicast"),
+        ("ff02::1".parse().unwrap(), "v6 multicast"),
+    ];
+    for (addr, label) in cases {
+        let r = req(*addr, 60, AuthorityTier::Operator, "test");
+        let err = b.block_ip(r).await.expect_err(label);
+        assert!(
+            matches!(
+                err,
+                BackendError::SpecialAddrRefused { .. } | BackendError::LinkLocalRefused(_)
+            ),
+            "{label} must be refused as a special address, got {err:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_normal_public_address_still_blocks() {
+    // The guard must not over-refuse — a routable public IP still blocks.
+    let b = InMemoryBackend::new();
+    let addr = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 7));
+    let r = req(addr, 60, AuthorityTier::Operator, "real threat");
+    b.block_ip(r).await.expect("a public address must still block");
+}
+
 // ───────────────────────── MS5 pending-extension queue tests ─────────────────────────
 
 #[tokio::test]
