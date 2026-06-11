@@ -76,3 +76,42 @@ alternative to something already wired?* — before integration. The headline
 "missing capability" subset is smaller and must be identified case-by-case.
 This is design work that needs operator direction on which capabilities are
 wanted, not an autonomous bulk wiring.
+
+## Recommended #1 integration target: decision-discipline (decision-* lattice)
+
+Classified the orphaned `decision-*` family (20 crates) — and unlike
+`action-denylist`, this is a **genuine missing capability**, the highest-value
+catalog→code gap found:
+
+**Gap (verified):** the `Responder` fires destructive actions (kill /
+quarantine / isolate / egress-lockdown) with **no rate-limiting, no
+repeat-suppression, no per-profile budget, and no cool-off** — grep of the
+responder shows zero throttle/dedup/budget/debounce logic (its only `dedup`
+deduplicates log strings). Meanwhile the entire decision-discipline lattice
+that would supply this is built-but-unwired: `decision-router`,
+`decision-throttle`, `decision-budget`, `decision-cache`, `decision-delay-policy`,
+`decision-conflict-detector`, `decision-watchdog`, `decision-explainer`,
+plus `fixed-window-counter` — all orphaned. **Operational risk:** a noisy or
+attacker-crafted event burst can make the daemon hammer the same destructive
+action with no ceiling.
+
+**Integration point:** `selfdef-decision-router::route(input: &RouterInput,
+floor: &TrustFloorManifest) -> Result<RouterOutput, RouterError>` is the
+designed composite gate — it returns the final `Outcome` (from
+`selfdef-policy-decision`) after composing the sub-policies. Wire it at the
+responder's action-dispatch chokepoint: build a `RouterInput` from the
+event/action/side-effect-class, call `route(...)` against a config-loaded
+`TrustFloorManifest`, and honor the `Outcome` (Allow → fire; Throttle/Deny/
+Defer → skip+log+emit a policy event).
+
+**Why it's safe to wire:** throttle/budget/dedup/cool-off only ever *reduce*
+the action set — for a destructive IPS the fail-safe direction (worst case:
+a legitimate action is delayed = availability cost, never a security hole).
+An empty/permissive default trust-floor = current behavior (no regression);
+tightening it is opt-in.
+
+**Scope:** multi-crate (responder dispatch + `RouterInput` construction +
+`TrustFloorManifest` config plumbing + tests). Sized for a session with full
+context budget, not a tail-end increment. This is the concrete "build the
+engine into running code" first step — recommended ahead of any further
+orphan wiring.
