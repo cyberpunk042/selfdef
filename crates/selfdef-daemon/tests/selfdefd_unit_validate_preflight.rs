@@ -34,6 +34,38 @@ fn execstartpre_precedes_execstart() {
 }
 
 #[test]
+fn unit_enables_liveness_watchdog() {
+    // The daemon emits sd_notify WATCHDOG=1 every 30s (run_heartbeat), but that
+    // is INERT unless the unit sets WatchdogSec. WatchdogSec=60 (a 2-beat
+    // window) makes systemd restart a HUNG daemon (deadlocked/runtime-wedged —
+    // alive but not beating, which Restart=on-failure can't catch). Lock it so
+    // a future unit edit can't silently disable hang-detection. (F-2026-100.)
+    // Line-precise (not substring): the directive must be its own line, so a
+    // mention in a comment doesn't satisfy the assertion.
+    assert!(
+        UNIT.lines().any(|l| l.trim() == "WatchdogSec=60"),
+        "selfdefd.service must set WatchdogSec=60 to enforce the WATCHDOG=1 \
+         heartbeat (else a hung daemon is undetected):\n{UNIT}"
+    );
+}
+
+#[test]
+fn unit_sets_owner_only_umask() {
+    // UMask=0077 makes every daemon-created file owner-only (0600/0700) by
+    // default — the hot store state.sqlite + its -wal/-shm siblings, the
+    // escalations db, any state file written without an explicit mode. Without
+    // it the mode is the inherited umask (typically 0022 → 0644 = a
+    // world-readable forensic store). The unix socket is unaffected (its mode is
+    // set explicitly post-bind). Lock it so a future unit edit can't silently
+    // drop the owner-only default. (F-2026-102.)
+    assert!(
+        UNIT.contains("UMask=0077"),
+        "selfdefd.service must set UMask=0077 so daemon-created files (incl. the \
+         hot store) are owner-only, not world-readable under a permissive umask:\n{UNIT}"
+    );
+}
+
+#[test]
 fn preflight_targets_the_same_config_as_execstart() {
     // Both lines must reference /etc/selfdef/selfdef.toml — validating a
     // different file than the one ExecStart loads would defeat the guard.

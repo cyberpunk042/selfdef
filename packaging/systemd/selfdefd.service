@@ -19,10 +19,24 @@ ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=30s
+# Liveness watchdog: the daemon emits `sd_notify WATCHDOG=1` every 30s
+# (run_heartbeat). A 60s window = two beats, so a HEALTHY daemon never trips,
+# but a HUNG one (deadlocked / runtime wedged — alive but not beating, which
+# Restart=on-failure can't catch because the process hasn't exited) is killed +
+# restarted by systemd at the deadline. Without the directive below the
+# WATCHDOG=1 sends are inert (systemd ignores them) and a hang is invisible.
+WatchdogSec=60
 
 # --- identity ---
 User=selfdef
 Group=selfdef
+# Owner-only default for everything the daemon creates (hot store
+# `/var/lib/selfdef/state.sqlite` + its `-wal`/`-shm` siblings, escalations db,
+# any state file written without an explicit mode). Without this the file mode
+# is the inherited umask — typically 0022 → 0644 = a WORLD-READABLE forensic
+# store. The /metrics + /v1 unix socket is unaffected: its mode is set
+# explicitly via set_permissions after bind, which overrides the umask.
+UMask=0077
 
 # --- capabilities ---
 # Minimal default set. Individual collectors may need elevations granted
