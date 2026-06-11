@@ -113,13 +113,90 @@ message after it's been republished onto the local bus (or
 identified as a self-echo). Redeliveries are safe — events carry a
 UUIDv7 and the store sink dedupes by id.
 
+## Federation signing — per-event authentication (F-2026-111 c)
+
+NATS transport auth (mTLS / NKey / JWT) authenticates the *connection*
+to the broker, not each *event*. A compromised broker, or any peer with
+publish rights, can otherwise forge a finding carrying a local pid/user
+and — if you run auto-response — drive a destructive action on this host
+chosen remotely. selfdef's federation trust boundary has two opt-in
+layers:
+
+1. **Fail-closed** (`[responder].act_on_federated = false`): the
+   responder refuses destructive actions (kill / quarantine / isolate /
+   egress-lockdown) for any finding that arrived from another host. Alerts,
+   evidence, and escalation are still delivered; operator `selfdefctl`
+   actions always act. Watch `selfdef_responder_federated_refused_total`.
+2. **Per-event signing** (this section): cryptographically authenticate
+   cross-host events so a *verified* one from a trusted peer may drive
+   response **even when fail-closed** — while forged / unknown-peer events
+   are dropped.
+
+### Set it up
+
+Each daemon signs its outbound events with an **unencrypted** minisign
+key (the daemon signs unattended, so it can't be password-gated):
+
+```bash
+# On every participating host — generate this host's event-signing key.
+# -W writes an UNENCRYPTED key (required; an encrypted key won't load).
+minisign -G -W -p /etc/selfdef/keys/federation.pub \
+                -s /etc/selfdef/keys/federation.key
+sudo chmod 0600 /etc/selfdef/keys/federation.key
+```
+
+Distribute each host's **public** key (`federation.pub`) to every peer,
+naming each peer by its `host_tag`. Then on each daemon:
+
+```toml
+[bus.nats]
+enabled = true
+url = "nats://nats.lan:4222"
+# This host's own unencrypted secret key.
+signing_key_file = "/etc/selfdef/keys/federation.key"
+
+# Every OTHER host you trust: its host_tag -> its public key file.
+[bus.nats.peer_keys]
+"host-b" = "/etc/selfdef/keys/peers/host-b.pub"
+"host-c" = "/etc/selfdef/keys/peers/host-c.pub"
+
+[responder]
+# Recommended with signing: refuse UNauthenticated cross-host triggers.
+act_on_federated = false
+```
+
+### Behavior
+
+- Outbound events are wrapped in a signed envelope `{kid, event, sig}`
+  (`kid` = sender `host_tag`).
+- An inbound event is `federation_verified` only if its `kid` is in
+  `peer_keys` AND its signature checks out against that key. Such events
+  bypass the fail-closed gate.
+- A signed envelope from an **unknown** peer, or one whose signature
+  **fails**, is dropped (not republished locally).
+- A **raw** (unsigned) event from a peer is accepted but stays
+  *unverified* — so the fail-closed gate still refuses destructive
+  response to it. (This lets a mixed fleet migrate incrementally.)
+- A bad key-load logs an error and the bridge runs **unsigned** rather
+  than killing fan-out.
+
+Watch `selfdef_nats_inbound_federated_verified_total` (the verified
+subset) against `selfdef_nats_inbound_federated_events_total` (all
+cross-host ingress) to confirm your peers' events are authenticating.
+
+> The signed envelope embeds the event JSON as a string, so the wire
+> payload is larger and every outbound event costs one minisign
+> signature. Federation signing is opt-in precisely because of that
+> cost — leave it off on hosts that don't span the trust boundary.
+
 ## What it isn't
 
 - **Not** a replacement for the local in-proc bus. Every subscriber
   inside the daemon (correlator, responder, store sink, API SSE
   stream) still reads from the local broadcast.
-- **Not** authenticated by selfdef itself. Bring your own NATS
-  cluster auth (mTLS, NKey, JWT, …).
+- **Not** transport-authenticated by selfdef itself — bring your own
+  NATS cluster auth (mTLS, NKey, JWT, …). *Per-event* authentication is
+  available separately via federation signing (above).
 - **Not** a transaction system. JetStream gives you "at-least-once"
   delivery, not "exactly-once" — that's why the dedupe story on the
   consumer side matters.
