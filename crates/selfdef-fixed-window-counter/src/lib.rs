@@ -57,6 +57,14 @@ impl FixedWindowCounter {
     }
 
     fn realign(&mut self, now_ms: u64) {
+        // Defend against a zero window (serde bypasses new()/validate()): the
+        // `now_ms / self.window_ms` below would divide by zero — a panic in
+        // EVERY build (integer div-by-zero is never masked). Skip realignment,
+        // leaving the count un-reset (fail-CLOSED: an over-limit corrupt counter
+        // keeps denying rather than crashing or silently resetting).
+        if self.window_ms == 0 {
+            return;
+        }
         let cur_bucket = (now_ms / self.window_ms) * self.window_ms;
         if cur_bucket != self.bucket_start_ms {
             self.bucket_start_ms = cur_bucket;
@@ -78,6 +86,13 @@ impl FixedWindowCounter {
 
     /// Reset.
     pub fn reset(&mut self, now_ms: u64) {
+        // Same div-by-zero defense as realign() (serde can set window_ms = 0):
+        // `now_ms / self.window_ms` panics in EVERY build. Fail-closed: a
+        // corrupt counter is a no-op on reset, not silently cleared to a
+        // permissive state (zeroing the count would open a rate limiter).
+        if self.window_ms == 0 {
+            return;
+        }
         self.bucket_start_ms = (now_ms / self.window_ms) * self.window_ms;
         self.current_count = 0;
     }
@@ -140,6 +155,26 @@ mod tests {
         c.observe(10, 100);
         c.reset(500);
         assert_eq!(c.count(500), 0);
+    }
+
+    #[test]
+    fn zero_window_does_not_divide_by_zero() {
+        // new()/validate() reject window_ms==0, but serde can construct one
+        // directly (public fields + Deserialize). observe/count (via realign)
+        // and reset all compute `now_ms / window_ms`, which panics in EVERY
+        // build on a zero window. They must self-defend fail-closed: skip the
+        // operation, leaving the accrued count intact (an over-limit corrupt
+        // counter keeps denying rather than crashing or resetting permissively).
+        let mut c = FixedWindowCounter {
+            schema_version: SCHEMA_VERSION.into(),
+            window_ms: 0,
+            bucket_start_ms: 0,
+            current_count: 5,
+        };
+        c.observe(3, 1000); // must not panic
+        assert_eq!(c.count(9_999_999), 8); // realign skipped → count accrues
+        c.reset(1000); // must not panic
+        assert_eq!(c.current_count, 8); // fail-closed: not reset to 0
     }
 
     #[test]

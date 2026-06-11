@@ -132,7 +132,15 @@ impl SloBudgetTracker {
         let total = s.successes.saturating_add(s.failures);
         // allowed = total × (10000 - target_bp) / 10000
         // (integer math — floor toward 0)
-        let error_bp = (10000 - s.target_bp) as u64;
+        //
+        // saturating_sub, not `-`: serde bypasses register()/validate(), so a
+        // restored or corrupt state can carry target_bp > 10000 that never
+        // passed the 1..=10000 gate. A plain subtraction underflows there —
+        // debug-panics (DoS on this snapshot path) and in release wraps to a
+        // huge error_bp, inflating `allowed` so the SLO never reports exhaustion
+        // (silent fail-open). saturating_sub fails closed: an impossible >100%
+        // target yields error_bp = 0 → zero budget → first failure exhausts.
+        let error_bp = 10000u32.saturating_sub(s.target_bp) as u64;
         let allowed = (total.saturating_mul(error_bp)) / 10000;
         let actual = s.failures;
         let remaining = allowed.saturating_sub(actual);
@@ -314,5 +322,24 @@ mod tests {
         let j = serde_json::to_string(&t).unwrap();
         let back: SloBudgetTracker = serde_json::from_str(&j).unwrap();
         assert_eq!(t, back);
+    }
+
+    #[test]
+    fn budget_self_defends_against_deserialized_oversized_target() {
+        // register()/validate() reject target_bp > 10000, but Slo has public
+        // fields + derives Deserialize, so a restored/corrupt state can carry
+        // one. budget() computed `10000 - target_bp`; for target_bp > 10000 that
+        // underflows — debug-panics, and in release wraps to a huge error_bp so
+        // `allowed` saturates huge and the SLO never reports exhaustion (silent
+        // fail-open). Must self-defend fail-closed: zero budget, first failure
+        // exhausts. No panic, no wrap.
+        let corrupt = r#"{"schema_version":"1.0.0",
+            "slos":{"api":{"target_bp":20000,"successes":100,"failures":1}}}"#;
+        let t: SloBudgetTracker = serde_json::from_str(corrupt).unwrap();
+        let b = t.budget("api").expect("budget present");
+        assert_eq!(b.total, 101);
+        assert_eq!(b.allowed_failures, 0, "impossible >100% target grants zero budget");
+        assert!(b.exhausted, "any failure against a zero budget exhausts");
+        assert_eq!(b.burn_ratio_bp, u32::MAX);
     }
 }
