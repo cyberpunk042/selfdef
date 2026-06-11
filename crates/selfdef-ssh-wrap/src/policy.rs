@@ -132,10 +132,30 @@ impl ResolvedPolicy {
         // stand. Legitimate single-'@'/no-'@' targets never reach this branch
         // (their host carries no '@'), so their behaviour is unchanged.
         if !host.contains('@') {
-            for (pattern, host_policy) in &file.hosts {
-                if matches_pattern(pattern, host) {
-                    merged = host_policy.merge_over(&merged);
-                }
+            // Deterministic precedence (F-2026-110): collect the matching
+            // patterns and apply them LEAST-specific-first so the most-specific
+            // override wins for any conflicting field. Iterating `file.hosts` (a
+            // HashMap) directly made the winner depend on hash order, so a host
+            // matching two overlapping patterns with conflicting values (e.g.
+            // `*.internal` and `db.*` both matching `db.internal`) got a
+            // run-to-run-varying policy — a non-deterministic security control.
+            // Specificity order: an exact match outranks any glob; among globs
+            // the longer (more specific) pattern wins; a lexical tiebreak makes
+            // it fully deterministic. (The exact precedence rule is a sensible
+            // default — adjust the sort key if a different policy is desired;
+            // determinism itself is the fix.) `merge_over` lets self's Some
+            // values override the base, so applying most-specific LAST makes it win.
+            let mut matches: Vec<(&String, &HostPolicy)> = file
+                .hosts
+                .iter()
+                .filter(|(pattern, _)| matches_pattern(pattern, host))
+                .collect();
+            matches.sort_by(|(a, _), (b, _)| {
+                let spec = |p: &str| (p == host, p.len());
+                spec(a).cmp(&spec(b)).then_with(|| a.cmp(b))
+            });
+            for (_pattern, host_policy) in matches {
+                merged = host_policy.merge_over(&merged);
             }
         }
         // Anywhere a value somehow still None, fall back to secure defaults.
@@ -416,5 +436,42 @@ mod tests {
         let args = policy.to_ssh_args();
         assert!(args.iter().any(|s| s == "ForwardAgent=no"));
         assert!(args.iter().any(|s| s == "StrictHostKeyChecking=accept-new"));
+    }
+
+    #[test]
+    fn overlapping_patterns_resolve_deterministically_most_specific_wins() {
+        // F-2026-110: a host matching overlapping patterns with CONFLICTING
+        // values must resolve identically every run (no HashMap-order
+        // dependence), with the more-specific pattern winning.
+        let toml_str = r#"
+            [defaults]
+            port_forwarding = false
+            [hosts."*.internal"]
+            port_forwarding = true
+            [hosts."db.*"]
+            port_forwarding = false
+            forward_agent = true
+            [hosts."db.internal"]
+            port_forwarding = true
+            forward_agent = false
+        "#;
+        let file: PolicyFile = toml::from_str(toml_str).unwrap();
+
+        // `db.internal` matches both globs AND the exact entry. Resolve many
+        // times — result must be byte-identical (deterministic).
+        let first = ResolvedPolicy::resolve(&file, "db.internal");
+        for _ in 0..50 {
+            let p = ResolvedPolicy::resolve(&file, "db.internal");
+            assert_eq!(p.port_forwarding, first.port_forwarding);
+            assert_eq!(p.forward_agent, first.forward_agent);
+        }
+        // Exact `db.internal` is most-specific → its values win.
+        assert!(first.port_forwarding, "exact host override wins port_forwarding");
+        assert!(!first.forward_agent, "exact host override wins forward_agent");
+
+        // Glob-vs-glob: `db.x.internal` matches `*.internal` (len 10) AND `db.*`
+        // (len 4); the longer/more-specific `*.internal` wins → port_forwarding=true.
+        let p2 = ResolvedPolicy::resolve(&file, "db.x.internal");
+        assert!(p2.port_forwarding, "longer glob *.internal outranks db.*");
     }
 }
