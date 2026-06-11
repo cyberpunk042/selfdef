@@ -138,6 +138,38 @@
 
 ---
 
+## Security hardening sweep — wired attacker-reachable surface (2026-06-11)
+
+A focused pass over the *running* daemon's attacker-reachable surface (the 89
+wired crates — the actual attack surface, per `crate-wiring-analysis.md`).
+Genuine defects fixed this cycle: **F-2026-112** (failed destructive action
+dedup-suppressed on retry), **F-2026-113** (3 built destructive effectors absent
+from the circuit-breaker classification), **F-2026-114** (circuit-breaker alert
+fired on routine dedup), and **F-2026-111** (remote-driven local destructive
+response — closed with a fail-closed federation trust boundary, opt-in,
+default-preserving).
+
+The rest of the surface was audited and **verified correct** (recorded so the
+negative results aren't re-investigated; each is a real verification gate, not
+an assumption):
+
+| Surface | Property verified | Evidence |
+|---|---|---|
+| Effectors (6 pid-targeting destructive backends) | init-refusal fail-closed (`pid == 1` / `pid <= 1` + kernel-thread) — no host-DoS via kill/quarantine/isolate/freeze/cap-drop/env-scrub of init | each backend has a `pid_1_*_refused` test; apparmor uses the strongest `check_sacrosanct(pid<=1)` |
+| `selfdef-store` (SQLite persistence) | no SQL injection — every query is a static string with bound `?N` params (`params![]`); no dynamic WHERE building | `crates/selfdef-store/src/sqlite.rs` (INSERT + all SELECT/DELETE) |
+| Collectors (suricata/auditd/journald/tetragon/eventstream) | panic-safe on untrusted input — unparseable input soft-skipped, no `unwrap`/`expect`/indexing on parsed data in non-test code | grep of parse paths; Tetragon also self-heals across rotation/truncation/delete-recreate |
+| `token_eq` (bearer-token compare) | constant-time (XOR-fold, no early return) + length pre-check prevents prefix-token bypass | now regression-locked by `token_eq_tests` (added this cycle) |
+| `/events/stream` SSE quota | bounded — global cap (64) + per-token cap (8), operator-overridable; per-token map pruned-on-zero in BOTH Drop and the global-cap-reject undo path (no zombie-entry leak); underflow debug-asserted | `crates/selfdef-api/src/handlers.rs` `SubscriberGuard` (F-2027-061 / F-2028-037) |
+| NATS bridge self-echo | both core + JetStream inbound drop `host_tag == local` (no loop / no self-processing) | `crates/selfdef-nats/src/lib.rs` |
+
+Conclusion: the wired surface is sound; the genuine defects found are fixed and
+test-locked. Remaining high-value work (F-2026-111 option (c) signed federated
+events; orphan-discipline wiring such as decision-budget / grant-governance) is
+**design-gated** — it needs an operator decision on policy/keys, not a surgical
+fix.
+
+---
+
 ## Triage suggestion (for Phase 2, not committed)
 
 The four central-promise blockers cluster into two coherent
