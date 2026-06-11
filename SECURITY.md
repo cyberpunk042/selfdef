@@ -75,6 +75,40 @@ surfaces the shipped modules introduce.
 - `panic = "abort"` in release: no unwinding into hostile state.
 - `unsafe_code = "forbid"` everywhere except the eBPF crate.
 
+### Response self-protection (anti-self-attack)
+The responder and guardian wield destructive primitives (kill / quarantine /
+isolate / revoke / block / SIGKILL) driven by events whose fields a local or
+federated attacker can influence (a crafted/misattributed collector or Tetragon
+event). Both responders therefore refuse to turn that power against the IPS
+itself or the operator (findings F-2026-116 … F-2026-125):
+
+- **Self-preservation.** No pid-targeting action signals the daemon's own pid
+  (`pid_from_event` filters `std::process::id()`), and the guardian refuses to
+  SIGKILL its own pid — a crafted event naming the daemon can't make the IPS
+  kill itself. Init (pid 1) is refused everywhere.
+- **No operator lock-out.** `block_ip` refuses loopback / unspecified /
+  multicast / link-local / broadcast addresses (can't self-DoS the host's
+  networking). Session / API-token / MFA revocation and the `revoke_session`
+  action refuse a configured *exclusion list* of protected principals — **but
+  that list defaults empty; populate it** (see the hardening checklist) or the
+  protection is inert.
+- **No argument injection.** Every action that shells out (`revoke_session`,
+  the guardian's `podman kill`, `velociraptor_escalate`) refuses an
+  attacker-influenced value starting with `-` and/or passes `--` so a value
+  like `--all` can never be flag-parsed (e.g. `podman kill --all` mass-kill).
+- **No console spoofing.** Guardian console alerts strip terminal control /
+  escape sequences before writing to `/dev/console`.
+- **Federation trust boundary.** With `[responder].act_on_federated = false`,
+  destructive response to a cross-host finding is refused unless the event
+  carried a valid trusted-peer signature (F-2026-111).
+- **Circuit-breakers** (opt-in): per-target dedup + a global rate-cap bound a
+  finding flood from driving mass destruction.
+
+> Most destructive effectors run in **dry-run by default**
+> (`[responder].dry_run = true`) — they preview, not execute — so these guards
+> matter most once you enable real response (`dry_run = false`). The guardian
+> (`selfdef-guardian`) has no dry-run mode and its guards apply unconditionally.
+
 ### Configuration & rules
 - Config and rules are read-only at runtime; daemon owns no write capability
   for these paths.
@@ -273,6 +307,17 @@ posture is:
 - `/metrics` exposed via UNIX socket on hosts where the credential dir
   is not exclusively root-writable; rotate the API token via a deliberate
   daemon restart.
+- **If you enable real (non-dry-run) destructive response**, populate the
+  self-lockout exclusion lists with your operator + break-glass accounts —
+  they default empty: `[responder].revoke_session_excluded_users`, and the
+  protected-principal sets on the session / API-token / MFA revocation
+  effectors when wired. Without this, a crafted event naming the operator can
+  revoke their access mid-incident.
+- **For NATS federation with auto-response**, set
+  `[responder].act_on_federated = false` and configure per-peer signing keys
+  (`[bus.nats].signing_key_file` + `[bus.nats.peer_keys]`) so only
+  cryptographically-authenticated cross-host findings can drive destructive
+  response.
 
 This block is intentionally short — copy it into your deployment runbook.
 
