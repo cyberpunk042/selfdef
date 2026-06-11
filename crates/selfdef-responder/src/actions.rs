@@ -282,6 +282,21 @@ impl Action for RevokeSessionAction {
             return Ok(ActionOutcome::skipped("no actor user name"));
         };
 
+        // A username that starts with `-` would be parsed as a flag/option by
+        // the revoke script rather than a positional argument (argv injection):
+        // `event.actor.user.name` is attacker-influenceable (e.g. an auditd
+        // `acct=` field) and the script is invoked as `script <user>` with no
+        // `--` separator, so a value like `-oProxyCommand=…` / `--config=…`
+        // could change the script's behavior. Refuse it fail-closed — a real
+        // username never starts with `-`, so a leading-`-` value signals
+        // tampering, not a session to revoke. Checked before the dry-run branch
+        // so a dry run previews the refusal accurately.
+        if user.starts_with('-') {
+            return Ok(ActionOutcome::skipped(format!(
+                "refusing user with leading '-' (possible argv injection): {user:?}"
+            )));
+        }
+
         if dry_run {
             return Ok(ActionOutcome::dry_run(format!(
                 "would invoke {} {user}",
@@ -2325,6 +2340,34 @@ mod tests {
             }),
             ..Actor::default()
         })
+    }
+
+    #[tokio::test]
+    async fn revoke_session_refuses_username_with_leading_dash() {
+        // Argv-injection guard (F-2026-106): event.actor.user.name is
+        // attacker-influenceable (auditd `acct=` field), and the script-based
+        // RevokeSessionAction runs `script <user>` with no `--` separator. A
+        // username starting with `-` would be flag-parsed by the script (e.g.
+        // `-oProxyCommand=…`). The action must refuse it fail-closed BEFORE
+        // invoking the script — verified in dry-run so no subprocess is spawned.
+        let action = RevokeSessionAction::new(PathBuf::from("/bin/true"));
+        let outcome = action
+            .execute(&finding_with_user("-oProxyCommand=evil"), true)
+            .await
+            .unwrap();
+        assert_eq!(
+            outcome.status,
+            Status::Skipped,
+            "a username with a leading '-' must be refused, not passed to the script"
+        );
+        assert!(outcome.notes.contains("argv injection"), "{}", outcome.notes);
+        // A normal username still previews a real invocation.
+        let ok = action
+            .execute(&finding_with_user("alice"), true)
+            .await
+            .unwrap();
+        assert_eq!(ok.status, Status::DryRun);
+        assert!(ok.notes.contains("alice"));
     }
 
     #[tokio::test]
