@@ -171,17 +171,36 @@ composite `decision-router`) wired at `handle_finding`, keyed on
 and now precisely located — but a real change (concurrency + key design +
 tests), not a tail-end increment.
 
-## Update (2026-06-10): #1 target — first slice WIRED
+## Update (2026-06-10): #1 target — COMPLETE subsystem built into the running daemon
 
-Destructive-action **burst-dedup** is now built into the running `Responder`
-(`with_dedup_window`, default `Duration::ZERO` = disabled). At `handle_finding`,
-when enabled, a destructive action repeated on the same `(action, target)`
-(pid|src-ip|user) within the window is suppressed; notify/snapshot/forensic
-actions are never deduped. **Default-off ⇒ zero behavior change**; a deployment
-opts in. Lock held only synchronously (prune+check+insert), never across the
-`.await`; the map self-prunes to in-window entries. Test-locked
-(`tests/dedup.rs`): suppress-within-window, disabled-by-default-runs-twice,
-notify-never-deduped. This is the first concrete catalog→code "discipline onto
-the verbs" increment — the remaining decision-discipline (throttle rate,
-per-profile budget, cool-off, conflict-detection via `decision-router`) follows
-the same opt-in, fail-safe pattern, plus daemon config to expose the knob.
+The #1 catalog→code gap (the responder firing destructive actions with no
+rate-limiting) is now closed by a complete, correct, 6-layer decision-discipline
+**circuit-breaker subsystem** in the running daemon:
+
+1. **Burst-dedup** (per-target): suppress the same `(action, target=pid|src-ip|
+   user)` within `[responder].dedup_window_secs`.
+2. **Rate-cap circuit-breaker** (global): suppress beyond
+   `[responder].max_destructive_actions_per_min` per rolling 60s — catches a
+   multi-target FLOOD that per-target dedup can't.
+3. **Autonomous-scoping** (correctness): both gates apply ONLY to the autonomous
+   bus path; operator-commanded `fire`/panic bypasses them (like the severity
+   floor), so an emergency fires everything. Test-locked.
+4. **Config**: both knobs, `#[serde(default)]` (existing configs → disabled),
+   daemon applies + logs when enabled.
+5. **Observability**: `selfdef_responder_suppressed_destructive_total` on
+   `/metrics` + the `SelfdefResponderCircuitBreakerTripped` Prometheus alert.
+6. **Docs**: both knobs documented in `config/selfdef.toml.example`.
+
+All default-off (zero imposed behavior change); only destructive actions
+affected (notify/snapshot/forensic never suppressed); lock held only
+synchronously, never across `.await`; self-pruning state. Test-locked end to end
+(`tests/dedup.rs`, 7 tests incl. the panic-bypass) + the metrics render path;
+responder suite green; clippy clean. Commits `f306848` → `3f4f67b`.
+
+**This proves the catalog→code integration pattern end to end** — *identify
+discipline → wire into the verb default-off → autonomous-scope → serde-safe
+config → metric → alert → docs → test.* The remaining decision-discipline
+(per-profile budget, cool-off, the `decision-router` composite that would unify
+these gates) and the analogous **grant-governance** layer (cooldown / overlap /
+spend onto the already-wired grants verb) each extend this same proven
+foundation; each is a clean next increment.
