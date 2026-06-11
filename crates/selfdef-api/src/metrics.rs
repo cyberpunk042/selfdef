@@ -87,6 +87,13 @@ pub struct Metrics {
     /// suppression doesn't raise it.
     responder_ratecap_tripped: OnceLock<Arc<AtomicU64>>,
 
+    /// Cumulative inbound federated events (from OTHER hosts via the NATS
+    /// bridge) republished onto the local bus — i.e. events that entered the
+    /// local correlator→responder path from across the trust boundary. Shares
+    /// the bridge's `Arc<AtomicU64>`; unset until the daemon wires it. Surfaces
+    /// the otherwise-invisible cross-host ingress (see F-2026-111).
+    nats_federated_inbound: OnceLock<Arc<AtomicU64>>,
+
     /// M060 mirror-export per-artifact publish counters. Keys are the
     /// canonical artifact filename (e.g. `"grants.json"`); values are
     /// (ok_count, failed_count). Set + bumped by the daemon's
@@ -123,6 +130,7 @@ impl Metrics {
             correlator_lag: OnceLock::new(),
             responder_suppressed: OnceLock::new(),
             responder_ratecap_tripped: OnceLock::new(),
+            nats_federated_inbound: OnceLock::new(),
             m060_publish_counts: Mutex::new(HashMap::new()),
             m060_last_publish_unix: Mutex::new(HashMap::new()),
         }
@@ -247,6 +255,14 @@ impl Metrics {
     /// dedup. Call once at startup; idempotent (`OnceLock`).
     pub fn set_responder_ratecap_tripped_source(&self, tripped: Arc<AtomicU64>) {
         let _ = self.responder_ratecap_tripped.set(tripped);
+    }
+
+    /// Wire the inbound-federated-event counter shared with the NATS bridge (the
+    /// same `Arc` handed to `run_bridge`). Exposes `selfdef_nats_inbound_federated_events_total`
+    /// — the cross-host ingress volume into the local response path. Call once at
+    /// startup; when unset the series is not emitted. Idempotent (`OnceLock`).
+    pub fn set_nats_federated_inbound_source(&self, federated: Arc<AtomicU64>) {
+        let _ = self.nats_federated_inbound.set(federated);
     }
 
     /// Render the current counters as a Prometheus exposition-format
@@ -455,6 +471,18 @@ impl Metrics {
             writeln!(
                 out,
                 "selfdef_responder_ratecap_tripped_total {}",
+                c.load(Ordering::Relaxed)
+            )
+            .unwrap();
+        }
+        if let Some(c) = self.nats_federated_inbound.get() {
+            out.push_str(
+                "# HELP selfdef_nats_inbound_federated_events_total Inbound events from other hosts (via the NATS bridge) republished onto the local bus — cross-host ingress into the correlator/responder path.\n",
+            );
+            out.push_str("# TYPE selfdef_nats_inbound_federated_events_total counter\n");
+            writeln!(
+                out,
+                "selfdef_nats_inbound_federated_events_total {}",
                 c.load(Ordering::Relaxed)
             )
             .unwrap();
@@ -863,6 +891,30 @@ mod tests {
         assert!(
             wired.contains("selfdef_responder_suppressed_destructive_total 4"),
             "aggregate total stays separate (includes dedup):\n{wired}"
+        );
+    }
+
+    #[test]
+    fn nats_federated_inbound_series_appears_only_when_wired_and_reads_live() {
+        // Cross-host ingress (F-2026-111 observability) is absent until the
+        // daemon wires the NATS bridge counter, then reads the shared Arc live.
+        let m = Metrics::new("h");
+        assert!(
+            !m.render(0).contains("selfdef_nats_inbound_federated_events_total"),
+            "federated-ingress series must be absent until wired"
+        );
+
+        let federated = Arc::new(AtomicU64::new(0));
+        m.set_nats_federated_inbound_source(Arc::clone(&federated));
+        federated.fetch_add(5, Ordering::Relaxed);
+        let wired = m.render(0);
+        assert!(
+            wired.contains("# TYPE selfdef_nats_inbound_federated_events_total counter"),
+            "{wired}"
+        );
+        assert!(
+            wired.contains("selfdef_nats_inbound_federated_events_total 5"),
+            "{wired}"
         );
     }
 

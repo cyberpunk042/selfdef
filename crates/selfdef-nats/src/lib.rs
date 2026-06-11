@@ -48,6 +48,7 @@
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use async_nats::jetstream;
@@ -193,14 +194,15 @@ pub async fn run_bridge(
     publisher: Publisher,
     subscriber: Subscriber,
     shutdown: CancellationToken,
+    federated_inbound: Option<Arc<AtomicU64>>,
 ) -> Result<(), NatsError> {
     let client = async_nats::connect(&cfg.url).await?;
     info!(url = %cfg.url, prefix = %cfg.subject_prefix, "nats: connected");
 
     if cfg.jetstream.enabled {
-        run_jetstream_bridge(client, cfg, host_tag, publisher, subscriber, shutdown).await
+        run_jetstream_bridge(client, cfg, host_tag, publisher, subscriber, shutdown, federated_inbound).await
     } else {
-        run_core_bridge(client, cfg, host_tag, publisher, subscriber, shutdown).await
+        run_core_bridge(client, cfg, host_tag, publisher, subscriber, shutdown, federated_inbound).await
     }
 }
 
@@ -211,6 +213,7 @@ async fn run_core_bridge(
     publisher: Publisher,
     subscriber: Subscriber,
     shutdown: CancellationToken,
+    federated_inbound: Option<Arc<AtomicU64>>,
 ) -> Result<(), NatsError> {
     let out_subject = outbound_subject(&cfg.subject_prefix, &host_tag);
     let in_subject = inbound_subject(&cfg.subject_prefix);
@@ -236,6 +239,7 @@ async fn run_core_bridge(
     let in_task = {
         let host_tag = host_tag.clone();
         let sd = shutdown.clone();
+        let federated_inbound = federated_inbound.clone();
         tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -248,16 +252,12 @@ async fn run_core_bridge(
                             warn!("nats inbound: subscription ended");
                             return;
                         };
-                        match decode_event(&msg.payload) {
-                            Ok(event) => {
-                                if event.host_tag == host_tag {
-                                    debug!(id = %event.id, "nats inbound: dropping self-echo");
-                                    continue;
-                                }
-                                publisher.publish_lossy(event);
-                            }
-                            Err(e) => warn!(error = %e, len = msg.payload.len(), "nats inbound: decode failed"),
-                        }
+                        republish_inbound(
+                            &msg.payload,
+                            &host_tag,
+                            &publisher,
+                            federated_inbound.as_deref(),
+                        );
                     }
                 }
             }
@@ -279,6 +279,7 @@ async fn run_jetstream_bridge(
     publisher: Publisher,
     subscriber: Subscriber,
     shutdown: CancellationToken,
+    federated_inbound: Option<Arc<AtomicU64>>,
 ) -> Result<(), NatsError> {
     let js = jetstream::new(client);
 
@@ -342,6 +343,7 @@ async fn run_jetstream_bridge(
     let in_task = {
         let host_tag = host_tag.clone();
         let sd = shutdown.clone();
+        let federated_inbound = federated_inbound.clone();
         tokio::spawn(async move {
             let mut messages = match consumer.messages().await {
                 Ok(s) => s,
@@ -368,16 +370,12 @@ async fn run_jetstream_bridge(
                                 continue;
                             }
                         };
-                        match decode_event(&msg.payload) {
-                            Ok(event) => {
-                                if event.host_tag != host_tag {
-                                    publisher.publish_lossy(event);
-                                } else {
-                                    debug!(id = %event.id, "jetstream inbound: dropping self-echo");
-                                }
-                            }
-                            Err(e) => warn!(error = %e, len = msg.payload.len(), "jetstream inbound: decode failed"),
-                        }
+                        republish_inbound(
+                            &msg.payload,
+                            &host_tag,
+                            &publisher,
+                            federated_inbound.as_deref(),
+                        );
                         // Ack regardless of local outcome. publish_lossy
                         // never fails; a redelivery would just re-push
                         // the same event id and the store sink dedups.
@@ -498,6 +496,38 @@ fn decode_event(bytes: &[u8]) -> Result<Event, NatsError> {
     Ok(serde_json::from_slice(bytes)?)
 }
 
+/// Decode one inbound NATS payload and, unless it is our own echo, republish it
+/// onto the local bus — counting it as a *federated ingress* so the otherwise
+/// invisible cross-host event flow is observable on `/metrics`. Shared by the
+/// core and JetStream inbound loops (previously duplicated inline). Decode
+/// failures are logged and dropped; the JetStream caller still acks afterward.
+///
+/// The federated count is the trust-boundary signal: every event it counts is
+/// one that entered the local correlator→responder path from another host (see
+/// F-2026-111 — inbound federated events currently drive local response with no
+/// per-event attestation). Surfacing the volume is the prerequisite for any
+/// later policy on it; this function changes no behavior, it only observes.
+fn republish_inbound(
+    payload: &[u8],
+    local_host_tag: &str,
+    publisher: &Publisher,
+    federated_inbound: Option<&AtomicU64>,
+) {
+    match decode_event(payload) {
+        Ok(event) => {
+            if event.host_tag == local_host_tag {
+                debug!(id = %event.id, "nats inbound: dropping self-echo");
+                return;
+            }
+            if let Some(c) = federated_inbound {
+                c.fetch_add(1, Ordering::Relaxed);
+            }
+            publisher.publish_lossy(event);
+        }
+        Err(e) => warn!(error = %e, len = payload.len(), "nats inbound: decode failed"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -574,6 +604,60 @@ mod tests {
         assert!(!n.contains('>'));
         assert!(!n.contains('/'));
         assert!(n.starts_with("p-"));
+    }
+
+    #[test]
+    fn republish_inbound_counts_and_publishes_a_federated_event() {
+        // A remote-host event is republished onto the local bus AND counted as
+        // a federated ingress (the observability signal for F-2026-111).
+        let bus = selfdef_bus::Bus::new(8);
+        let sub = bus.subscribe();
+        let publisher = bus.publisher();
+        let counter = AtomicU64::new(0);
+        let bytes = serde_json::to_vec(&synth_event("other-host")).unwrap();
+
+        republish_inbound(&bytes, "this-host", &publisher, Some(&counter));
+
+        assert_eq!(counter.load(Ordering::Relaxed), 1, "federated event must be counted");
+        // The event reached the local bus.
+        let mut sub = sub;
+        let got = sub
+            .try_recv()
+            .expect("bus recv ok")
+            .expect("federated event must be republished locally");
+        assert_eq!(got.host_tag, "other-host");
+    }
+
+    #[test]
+    fn republish_inbound_drops_self_echo_without_counting() {
+        // Our own event bouncing back must be dropped and NOT counted as
+        // federated ingress (it never left the local trust boundary).
+        let bus = selfdef_bus::Bus::new(8);
+        let sub = bus.subscribe();
+        let publisher = bus.publisher();
+        let counter = AtomicU64::new(0);
+        let bytes = serde_json::to_vec(&synth_event("this-host")).unwrap();
+
+        republish_inbound(&bytes, "this-host", &publisher, Some(&counter));
+
+        assert_eq!(counter.load(Ordering::Relaxed), 0, "self-echo must not count as federated");
+        let mut sub = sub;
+        assert!(matches!(sub.try_recv(), Ok(None)), "self-echo must not be republished");
+    }
+
+    #[test]
+    fn republish_inbound_drops_undecodable_payload() {
+        // A garbage payload is logged + dropped: no publish, no count, no panic.
+        let bus = selfdef_bus::Bus::new(8);
+        let sub = bus.subscribe();
+        let publisher = bus.publisher();
+        let counter = AtomicU64::new(0);
+
+        republish_inbound(b"not json", "this-host", &publisher, Some(&counter));
+
+        assert_eq!(counter.load(Ordering::Relaxed), 0);
+        let mut sub = sub;
+        assert!(matches!(sub.try_recv(), Ok(None)));
     }
 
     #[test]

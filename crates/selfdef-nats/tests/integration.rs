@@ -162,10 +162,10 @@ async fn core_bridge_round_trips_event_between_two_hosts() {
     let cfg_b = cfg_template;
 
     let h_a = tokio::spawn(async move {
-        let _ = run_bridge(cfg_a, "host-a".into(), pub_a, sub_a, s1).await;
+        let _ = run_bridge(cfg_a, "host-a".into(), pub_a, sub_a, s1, None).await;
     });
     let h_b = tokio::spawn(async move {
-        let _ = run_bridge(cfg_b, "host-b".into(), pub_b, sub_b, s2).await;
+        let _ = run_bridge(cfg_b, "host-b".into(), pub_b, sub_b, s2, None).await;
     });
 
     // Give both bridges a moment to subscribe before we publish.
@@ -242,6 +242,7 @@ async fn jetstream_bridge_creates_stream_and_durable_consumer() {
             publisher,
             subscriber,
             shutdown_child,
+            None,
         )
         .await;
     });

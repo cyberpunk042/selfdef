@@ -437,6 +437,7 @@ async fn main() -> Result<()> {
     let correlator_lag = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let responder_suppressed = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let responder_ratecap_tripped = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let nats_federated_inbound = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
     // The shared Metrics handle. Constructed here (before the retention +
     // mirror loops) so every producer records into the SAME Arc that the
@@ -473,6 +474,8 @@ async fn main() -> Result<()> {
         // Distinct rate-cap-trip series — the circuit-breaker alert keys on this
         // (not the aggregate total), so routine dedup doesn't raise the alert.
         m.set_responder_ratecap_tripped_source(Arc::clone(&responder_ratecap_tripped));
+        // Cross-host federated-event ingress into the local response path.
+        m.set_nats_federated_inbound_source(Arc::clone(&nats_federated_inbound));
     }
 
     // SD-R retention sweep (SDD-081): enforce StoreConfig::hot_retention_days.
@@ -844,6 +847,7 @@ async fn main() -> Result<()> {
         let pub_ = publisher.clone();
         let ht = host_tag.clone();
         let sd = shutdown.clone();
+        let fed_inbound = Arc::clone(&nats_federated_inbound);
         info!(url = %nats_cfg.url, "nats bridge: starting");
         Some(tokio::spawn(async move {
             // Supervised retry loop. A single failed run previously killed the
@@ -869,6 +873,7 @@ async fn main() -> Result<()> {
                     pub_.clone(),
                     sub,
                     sd.clone(),
+                    Some(Arc::clone(&fed_inbound)),
                 )
                 .await
                 {
