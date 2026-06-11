@@ -45,6 +45,37 @@ async fn revoke_returns_receipt_with_active_handle() {
 }
 
 #[tokio::test]
+async fn excluded_principals_are_never_revoked_self_lockout_guard() {
+    // Revocation-family self-lockout guard (F-2026-117/118/119): a protected
+    // principal's MFA grant must NOT be revocable, so an attacker-crafted event
+    // naming the operator can't strip their step-up auth mid-incident.
+    let b = InMemoryBackend::new().with_excluded_principals(["operator-fp".to_string()]);
+    let blocked = req(
+        "operator-fp",
+        1800,
+        AuthorityTier::Responder,
+        MfaGrantScope::All,
+        "crafted finding naming the operator",
+    );
+    let err = b
+        .revoke_mfa_grants(blocked)
+        .await
+        .expect_err("a protected principal must NOT be revoked");
+    assert!(matches!(
+        err,
+        MfaGrantRevocationError::ExcludedPrincipal { principal } if principal == "operator-fp"
+    ));
+    let ok = req(
+        "mallory",
+        1800,
+        AuthorityTier::Responder,
+        MfaGrantScope::All,
+        "real threat",
+    );
+    b.revoke_mfa_grants(ok).await.expect("non-excluded principal must still revoke");
+}
+
+#[tokio::test]
 async fn empty_principal_is_rejected() {
     let b = InMemoryBackend::new();
     let r = req("", 60, AuthorityTier::Operator, MfaGrantScope::All, "x");

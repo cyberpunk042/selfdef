@@ -93,6 +93,11 @@ pub enum MfaGrantRevocationError {
         max_secs: u64,
         requested_secs: u64,
     },
+    /// Principal is on the never-revoke exclusion list — the self-lockout guard
+    /// (operator / break-glass). Revoking the operator's MFA grant mid-incident
+    /// would lock them out of step-up auth (SDD-067/068 family, F-2026-117/118).
+    #[error("principal {principal} is on the exclusion list — cannot revoke")]
+    ExcludedPrincipal { principal: String },
     #[error("backend unreachable: {0}")]
     BackendUnreachable(String),
 }
@@ -123,8 +128,24 @@ struct State {
     pending: HashMap<String, PendingMfaGrantRestore>,
 }
 
+/// Never-revoke self-lockout guard: refuse a protected principal (operator /
+/// break-glass) so an attacker-crafted event naming one can't strip their MFA
+/// grant mid-incident. Shared by both backends.
+fn check_excluded(
+    excluded: &std::collections::HashSet<String>,
+    principal: &str,
+) -> Result<(), MfaGrantRevocationError> {
+    if excluded.contains(principal) {
+        return Err(MfaGrantRevocationError::ExcludedPrincipal {
+            principal: principal.to_string(),
+        });
+    }
+    Ok(())
+}
+
 pub struct InMemoryBackend {
     inner: Mutex<State>,
+    excluded_principals: std::collections::HashSet<String>,
 }
 
 impl Default for InMemoryBackend {
@@ -137,7 +158,18 @@ impl InMemoryBackend {
     pub fn new() -> Self {
         Self {
             inner: Mutex::new(State::default()),
+            excluded_principals: std::collections::HashSet::new(),
         }
+    }
+
+    /// Set the never-revoke principal exclusion list (self-lockout guard).
+    #[must_use]
+    pub fn with_excluded_principals(
+        mut self,
+        principals: impl IntoIterator<Item = String>,
+    ) -> Self {
+        self.excluded_principals = principals.into_iter().collect();
+        self
     }
 
     pub async fn active_count(&self) -> usize {
@@ -174,6 +206,7 @@ impl MfaGrantRevocationBackend for InMemoryBackend {
         req: MfaGrantRevokeRequest,
     ) -> Result<MfaGrantRevokeReceipt, MfaGrantRevocationError> {
         validate(&req)?;
+        check_excluded(&self.excluded_principals, &req.principal)?;
         let req_authority = req.authority;
         let req_principal = req.principal.clone();
         let req_reason = req.reason.clone();
@@ -261,9 +294,20 @@ struct FsState {
 pub struct FsBackend {
     state_dir: PathBuf,
     inner: Mutex<FsState>,
+    excluded_principals: std::collections::HashSet<String>,
 }
 
 impl FsBackend {
+    /// Set the never-revoke principal exclusion list (self-lockout guard).
+    #[must_use]
+    pub fn with_excluded_principals(
+        mut self,
+        principals: impl IntoIterator<Item = String>,
+    ) -> Self {
+        self.excluded_principals = principals.into_iter().collect();
+        self
+    }
+
     pub fn open(state_dir: impl Into<PathBuf>) -> Result<Self, MfaGrantRevocationError> {
         let state_dir = state_dir.into();
         fs::create_dir_all(&state_dir).map_err(|e| {
@@ -277,6 +321,7 @@ impl FsBackend {
         Ok(Self {
             state_dir,
             inner: Mutex::new(FsState { active, pending }),
+            excluded_principals: std::collections::HashSet::new(),
         })
     }
 
@@ -405,6 +450,7 @@ impl MfaGrantRevocationBackend for FsBackend {
         req: MfaGrantRevokeRequest,
     ) -> Result<MfaGrantRevokeReceipt, MfaGrantRevocationError> {
         validate(&req)?;
+        check_excluded(&self.excluded_principals, &req.principal)?;
         let snapshot = {
             let mut state = self.inner.lock().unwrap();
             let key = req.idempotency_key.clone();

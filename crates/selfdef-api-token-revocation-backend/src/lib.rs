@@ -105,6 +105,11 @@ pub enum TokenRevocationError {
         max_secs: u64,
         requested_secs: u64,
     },
+    /// Principal is on the never-revoke exclusion list — the self-lockout guard
+    /// (operator / daemon service user / break-glass). Mirrors the paired
+    /// session-revocation primitive (SDD-067, F-2026-117).
+    #[error("principal {principal} is on the exclusion list — cannot revoke")]
+    ExcludedPrincipal { principal: String },
     #[error("backend unreachable: {0}")]
     BackendUnreachable(String),
 }
@@ -135,8 +140,24 @@ struct State {
     pending: HashMap<String, PendingTokenRestore>,
 }
 
+/// Never-revoke self-lockout guard: refuse a protected principal (operator /
+/// daemon service user / break-glass) so an attacker-crafted event naming one
+/// can't strip the operator's API access mid-incident. Shared by both backends.
+fn check_excluded(
+    excluded: &std::collections::HashSet<String>,
+    principal: &str,
+) -> Result<(), TokenRevocationError> {
+    if excluded.contains(principal) {
+        return Err(TokenRevocationError::ExcludedPrincipal {
+            principal: principal.to_string(),
+        });
+    }
+    Ok(())
+}
+
 pub struct InMemoryBackend {
     inner: Mutex<State>,
+    excluded_principals: std::collections::HashSet<String>,
 }
 
 impl Default for InMemoryBackend {
@@ -149,7 +170,18 @@ impl InMemoryBackend {
     pub fn new() -> Self {
         Self {
             inner: Mutex::new(State::default()),
+            excluded_principals: std::collections::HashSet::new(),
         }
+    }
+
+    /// Set the never-revoke principal exclusion list (self-lockout guard).
+    #[must_use]
+    pub fn with_excluded_principals(
+        mut self,
+        principals: impl IntoIterator<Item = String>,
+    ) -> Self {
+        self.excluded_principals = principals.into_iter().collect();
+        self
     }
 
     pub async fn active_count(&self) -> usize {
@@ -186,6 +218,7 @@ impl ApiTokenRevocationBackend for InMemoryBackend {
         req: TokenRevokeRequest,
     ) -> Result<TokenRevokeReceipt, TokenRevocationError> {
         validate(&req)?;
+        check_excluded(&self.excluded_principals, &req.principal)?;
         let req_authority = req.authority;
         let req_principal = req.principal.clone();
         let req_reason = req.reason.clone();
@@ -283,9 +316,20 @@ struct FsState {
 pub struct FsBackend {
     state_dir: PathBuf,
     inner: Mutex<FsState>,
+    excluded_principals: std::collections::HashSet<String>,
 }
 
 impl FsBackend {
+    /// Set the never-revoke principal exclusion list (self-lockout guard).
+    #[must_use]
+    pub fn with_excluded_principals(
+        mut self,
+        principals: impl IntoIterator<Item = String>,
+    ) -> Self {
+        self.excluded_principals = principals.into_iter().collect();
+        self
+    }
+
     /// Opens or initialises an FsBackend rooted at `state_dir`.
     /// Creates the directory if absent. Loads existing JSON if
     /// present; silently re-initialises to empty if either file
@@ -305,6 +349,7 @@ impl FsBackend {
         Ok(Self {
             state_dir,
             inner: Mutex::new(FsState { active, pending }),
+            excluded_principals: std::collections::HashSet::new(),
         })
     }
 
@@ -439,6 +484,7 @@ impl ApiTokenRevocationBackend for FsBackend {
         req: TokenRevokeRequest,
     ) -> Result<TokenRevokeReceipt, TokenRevocationError> {
         validate(&req)?;
+        check_excluded(&self.excluded_principals, &req.principal)?;
         let snapshot = {
             let mut state = self.inner.lock().unwrap();
             let key = req.idempotency_key.clone();

@@ -45,6 +45,38 @@ async fn revoke_returns_receipt_with_active_handle() {
 }
 
 #[tokio::test]
+async fn excluded_principals_are_never_revoked_self_lockout_guard() {
+    // F-2026-117 sibling: a protected principal (operator / daemon user) must
+    // NOT have its API tokens revoked, so an attacker-crafted event naming the
+    // operator can't strip their API access mid-incident.
+    let b = InMemoryBackend::new().with_excluded_principals(["operator-fp".to_string()]);
+    let blocked = req(
+        "operator-fp",
+        3600,
+        AuthorityTier::Responder,
+        TokenClassMask::All,
+        "crafted finding naming the operator",
+    );
+    let err = b
+        .revoke_tokens(blocked)
+        .await
+        .expect_err("a protected principal must NOT be revoked");
+    assert!(matches!(
+        err,
+        TokenRevocationError::ExcludedPrincipal { principal } if principal == "operator-fp"
+    ));
+    // A non-excluded principal still revokes.
+    let ok = req(
+        "mallory",
+        3600,
+        AuthorityTier::Responder,
+        TokenClassMask::All,
+        "real threat",
+    );
+    b.revoke_tokens(ok).await.expect("non-excluded principal must still revoke");
+}
+
+#[tokio::test]
 async fn empty_principal_is_rejected() {
     let b = InMemoryBackend::new();
     let r = req("", 60, AuthorityTier::Operator, TokenClassMask::All, "x");
