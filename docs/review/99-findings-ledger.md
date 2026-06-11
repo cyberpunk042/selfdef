@@ -163,6 +163,7 @@ an assumption):
 | `token_eq` (bearer-token compare) | constant-time (XOR-fold, no early return) + length pre-check prevents prefix-token bypass | now regression-locked by `token_eq_tests` (added this cycle) |
 | `/events/stream` SSE quota | bounded — global cap (64) + per-token cap (8), operator-overridable; per-token map pruned-on-zero in BOTH Drop and the global-cap-reject undo path (no zombie-entry leak); underflow debug-asserted | `crates/selfdef-api/src/handlers.rs` `SubscriberGuard` (F-2027-061 / F-2028-037) |
 | NATS bridge self-echo | both core + JetStream inbound drop `host_tag == local` (no loop / no self-processing) | `crates/selfdef-nats/src/lib.rs` |
+| Guardian OCSF audit chain (`audit_chain_check`) | genuine hash chain — each line's `prev_event_sha256` is checked against the RECOMPUTED `SHA256` of the previous line's content (not field-consistency), so tampering / reordering / insertion / head-truncation all break it; wired (runs on every `/v1/guardian` query + metric scrape). Tail-truncation is inherently undetectable by any *local* forward walk (root controls the storage); selfdef's answer is real-time off-host anchoring (sovereign-os mirror + NATS), and the function does NOT over-claim tail-truncation detection. The `DefaultEffector` also refuses to SIGKILL pid 1 (init) and has a per-target SIGKILL-flood circuit-breaker. | `crates/selfdef-guardian/src/lib.rs` |
 
 The third runnable binary, **`ssh-wrap`**, was also audited: its argv-filter
 mechanism is sound (option-cluster smuggling and target-boundary handling are
