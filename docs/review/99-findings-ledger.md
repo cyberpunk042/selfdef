@@ -187,3 +187,13 @@ Branch `claude/stoic-ptolemy-kfhejm`. Each fix failing-first test-locked
   patterns (HashMap iteration order) — needs a precedence rule.
 - **F-2026-111** inbound NATS federated events drive local destructive response
   with no per-event attestation — needs a federation trust-boundary decision.
+- **F-2026-098** friction-audit (sovereign-guard.service) is audit-ordered, not
+  blocking. The unit uses only `Before=podman.service docker.service
+  containerd.service` (ordering), with no `Requires=`/`Requisite=` from the
+  runtimes back to it — so `Before=` does NOT propagate failure, and the
+  container runtimes start even if friction-audit's hardware-integrity gates
+  fail. SECURITY.md's "refuses to start container runtimes until the
+  hardware-integrity gates pass" over-claims. Decision needed: make it blocking
+  (runtime-unit drop-ins with `Requires=sovereign-guard.service` — but that can
+  brick a host on a false-positive hardware reading), or keep it audit-only and
+  soften the doc. Not changed unilaterally.
