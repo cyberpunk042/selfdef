@@ -198,6 +198,14 @@ impl Effector for RealEffector {
             // path): SIGKILL-ing init halts the host — never do it.
             return Err("refusing to SIGKILL pid 1 (init); would halt the host".into());
         }
+        // Self-preservation (F-2026-122, guardian analog of F-2026-120): never
+        // SIGKILL the guardian's OWN process. `target_pid` comes from a Tetragon
+        // event (attacker-influenceable), so a crafted/misattributed event
+        // naming the guardian's pid would otherwise make the supervisor kill
+        // itself — tearing down the supervisor-tier containment + audit chain.
+        if target_pid == std::process::id() {
+            return Err("refusing to SIGKILL the guardian's own pid (self-preservation)".into());
+        }
         let st = Command::new("kill")
             .args(["-9", &target_pid.to_string()])
             .status()
@@ -286,9 +294,17 @@ impl<E: Effector> Responder<E> {
         // (init) halts the machine, so a crafted or buggy Tetragon event must
         // not turn the guardian into a host-down switch. The container path is
         // unaffected — it kills a container, not a host pid.
-        let sk_outcome = if event.container_id.is_empty() && event.pid <= 1 {
+        //
+        // Self-preservation (F-2026-122): also refuse the guardian's OWN pid —
+        // `event.pid` is attacker-influenceable, and SIGKILL-ing the guardian
+        // tears down supervisor-tier containment + the audit chain. (Orchestrator
+        // guard here + a backstop in RealEffector::sigkill, mirroring pid 1.)
+        let self_pid = std::process::id();
+        let sk_outcome = if event.container_id.is_empty()
+            && (event.pid <= 1 || event.pid == self_pid)
+        {
             StepOutcome::Skipped(format!(
-                "refusing host SIGKILL of pid {} (init/invalid); would halt the host",
+                "refusing host SIGKILL of pid {} (init/invalid/self); would halt the host or the guardian",
                 event.pid
             ))
         } else {
@@ -748,6 +764,33 @@ mod tests {
             1,
             "container-scoped kill still proceeds"
         );
+    }
+
+    #[test]
+    fn respond_refuses_host_sigkill_of_guardians_own_pid() {
+        // F-2026-122 self-preservation: a Tetragon event naming the guardian's
+        // OWN pid (host-scoped) must never reach `kill -9 <self>` — that would
+        // tear down the supervisor. event.pid is attacker-influenceable.
+        let dir = TempDir::new().unwrap();
+        let sigkills = Rc::new(RefCell::new(Vec::new()));
+        let eff = StubEffector {
+            sigkills: sigkills.clone(),
+            ..StubEffector::default()
+        };
+        let r = make_responder(eff, &dir);
+        let mut ev = sample_event();
+        ev.pid = std::process::id();
+        ev.container_id = String::new();
+        ev.action = "ProcessExec".into();
+        let v = r.respond(&ev).unwrap();
+        assert!(
+            sigkills.borrow().is_empty(),
+            "must not invoke kill on the guardian's own pid"
+        );
+        assert!(matches!(v.response_steps[0].outcome, StepOutcome::Skipped(_)));
+        assert!(!v.sigkill_ok());
+        // Audit + console still run (the threat is recorded, just not self-killed).
+        assert!(v.audit_append_ok());
     }
 
     #[test]
