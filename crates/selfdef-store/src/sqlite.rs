@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use selfdef_core::{Event, SCHEMA_VERSION};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::StoreError;
@@ -43,6 +43,18 @@ impl SqliteStore {
         conn.pragma_update(None, "busy_timeout", 5_000_i64)?;
         conn.pragma_update(None, "temp_store", "MEMORY")?;
 
+        // Startup integrity check: a structurally-corrupt forensic store would
+        // otherwise open silently and surface only later as scattered query
+        // errors — for an IPS, that's unrecoverable recent events the operator
+        // never learns about. `quick_check` (fast; full `integrity_check` is too
+        // slow on a large hot store) runs here and logs LOUDLY on failure, but
+        // CONTINUES: bricking the IPS over a degraded forensic DB is worse than
+        // running flagged (availability > a perfect store). `migrate` runs after
+        // so a corrupt header is reported as corruption, not a migration error.
+        if let Err(reason) = Self::integrity_check(&conn) {
+            error!(path = %path.display(), reason, "STORE INTEGRITY CHECK FAILED — forensic store may be corrupt; continuing (events may be lost)");
+        }
+
         Self::migrate(&conn)?;
 
         info!(path = %path.display(), schema = SCHEMA_VERSION, "store opened");
@@ -51,6 +63,18 @@ impl SqliteStore {
             conn: Arc::new(Mutex::new(conn)),
             path,
         })
+    }
+
+    /// Run `PRAGMA quick_check` and return `Err(reason)` unless it reports "ok".
+    pub(crate) fn integrity_check(conn: &Connection) -> Result<(), String> {
+        let result: String = conn
+            .query_row("PRAGMA quick_check", [], |r| r.get(0))
+            .map_err(|e| format!("quick_check query failed: {e}"))?;
+        if result == "ok" {
+            Ok(())
+        } else {
+            Err(format!("quick_check reported corruption: {result}"))
+        }
     }
 
     fn migrate(conn: &Connection) -> Result<(), StoreError> {
@@ -235,6 +259,62 @@ mod tests {
         let path = dir.path().join("state.sqlite");
         let store = SqliteStore::open(&path).unwrap();
         assert_eq!(store.count().await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn integrity_check_passes_on_valid_db() {
+        let dir = tempdir().unwrap();
+        let store = SqliteStore::open(dir.path().join("state.sqlite")).unwrap();
+        store
+            .insert(&make_event(1, SeverityId::Medium))
+            .await
+            .unwrap();
+        let conn = store.conn.lock().unwrap();
+        assert!(SqliteStore::integrity_check(&conn).is_ok());
+    }
+
+    #[test]
+    fn integrity_check_detects_corrupt_page() {
+        // Build a multi-page DB, checkpoint the WAL into the main file, then
+        // mangle a data page. quick_check must report corruption (Err) — the
+        // guard wired into open() that surfaces a degraded forensic store.
+        // Fails (returns Ok) if the check is stubbed always-ok.
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("state.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+            conn.execute(
+                "CREATE TABLE t (id INTEGER PRIMARY KEY, blob BLOB)",
+                [],
+            )
+            .unwrap();
+            for i in 0..400 {
+                conn.execute(
+                    "INSERT INTO t (id, blob) VALUES (?1, ?2)",
+                    params![i, vec![0xABu8; 64]],
+                )
+                .unwrap();
+            }
+            conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+        }
+        // Corrupt a broad swath of data pages (skip page 1 = the header/schema).
+        let mut bytes = std::fs::read(&path).unwrap();
+        assert!(
+            bytes.len() > 12288,
+            "db should span several pages, got {} bytes",
+            bytes.len()
+        );
+        for off in 4096..12288 {
+            bytes[off] ^= 0xFF;
+        }
+        std::fs::write(&path, &bytes).unwrap();
+        let conn =
+            Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_WRITE).unwrap();
+        assert!(
+            SqliteStore::integrity_check(&conn).is_err(),
+            "quick_check must detect the mangled data pages"
+        );
     }
 
     #[tokio::test]
