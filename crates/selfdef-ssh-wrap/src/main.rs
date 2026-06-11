@@ -148,8 +148,46 @@ fn compute_stripped(
                     out.push(format!("-o {v}"));
                 }
             }
+            // A denied VALUE-option (e.g. L/R/D/W when port-forwarding is off)
+            // is stripped by argv::filter; record it too so the policy_strip
+            // event mirrors the action. Without this a BLOCKED tunnel attempt
+            // produces no audit event — the filter prevents it but the operator
+            // never sees it. ('o' is handled above and matches earlier.)
+            argv::Token::Option(c, v) | argv::Token::AttachedOption(c, v)
+                if denied_flags.contains(c) =>
+            {
+                out.push(format!("-{c} {v}"));
+            }
             _ => {}
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(v: &[&str]) -> Vec<String> {
+        v.iter().map(|x| (*x).to_string()).collect()
+    }
+
+    #[test]
+    fn compute_stripped_logs_denied_value_option_for_audit() {
+        // Lock-step with argv::filter (F-2026-109): filter strips a denied
+        // value-option (e.g. -L when port-forwarding is off), so compute_stripped
+        // must record it too — else a BLOCKED tunnel attempt produces no
+        // policy_strip event and the operator never sees the attempt.
+        let argv = args(&["-L", "8080:internal-db:5432", "user@host"]);
+        let stripped = compute_stripped(&argv::classify(&argv), &['L'], &[]);
+        assert!(
+            stripped.iter().any(|x| x.contains("-L") && x.contains("8080")),
+            "denied port-forward must be recorded for the audit event, got {stripped:?}"
+        );
+        // -o key strip and bare-flag strip still recorded (no regression).
+        let s2 = compute_stripped(&argv::classify(&args(&["-o", "ProxyCommand=/x", "h"])), &[], &["ProxyCommand"]);
+        assert!(s2.iter().any(|x| x.contains("ProxyCommand")), "{s2:?}");
+        let s3 = compute_stripped(&argv::classify(&args(&["-A", "h"])), &['A'], &[]);
+        assert!(s3.iter().any(|x| x == "-A"), "{s3:?}");
+    }
 }

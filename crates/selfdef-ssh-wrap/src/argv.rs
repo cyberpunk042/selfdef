@@ -118,6 +118,16 @@ pub fn filter(tokens: &[Token<'_>], denied_flags: &[char], denied_o_keys: &[&str
                 out.push((*val).to_string());
             }
             Token::Option(c, val) => {
+                // A denied *value-option* must be stripped too. denied_flags
+                // carries L/R/D/W when port_forwarding=false (and any other
+                // value-taking option a policy forbids); these parse as
+                // Token::Option, not Token::Flag, so without this check
+                // `ssh -L 8080:internal:80 host` would forward through the
+                // wrapper despite the policy — a port-forwarding/tunnel bypass.
+                // `continue` drops the option AND its value (one token).
+                if denied_flags.contains(c) {
+                    continue;
+                }
                 out.push(format!("-{c}"));
                 out.push((*val).to_string());
             }
@@ -129,6 +139,11 @@ pub fn filter(tokens: &[Token<'_>], denied_flags: &[char], denied_o_keys: &[&str
                 out.push(format!("-o{val}"));
             }
             Token::AttachedOption(c, val) => {
+                // Same as the spaced value-option form: a denied value-option in
+                // attached form (`-L8080:internal:80`) must be stripped too.
+                if denied_flags.contains(c) {
+                    continue;
+                }
                 out.push(format!("-{c}{val}"));
             }
             Token::Positional(p) => out.push((*p).to_string()),
@@ -249,6 +264,41 @@ mod tests {
         assert!(!filtered.contains(&"-A".to_string()));
         assert!(filtered.contains(&"-v".to_string()));
         assert!(filtered.contains(&"user@host".to_string()));
+    }
+
+    #[test]
+    fn filter_strips_denied_value_option_port_forward() {
+        // BYPASS: port_forwarding=false makes denied_flags carry L/R/D/W, but
+        // those are VALUE-options (parsed as Token::Option / AttachedOption),
+        // not flags. Without stripping denied value-options, `ssh -L
+        // 8080:internal:80 host` would forward through the wrapper despite the
+        // policy — an SSH-tunnel bypass. Both spaced and attached forms must be
+        // dropped, value included.
+        for argv in [
+            s(&["-L", "8080:internal-db:5432", "user@host"]),
+            s(&["-L8080:internal-db:5432", "user@host"]),
+            s(&["-R", "9090:localhost:9090", "user@host"]),
+            s(&["-D", "1080", "user@host"]),
+        ] {
+            let filtered = filter(&classify(&argv), &['L', 'R', 'D', 'W'], &[]);
+            assert!(
+                !filtered.iter().any(|a| a.starts_with("-L")
+                    || a.starts_with("-R")
+                    || a.starts_with("-D")
+                    || a.starts_with("-W")),
+                "denied value-option survived filter: {filtered:?}"
+            );
+            assert!(
+                !filtered.iter().any(|a| a.contains("internal-db")
+                    || a.contains("8080")
+                    || a.contains("1080")),
+                "forward spec leaked: {filtered:?}"
+            );
+            assert!(filtered.iter().any(|a| a == "user@host"));
+        }
+        // An allowed value-option (e.g. -p port) still passes.
+        let filtered = filter(&classify(&s(&["-p", "2222", "user@host"])), &['L', 'R', 'D', 'W'], &[]);
+        assert!(filtered.contains(&"-p".to_string()) && filtered.contains(&"2222".to_string()));
     }
 
     #[test]
