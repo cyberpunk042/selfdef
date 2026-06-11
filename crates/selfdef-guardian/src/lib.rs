@@ -181,8 +181,19 @@ pub struct RealEffector;
 impl Effector for RealEffector {
     fn sigkill(&self, target_pid: u32, container_id: &str) -> Result<(), String> {
         if !container_id.is_empty() {
+            // Argument-injection guard (F-2026-123): `container_id` comes from a
+            // Tetragon event (attacker-influenceable). `podman kill --all` / `-a`
+            // kills EVERY container on the host, so a value like "--all" must
+            // never be flag-parsed. A real container id/name never starts with
+            // '-'; refuse it fail-closed, and pass `--` so any value is treated
+            // as positional regardless.
+            if container_id.starts_with('-') {
+                return Err(format!(
+                    "refusing container_id with leading '-' (possible argv injection, e.g. `podman kill --all`): {container_id:?}"
+                ));
+            }
             let st = Command::new("podman")
-                .args(["kill", container_id])
+                .args(["kill", "--", container_id])
                 .status()
                 .map_err(|e| format!("spawn podman kill: {e}"))?;
             if !st.success() {
@@ -865,6 +876,19 @@ mod tests {
         let log = dir.path().join("nested/deeply/a.log");
         RealEffector.append_audit_log(&log, "x").unwrap();
         assert!(log.exists());
+    }
+
+    #[test]
+    fn real_effector_refuses_flag_like_container_id() {
+        // F-2026-123: a Tetragon event with container_id="--all" must NOT become
+        // `podman kill --all` (mass container kill). The guard returns Err BEFORE
+        // spawning podman, so this is safe to assert without a container runtime.
+        for bad in ["--all", "-a", "--filter=x"] {
+            let err = RealEffector
+                .sigkill(0, bad)
+                .expect_err("flag-like container_id must be refused");
+            assert!(err.contains("argv injection"), "err for {bad:?}: {err}");
+        }
     }
 
     #[test]
