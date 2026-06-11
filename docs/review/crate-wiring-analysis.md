@@ -115,3 +115,33 @@ tightening it is opt-in.
 context budget, not a tail-end increment. This is the concrete "build the
 engine into running code" first step — recommended ahead of any further
 orphan wiring.
+
+## Meta-pattern (after classifying action-* / decision-* / grant-*)
+
+A consistent shape explains the 471 orphans — and it's exactly the operator's
+"real daemon + real modules, **thin crate lattice / engine not assembled**":
+
+> **The "verbs" are wired; the "discipline" is orphaned.**
+
+The daemon has the primitive mechanisms — fire an action (responder +
+effectors), issue/revoke a grant (grants API + registry), store an event,
+run a collector, gate an action by allowlist. What's overwhelmingly orphaned
+is the **policy/discipline lattice that composes those verbs into governed
+behavior**: throttle / budget / dedup / cool-off / conflict-detection over
+decisions; cooldown / overlap / spend-ledger / cascade over grants; the
+`policy-*`, `substrate-*`, `trust-*` composition layers.
+
+Classification so far:
+- `action-denylist` → **redundant** (responder's `allowed_actions` allowlist is stricter).
+- `decision-*` (20) → **genuine gap, highest priority** — responder fires
+  destructive actions with no decision-discipline; `decision-router` is the wiring point.
+- `grant-*` (13) → **partial gap** — basic issue/revoke wired; grant-governance
+  (cooldown/overlap/spend/cascade) orphaned. Lower stakes (operator-mediated).
+
+**Roadmap consequence:** "build into running code" ≠ wire 471 crates. It =
+wire the *discipline layer* onto the already-working verbs, highest-stakes
+first (decision-discipline over destructive actions). Each layer is a scoped,
+fail-safe-direction integration (the discipline only ever *restricts* the
+verbs). The per-family classification above is the prioritization input; the
+remaining families (`policy-*` 36, `substrate-*` 23, `actor-*` 12, …) follow
+the same verb-vs-discipline split and can be triaged the same way.
