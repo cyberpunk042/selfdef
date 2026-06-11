@@ -1,0 +1,61 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "observe-selfdef-tamper"
+  annotations:
+    selfdef.io/severity: "critical"
+    selfdef.io/attack: "T1554"   # Compromise Host Software Binary
+    # F-2026-099: real-time observation of writes to selfdef's own binary +
+    # config by anything OTHER than the legitimate update path. Observe-only
+    # (action Post) — never blocks, so a mis-tuned exclusion can only over-
+    # report, never break the daemon or an upgrade.
+    #
+    # !! REQUIRES ON-HOST VALIDATION BEFORE YOU RELY ON IT !!
+    # This policy is authored against the proven observe-sensitive-files.yaml
+    # pattern but has NOT been verified to load + fire on a live Tetragon
+    # kernel. Before treating it as tamper-detection:
+    #   1. Load it and confirm Tetragon accepts it (no parse/attach error).
+    #   2. As a NON-excluded binary, write to /etc/selfdef/ (e.g.
+    #      `sudo dd if=/dev/null of=/etc/selfdef/canary`) and confirm an event
+    #      is emitted.
+    #   3. Run the daemon + `apt reinstall selfdef` and confirm normal
+    #      operation does NOT storm (tune the matchBinaries list below if it
+    #      does — the legit-writer set is deployment-specific).
+    selfdef.io/validation: "REQUIRED-ON-TETRAGON-HOST"
+spec:
+  kprobes:
+    - call: "security_file_open"
+      syscall: false
+      return: true
+      args:
+        - index: 0
+          type: "file"
+      returnArg:
+        index: 0
+        type: "int"
+      selectors:
+        # Any process whose binary is NOT a legitimate selfdef writer/updater,
+        # opening selfdef's binary or config tree, is reported. The exclusion
+        # set is the daemon + CLI (which legitimately read/write their own
+        # config + state) and the package-management update path (dpkg/apt +
+        # the `install` postinst uses). Tune per deployment.
+        - matchArgs:
+            - index: 0
+              operator: "Prefix"
+              values:
+                - "/usr/bin/selfdefd"      # the daemon binary (T1554 swap)
+                - "/etc/selfdef/"          # config + rules tree (policy tamper)
+          matchBinaries:
+            - operator: "NotIn"
+              values:
+                - "/usr/bin/selfdefd"
+                - "/usr/bin/selfdefctl"
+                - "/usr/bin/dpkg"
+                - "/usr/sbin/dpkg"
+                - "/usr/bin/dpkg-deb"
+                - "/usr/bin/apt"
+                - "/usr/bin/apt-get"
+                - "/usr/bin/install"
+                - "/usr/lib/systemd/systemd"
+          matchActions:
+            - action: Post     # observe only — never Sigkill
