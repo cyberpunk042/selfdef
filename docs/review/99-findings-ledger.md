@@ -149,3 +149,41 @@ The important findings split roughly:
   integration tests.
 
 All sequencing is Phase-2's call. This ledger is the menu.
+
+---
+
+## Session addendum (2026-06-10) — security-hardening pass (PR #233)
+
+Branch `claude/stoic-ptolemy-kfhejm`. Each fix failing-first test-locked
+(contract/compile-locked for config); all touched crates green.
+
+### Fixed
+- **F-2026-108** (critical) ssh-wrap `-o` denylist bypass via combined-flag
+  cluster (`-qo ProxyCommand=…`): `classify` now walks clusters getopt-style.
+- **F-2026-112** ssh-wrap whitespace-form `-o` bypass (`-o "Key val"`): new
+  `o_option_key` splits on `=` OR whitespace.
+- **F-2026-109** + port-forward bypass: `filter` now strips denied value-options
+  (`-L/-R/-D/-W`); `compute_stripped` records them for the audit event.
+- **F-2026-113** ssh-wrap IPv6 `parse_target` policy mis-scoping.
+- **F-2026-114** ssh-wrap remote command preserved verbatim via `target_index`.
+- **F-2026-103/104/105** serde-bypass arithmetic (slo underflow→fail-open,
+  log-histogram shift-overflow, fixed-window-counter div-by-zero).
+- **F-2026-106** responder argv-injection (leading-`-` username → revoke script).
+- **F-2026-100** systemd `WatchdogSec=60`; **F-2026-102** `UMask=0077` + store
+  `quick_check`; **F-2026-101** `forbid(unsafe_code)` on all 14 effector backends.
+- **F-2026-107** API control-plane auth-boundary doc (enforcement was correct).
+
+### Held (operator design decision)
+- **F-2026-095** perimeter "multi-sig" is single-sig + attestation metadata.
+  `ExtensionStore::load_signed` verifies exactly ONE minisign signature; the
+  `signer_kid`/`auditor_kid` are manifest fields validated only non-empty +
+  distinct — there is NO second signature verified for the auditor. The
+  "operator + auditor multi-sig" framing (lib.rs lines 56-57, 69, 128-129, 197)
+  over-claims dual-control: a single signing-key compromise forges both kids.
+  Decision needed: (a) accept attested single-sig and correct the docs/comments
+  to say so, or (b) implement true two-signature verification (distinct keys).
+  Not changed unilaterally — it alters the documented security posture.
+- **F-2026-110** ssh-wrap non-deterministic policy under overlapping host
+  patterns (HashMap iteration order) — needs a precedence rule.
+- **F-2026-111** inbound NATS federated events drive local destructive response
+  with no per-event attestation — needs a federation trust-boundary decision.
