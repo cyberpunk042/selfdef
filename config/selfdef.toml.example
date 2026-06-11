@@ -179,6 +179,13 @@ third_party_policy_stance = "warn"
 #              narrow or revoke existing access — it only bounds grant-sprawl
 #              and overlap-escalation by a compromised control capability.
 overlap_policy = "off"
+# issuance_cooldown_secs: minimum seconds between issuing two grants of
+# IDENTICAL identity (same actor + kind + scope). 0 (default) disables it.
+# When > 0, a re-issue of the same grant within the window is refused (HTTP
+# 429). This bounds re-mint churn even of an already-expired or revoked grant
+# — something the active-only overlap check above does not catch. Fail-safe:
+# it only ever blocks ADDING a duplicate grant.
+issuance_cooldown_secs = 0
 
 [collectors]
 # Each collector has its own table; all default to disabled.

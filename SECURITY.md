@@ -323,7 +323,9 @@ posture is:
   capability cannot mint an unbounded sprawl of overlapping / escalating
   grants. Default `off` keeps the historical unconditional-issue behavior; the
   gate is fail-safe (it only ever blocks *adding* an overlapping grant, never
-  narrows existing access).
+  narrows existing access). Pair it with `[grants].issuance_cooldown_secs > 0`
+  to rate-bound re-minting of an identical grant (refused with 429), which also
+  catches re-mint churn of an already-expired/revoked grant.
 
 This block is intentionally short — copy it into your deployment runbook.
 

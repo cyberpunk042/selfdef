@@ -76,6 +76,11 @@ pub struct ApiState {
     /// the daemon raises it from `[grants].overlap_policy`. Kept as an
     /// api-local enum so this crate doesn't depend on `selfdef-config`.
     pub(crate) grants_overlap_policy: GrantsOverlapPolicy,
+    /// Grant-governance: minimum seconds between issuing two grants of
+    /// identical identity (actor + kind + scope). `0` (default) disables
+    /// the cooldown gate; `> 0` refuses an in-window re-issue with 429.
+    /// Raised by the daemon from `[grants].issuance_cooldown_secs`.
+    pub(crate) grants_issuance_cooldown_secs: u64,
 }
 
 /// Grant overlap-governance policy (api-local mirror of the config enum).
@@ -122,6 +127,7 @@ impl ApiState {
             sse_caps: SseCaps::default(),
             escalation_engine: None,
             grants_overlap_policy: GrantsOverlapPolicy::Off,
+            grants_issuance_cooldown_secs: 0,
         }
     }
 
@@ -134,9 +140,23 @@ impl ApiState {
         self
     }
 
+    /// Builder-style: set the grant issuance-cooldown window (seconds). The
+    /// daemon calls this from `[grants].issuance_cooldown_secs`. `0` (default)
+    /// disables the gate.
+    #[must_use]
+    pub fn with_grants_issuance_cooldown_secs(mut self, secs: u64) -> Self {
+        self.grants_issuance_cooldown_secs = secs;
+        self
+    }
+
     /// Accessor for the grant overlap-governance policy (handlers + tests).
     pub(crate) fn grants_overlap_policy(&self) -> GrantsOverlapPolicy {
         self.grants_overlap_policy
+    }
+
+    /// Accessor for the grant issuance-cooldown window (handlers + tests).
+    pub(crate) fn grants_issuance_cooldown_secs(&self) -> u64 {
+        self.grants_issuance_cooldown_secs
     }
 
     /// SDD-008 D-4: install the escalation engine handle so the

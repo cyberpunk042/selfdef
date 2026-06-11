@@ -856,9 +856,16 @@ async fn main() -> Result<()> {
                 "grants: overlap-governance enabled on /v1/grants/issue"
             );
         }
+        if cfg.grants.issuance_cooldown_secs > 0 {
+            info!(
+                cooldown_secs = cfg.grants.issuance_cooldown_secs,
+                "grants: issuance-cooldown enabled on /v1/grants/issue"
+            );
+        }
         let mut state = ApiState::new(Arc::clone(&store), Arc::clone(&bus), host_tag.clone())
             .with_publisher(publisher.clone())
             .with_grants_overlap_policy(grants_overlap_policy)
+            .with_grants_issuance_cooldown_secs(cfg.grants.issuance_cooldown_secs)
             // SDD-007 D-4: thread the operator-overrideable SSE
             // caps into ApiState. Empty/None falls back to the
             // compiled-in defaults (64 global, 8 per-token).

@@ -273,7 +273,18 @@ What landed:
 
 This proves the **grant-governance** layer extends the same proven integration
 pattern (identify discipline → wire into the verb default-off → serde-safe
-config → docs → test) onto the grants verb. The remaining grant-governance
-crates (`grant-issuance-cooldown` for per-template rate-limiting,
-`grant-spend-*` for budget caps) are the next increments on this same
-foundation; each is a clean default-off addition to the same handler.
+config → docs → test) onto the grants verb.
+
+**Second governance crate wired (same commit family):**
+`selfdef-grant-issuance-cooldown` now backs a `[grants].issuance_cooldown_secs`
+knob (default `0` = off). When `> 0`, `issue()` refuses (HTTP 429) re-minting a
+grant of *identical identity* (`actor|kind|scope`) within the window — seeded
+from the most-recent prior issuance found in the registry (single source of
+truth again; the orphaned crate's `classify` does the verdict). This catches
+re-mint churn of an already-expired/revoked grant that the active-only overlap
+gate cannot. Fail-safe + default-off; 2 new tests
+(`cooldown_blocks_in_window_clears_after`, `cooldown_ignores_distinct_identity`).
+
+The remaining grant-governance crates (`grant-spend-*` for byte/issuance budget
+caps, `grant-batch-policy`) are the next increments on this same foundation;
+each is a clean default-off addition to the same handler.

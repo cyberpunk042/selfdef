@@ -99,6 +99,28 @@ pub(crate) async fn issue(
         .issue(&req, &grant_id, &trace_id, now)
         .map_err(map_err)?;
 
+    // Issuance-cooldown gate. Refuse re-minting a grant of identical identity
+    // (actor + kind + scope) within `[grants].issuance_cooldown_secs` — bounds
+    // re-mint churn even of an already-expired/revoked grant (which the
+    // active-only overlap gate below does not catch). Drops the unsaved
+    // registry on refusal, so the mint never lands.
+    let cooldown_secs = state.grants_issuance_cooldown_secs();
+    if cooldown_secs > 0 {
+        let key = grant_key_req(&req);
+        let now_ms = (now.unix_timestamp_nanos() / 1_000_000) as u64;
+        if let Some(ready_at_ms) =
+            cooldown_ready_at_ms(reg.grants(), &id, &key, cooldown_secs, now_ms)
+        {
+            return Err((
+                StatusCode::TOO_MANY_REQUESTS,
+                format!(
+                    "grant {id} ({key}) re-issued within the {cooldown_secs}s issuance \
+                     cooldown; ready at epoch-ms {ready_at_ms}"
+                ),
+            ));
+        }
+    }
+
     // Overlap-governance gate. The candidate is `Pending` immediately after
     // `issue`; the detector only pairs `Active` grants, so we project the
     // candidate as active for the scan and look for any pair naming it.
@@ -167,6 +189,52 @@ fn candidate_overlap(grants: &[GrantEntry], candidate_id: &str) -> Option<GrantE
         pair.grant_a
     };
     for_scan.into_iter().find(|g| g.grant_id == other_id)
+}
+
+/// Stable identity key for the issuance-cooldown ledger: `actor|kind|scope`.
+/// Used only as an in-memory cooldown key, never serialized to the wire.
+fn grant_key_req(req: &GrantRequest) -> String {
+    format!("{}|{:?}|{}", req.actor, req.kind, req.scope)
+}
+
+/// Same identity key, computed from a stored [`GrantEntry`].
+fn grant_key_entry(g: &GrantEntry) -> String {
+    format!("{}|{:?}|{}", g.actor, g.kind, g.scope)
+}
+
+/// Parse an RFC3339 `issued_at` string into epoch-ms.
+fn parse_rfc3339_ms(s: &str) -> Option<u64> {
+    OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339)
+        .ok()
+        .map(|t| (t.unix_timestamp_nanos() / 1_000_000) as u64)
+}
+
+/// `Some(ready_at_ms)` when an identical-identity grant was issued within the
+/// cooldown window, else `None` (clear to issue). Drives the orphaned
+/// `selfdef-grant-issuance-cooldown` crate's `classify` on the single relevant
+/// key, seeded with the most-recent prior issuance of that identity.
+fn cooldown_ready_at_ms(
+    grants: &[GrantEntry],
+    candidate_id: &str,
+    candidate_key: &str,
+    cooldown_secs: u64,
+    now_ms: u64,
+) -> Option<u64> {
+    use selfdef_grant_issuance_cooldown::{CooldownVerdict, GrantIssuanceCooldown};
+
+    let latest_prior_ms = grants
+        .iter()
+        .filter(|g| g.grant_id != candidate_id)
+        .filter(|g| grant_key_entry(g) == candidate_key)
+        .filter_map(|g| parse_rfc3339_ms(&g.issued_at))
+        .max()?;
+
+    let mut ledger = GrantIssuanceCooldown::new(cooldown_secs.saturating_mul(1000));
+    ledger.record_issued(candidate_key, latest_prior_ms).ok()?;
+    match ledger.classify(candidate_key, now_ms) {
+        CooldownVerdict::Ready => None,
+        CooldownVerdict::Cooldown { ready_at_ms } => Some(ready_at_ms),
+    }
 }
 
 /// `POST /v1/grants/revoke` — revoke a grant by id. 404 when unknown.
@@ -370,6 +438,56 @@ mod tests {
             GrantRegistry::load(&path).unwrap().grants().len(),
             2,
             "off must persist as before"
+        );
+    }
+
+    // ---- grant issuance-cooldown gate (cooldown_ready_at_ms) ----
+
+    /// A re-issue of an identical-identity grant inside the cooldown window is
+    /// blocked; the same identity is clear once the window elapses. Drives the
+    /// orphaned cooldown crate via `cooldown_ready_at_ms` exactly as the
+    /// handler does.
+    #[test]
+    fn cooldown_blocks_in_window_clears_after() {
+        let now = OffsetDateTime::now_utc();
+        let issued_at = now
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap();
+        let mut reg = GrantRegistry::new();
+        // A prior grant of the same identity, issued "now".
+        let _prior = reg.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        // Candidate of identical identity.
+        let cand = reg.issue(&fs_req("/workspace"), "gr-2", "tr-2", now).unwrap();
+        let key = grant_key_req(&fs_req("/workspace"));
+        let now_ms = (now.unix_timestamp_nanos() / 1_000_000) as u64;
+
+        // Within a 60s window → blocked (prior was issued at `now`).
+        assert!(
+            cooldown_ready_at_ms(reg.grants(), &cand, &key, 60, now_ms).is_some(),
+            "re-issue inside the window must be blocked: prior issued_at={issued_at}"
+        );
+        // 120s later → clear.
+        let later_ms = now_ms + 120_000;
+        assert!(
+            cooldown_ready_at_ms(reg.grants(), &cand, &key, 60, later_ms).is_none(),
+            "identity must clear once the cooldown elapses"
+        );
+    }
+
+    /// A different identity (distinct scope) is never blocked by the cooldown,
+    /// and a zero-history identity is always clear.
+    #[test]
+    fn cooldown_ignores_distinct_identity() {
+        let now = OffsetDateTime::now_utc();
+        let mut reg = GrantRegistry::new();
+        let _prior = reg.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        // Candidate with a DIFFERENT scope → different identity key.
+        let cand = reg.issue(&fs_req("/var/log"), "gr-2", "tr-2", now).unwrap();
+        let key = grant_key_req(&fs_req("/var/log"));
+        let now_ms = (now.unix_timestamp_nanos() / 1_000_000) as u64;
+        assert!(
+            cooldown_ready_at_ms(reg.grants(), &cand, &key, 60, now_ms).is_none(),
+            "a distinct-identity grant is never cooldown-blocked"
         );
     }
 }

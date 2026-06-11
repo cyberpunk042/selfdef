@@ -314,6 +314,13 @@ pub struct GrantsConfig {
     /// *active* grant of the same kind (path-prefix for `filesystem`,
     /// domain-suffix for `network`, exact for the rest). Default `off`.
     pub overlap_policy: GrantsOverlapPolicy,
+    /// Minimum seconds between issuing two grants of *identical identity*
+    /// (same `actor` + `kind` + `scope`). `0` (default) disables the gate.
+    /// When `> 0`, a re-issue of the same grant within the window is refused
+    /// (HTTP 429) — this bounds re-mint churn even of an already-expired or
+    /// revoked grant, which the overlap gate (active-only) does not catch.
+    /// Fail-safe: only ever blocks *adding* a duplicate grant.
+    pub issuance_cooldown_secs: u64,
 }
 
 /// Grant overlap-governance policy. `#[serde(rename_all = "lowercase")]` so
