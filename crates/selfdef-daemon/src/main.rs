@@ -675,9 +675,13 @@ async fn main() -> Result<()> {
         Arc::new(selfdef_responder::actions::LockdownEgressAction::new(
             cfg.responder.lockdown_script.clone(),
         )),
-        Arc::new(selfdef_responder::actions::RevokeSessionAction::new(
-            cfg.responder.revoke_session_script.clone(),
-        )),
+        Arc::new(
+            selfdef_responder::actions::RevokeSessionAction::new(
+                cfg.responder.revoke_session_script.clone(),
+            )
+            // F-2026-121 self-lockout guard: never revoke a protected principal.
+            .with_excluded_users(cfg.responder.revoke_session_excluded_users.clone()),
+        ),
         Arc::new(selfdef_responder::actions::ForensicsBundleAction::new(
             cfg.responder.forensics_dir.clone(),
         )),

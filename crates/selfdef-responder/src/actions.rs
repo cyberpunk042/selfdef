@@ -288,11 +288,28 @@ impl Action for LockdownEgressAction {
 
 pub struct RevokeSessionAction {
     script: PathBuf,
+    /// Never-revoke self-lockout guard (F-2026-121): usernames this action
+    /// refuses to pass to the revoke script — the operator account, a
+    /// break-glass admin, etc. `event.actor.user` is attacker-influenceable, so
+    /// without this a crafted event naming the operator would (via the script)
+    /// strip the operator's sessions mid-incident. Defense-in-depth that does
+    /// not rely on the operator-provided script carrying its own guard.
+    excluded_users: std::collections::HashSet<String>,
 }
 
 impl RevokeSessionAction {
     pub fn new(script: PathBuf) -> Self {
-        Self { script }
+        Self {
+            script,
+            excluded_users: std::collections::HashSet::new(),
+        }
+    }
+
+    /// Set the never-revoke username exclusion list (self-lockout guard).
+    #[must_use]
+    pub fn with_excluded_users(mut self, users: impl IntoIterator<Item = String>) -> Self {
+        self.excluded_users = users.into_iter().collect();
+        self
     }
 }
 
@@ -324,6 +341,16 @@ impl Action for RevokeSessionAction {
         if user.starts_with('-') {
             return Ok(ActionOutcome::skipped(format!(
                 "refusing user with leading '-' (possible argv injection): {user:?}"
+            )));
+        }
+
+        // Self-lockout guard (F-2026-121): never revoke a protected principal
+        // (operator / break-glass). Defense-in-depth — does not rely on the
+        // operator-provided script to carry its own guard. Checked before the
+        // dry-run branch so a dry run previews the refusal.
+        if self.excluded_users.contains(&user) {
+            return Ok(ActionOutcome::skipped(format!(
+                "refusing to revoke protected user (self-lockout guard): {user:?}"
             )));
         }
 
@@ -2463,6 +2490,28 @@ mod tests {
             .unwrap();
         assert_eq!(ok.status, Status::DryRun);
         assert!(ok.notes.contains("alice"));
+    }
+
+    #[tokio::test]
+    async fn revoke_session_refuses_excluded_protected_user() {
+        // F-2026-121 self-lockout guard: an attacker-crafted event naming the
+        // operator must NOT reach the revoke script — defense-in-depth that does
+        // not rely on the operator's script carrying its own guard.
+        let action = RevokeSessionAction::new(PathBuf::from("/bin/true"))
+            .with_excluded_users(["operator-fp".to_string()]);
+        // dry_run=false to prove no subprocess is spawned for the protected user.
+        let blocked = action
+            .execute(&finding_with_user("operator-fp"), false)
+            .await
+            .unwrap();
+        assert_eq!(blocked.status, Status::Skipped, "protected user must be refused");
+        assert!(blocked.notes.contains("self-lockout"), "note: {}", blocked.notes);
+        // A non-excluded user still proceeds (no over-refusal).
+        let ok = action
+            .execute(&finding_with_user("mallory"), true)
+            .await
+            .unwrap();
+        assert_eq!(ok.status, Status::DryRun);
     }
 
     #[tokio::test]

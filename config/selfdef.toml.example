@@ -578,6 +578,12 @@ snapshot_dir = "/var/lib/selfdef/snapshots"
 # implementations live in packaging/scripts/ in the source tree.
 lockdown_script = "/usr/local/sbin/selfdef-lockdown.sh"
 revoke_session_script = "/usr/local/sbin/selfdef-revoke-session.sh"
+# Self-lockout guard (F-2026-121): usernames the revoke_session action will
+# NEVER revoke. event.actor.user is attacker-influenceable, so a crafted event
+# naming the operator could otherwise strip the operator's sessions mid-incident.
+# STRONGLY recommended on any host running autonomous session revocation: list
+# the operator account + any break-glass admin. Empty = no protection.
+revoke_session_excluded_users = []   # e.g. ["operator-fp", "root"]
 
 # Where forensics_bundle writes per-event evidence directories. Each bundle
 # is `forensics_dir/<event-uuid>/` and contains event.json, system metadata,

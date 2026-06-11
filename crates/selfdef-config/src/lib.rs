@@ -1808,6 +1808,13 @@ pub struct ResponderConfig {
     pub lockdown_script: PathBuf,
     /// Script invoked by `revoke_session` action.
     pub revoke_session_script: PathBuf,
+    /// Usernames the `revoke_session` action must NEVER revoke — the self-lockout
+    /// guard (F-2026-121). `event.actor.user` is attacker-influenceable, so
+    /// populate this with the operator account and any break-glass admin to stop
+    /// a crafted event from stripping the operator's sessions mid-incident.
+    /// Empty by default (no protection — set it for any host running autonomous
+    /// session revocation).
+    pub revoke_session_excluded_users: Vec<String>,
     /// Directory under which `forensics_bundle` writes per-event bundles.
     pub forensics_dir: PathBuf,
     /// Velociraptor CLI binary invoked by `velociraptor_escalate`.
@@ -1835,6 +1842,7 @@ impl Default for ResponderConfig {
             snapshot_dir: PathBuf::from("/var/lib/selfdef/snapshots"),
             lockdown_script: PathBuf::from("/usr/local/sbin/selfdef-lockdown.sh"),
             revoke_session_script: PathBuf::from("/usr/local/sbin/selfdef-revoke-session.sh"),
+            revoke_session_excluded_users: Vec::new(),
             forensics_dir: PathBuf::from("/var/lib/selfdef/forensics"),
             velociraptor_binary: PathBuf::from("/usr/local/bin/velociraptor"),
             velociraptor_args: Vec::new(),
