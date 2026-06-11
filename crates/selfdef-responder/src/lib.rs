@@ -122,6 +122,17 @@ pub const DEFAULT_ACTION_DEADLINE: Duration = Duration::from_secs(60);
 /// already-blocked IP), never an intentional repeat — so they are eligible for
 /// burst-dedup. Notify, snapshot, and forensic-bundle actions are intentionally
 /// EXCLUDED: every alert and every evidence capture must be preserved.
+/// Whether an action mutates target/host state (so the decision-discipline
+/// circuit-breakers — burst-dedup + rate-cap — apply to it). Evidence/escalation
+/// actions (`notify`, `snapshot_proc`, `forensics_bundle`, `velociraptor_escalate`)
+/// are NOT destructive: every finding must produce its alert/evidence/escalation,
+/// so they are never suppressed (same rationale as "notify is never deduped").
+///
+/// This is the single source of truth for destructiveness; it MUST stay complete
+/// relative to the `Action` impls in [`actions`], because an unrecognized
+/// destructive action silently escapes BOTH circuit-breakers (a finding burst
+/// could then hammer it). The `action_name_classification_is_complete` unit test
+/// gates drift: it fails if any known action name is left unclassified.
 fn is_destructive_action(name: &str) -> bool {
     matches!(
         name,
@@ -139,6 +150,13 @@ fn is_destructive_action(name: &str) -> bool {
             | "socket_fd_revocation"
             | "process_env_scrub"
             | "capability_drop"
+            // Built effectors not yet wired into the daemon action vec, but
+            // destructive — classified now so they cannot silently escape the
+            // circuit-breakers if a future wiring registers them. Inert today
+            // (the live gate only sees registered actions).
+            | "kernel_keyring_eviction"  // revokes kernel keyring keys
+            | "apparmor_profile_pivot"   // confines a process into a stricter MAC profile
+            | "bpf_map_element_clear"    // wipes kernel BPF map state
     )
 }
 
@@ -502,6 +520,59 @@ impl Responder {
                     "action timed out (deadline); continuing with remaining actions"
                 ),
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_destructive_action;
+
+    /// Anti-drift gate for the circuit-breaker coverage. Every `Action` impl's
+    /// `name()` in `actions.rs` MUST appear here with its destructiveness, so a
+    /// destructive action can never be added without a conscious classification
+    /// — an unclassified destructive action would silently escape BOTH the
+    /// burst-dedup and the rate-cap gate.
+    ///
+    /// To regenerate the name list after adding/removing an action:
+    ///   grep -nA1 'fn name(&self)' crates/selfdef-responder/src/actions.rs
+    /// Destructive = mutates target/host state. Non-destructive = produces an
+    /// alert / evidence / external escalation that must never be suppressed.
+    #[test]
+    fn action_name_classification_is_complete() {
+        // (name, expected_is_destructive)
+        let known: &[(&str, bool)] = &[
+            // --- destructive: subject to dedup + rate-cap ---
+            ("kill_pid", true),
+            ("lockdown_egress", true),
+            ("revoke_session", true),
+            ("block_ip", true),
+            ("quarantine_process", true),
+            ("session_revocation", true),
+            ("api_token_revocation", true),
+            ("mfa_grant_revocation", true),
+            ("netns_isolation", true),
+            ("mount_binding_unbind", true),
+            ("process_tree_freeze", true),
+            ("socket_fd_revocation", true),
+            ("process_env_scrub", true),
+            ("capability_drop", true),
+            ("kernel_keyring_eviction", true),
+            ("apparmor_profile_pivot", true),
+            ("bpf_map_element_clear", true),
+            // --- non-destructive: alert / evidence / escalation, never suppressed ---
+            ("notify", false),
+            ("snapshot_proc", false),
+            ("forensics_bundle", false),
+            ("velociraptor_escalate", false),
+        ];
+        for (name, expected) in known {
+            assert_eq!(
+                is_destructive_action(name),
+                *expected,
+                "classification drift for action {name:?}: a new/destructive action \
+                 must be added to is_destructive_action (else it escapes the circuit-breakers)"
+            );
         }
     }
 }
