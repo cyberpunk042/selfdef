@@ -3175,6 +3175,37 @@ mod tests {
             cfg.responder.snapshot_dir,
             ResponderConfig::default().snapshot_dir
         );
+        // Security default: a config that does not mention act_on_federated
+        // preserves prior cross-host-response behavior (true), never silently
+        // failing closed on upgrade. (F-2026-111.)
+        assert!(
+            cfg.responder.act_on_federated,
+            "act_on_federated must default true when omitted"
+        );
+    }
+
+    #[test]
+    fn responder_act_on_federated_defaults_true_and_parses_fail_closed() {
+        // The default is the prior behavior (act on federated findings)...
+        assert!(ResponderConfig::default().act_on_federated);
+
+        // ...and an operator can explicitly fail closed. Locking this guards the
+        // security knob against a serde-rename / default regression silently
+        // flipping the federation trust boundary (F-2026-111).
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [responder]
+            act_on_federated = false
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert!(
+            !cfg.responder.act_on_federated,
+            "act_on_federated = false must parse to fail-closed"
+        );
     }
 
     // ----------------------------------------------------------------
