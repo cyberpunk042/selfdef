@@ -171,13 +171,35 @@ pub fn filter(tokens: &[Token<'_>], denied_flags: &[char], denied_o_keys: &[&str
 }
 
 /// Split target like `user@host:port` (or just `host`) into parts.
+///
+/// Follows ssh's hostname convention so the HOST the policy keys on is the real
+/// host — including IPv6, where a naive `rsplit_once(':')` would slice an address
+/// like `2001:db8::1` into host `2001:db8:` + port `1` and silently resolve the
+/// WRONG (or default) policy for that connection:
+///   - `[addr]:port` / `[addr]` — bracketed; the port (if any) follows `]`.
+///   - a bare literal with more than one `:` is an unbracketed IPv6 address (no port).
+///   - otherwise `host[:port]`.
 pub fn parse_target(spec: &str) -> (Option<String>, String, Option<u16>) {
     let (user, rest) = match spec.split_once('@') {
         Some((u, r)) => (Some(u.to_string()), r),
         None => (None, spec),
     };
+    // Bracketed IPv6: `[2001:db8::1]` or `[2001:db8::1]:22`.
+    if let Some(after_lb) = rest.strip_prefix('[') {
+        if let Some((addr, tail)) = after_lb.split_once(']') {
+            let port = tail.strip_prefix(':').and_then(|p| p.parse::<u16>().ok());
+            return (user, addr.to_string(), port);
+        }
+        // Unterminated bracket — fall through and treat the whole thing as host.
+    }
+    // Unbracketed IPv6 literal (>1 colon) carries no port.
+    if rest.matches(':').count() > 1 {
+        return (user, rest.to_string(), None);
+    }
     let (host, port) = match rest.rsplit_once(':') {
-        Some((h, p)) if p.parse::<u16>().is_ok() => (h.to_string(), p.parse::<u16>().ok()),
+        Some((h, p)) if !h.is_empty() && p.parse::<u16>().is_ok() => {
+            (h.to_string(), p.parse::<u16>().ok())
+        }
         _ => (rest.to_string(), None),
     };
     (user, host, port)
@@ -271,6 +293,26 @@ mod tests {
             parse_target("user@host:2222"),
             (Some("user".into()), "host".into(), Some(2222))
         );
+    }
+
+    #[test]
+    fn parse_target_ipv6() {
+        // Bare IPv6 literal: NOT sliced into host `2001:db8:` + port `1` (the
+        // pre-fix bug that mis-scoped the policy for IPv6 connections).
+        assert_eq!(parse_target("2001:db8::1"), (None, "2001:db8::1".into(), None));
+        assert_eq!(parse_target("::1"), (None, "::1".into(), None));
+        assert_eq!(
+            parse_target("user@fe80::1"),
+            (Some("user".into()), "fe80::1".into(), None)
+        );
+        // Bracketed forms carry the port after `]`; host has no brackets.
+        assert_eq!(parse_target("[2001:db8::1]:22"), (None, "2001:db8::1".into(), Some(22)));
+        assert_eq!(
+            parse_target("user@[2001:db8::1]"),
+            (Some("user".into()), "2001:db8::1".into(), None)
+        );
+        // A trailing non-numeric ":x" is not a port (host keeps its value).
+        assert_eq!(parse_target("host:notaport"), (None, "host:notaport".into(), None));
     }
 
     #[test]
