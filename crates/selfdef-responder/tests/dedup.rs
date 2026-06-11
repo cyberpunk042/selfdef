@@ -210,6 +210,55 @@ async fn suppressed_counter_increments_when_a_destructive_action_is_suppressed()
 }
 
 #[tokio::test]
+async fn dedup_suppression_does_not_trip_the_circuit_breaker_counter() {
+    // The circuit-breaker alert keys on the rate-cap counter ONLY. Routine
+    // per-target dedup is benign and must NOT raise it — otherwise a single
+    // duplicate finding would fire a "circuit breaker tripped" warning (alert
+    // fatigue). Dedup still bumps the aggregate `suppressed` total.
+    let (a, calls) = action("kill_pid");
+    let suppressed = Arc::new(AtomicU64::new(0));
+    let ratecap = Arc::new(AtomicU64::new(0));
+    let r = Arc::new(
+        Responder::new(vec![a], vec!["kill_pid".into()], false)
+            .with_dedup_window(Duration::from_secs(60))
+            .with_suppressed_counter(suppressed.clone())
+            .with_ratecap_counter(ratecap.clone()),
+    );
+    run_findings(r, vec![finding(1), finding(2)]).await;
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(suppressed.load(Ordering::SeqCst), 1, "dedup bumps the aggregate total");
+    assert_eq!(
+        ratecap.load(Ordering::SeqCst),
+        0,
+        "routine dedup must NOT trip the rate-cap circuit-breaker counter"
+    );
+}
+
+#[tokio::test]
+async fn rate_cap_trip_increments_both_the_total_and_the_circuit_breaker_counter() {
+    // A genuine flood (rate-cap reached) is the real circuit-breaker trip: it
+    // bumps BOTH the aggregate `suppressed` total AND the dedicated rate-cap
+    // counter the alert keys on.
+    let (a, calls) = action("kill_pid");
+    let suppressed = Arc::new(AtomicU64::new(0));
+    let ratecap = Arc::new(AtomicU64::new(0));
+    let r = Arc::new(
+        Responder::new(vec![a], vec!["kill_pid".into()], false)
+            .with_destructive_cap_per_min(2)
+            .with_suppressed_counter(suppressed.clone())
+            .with_ratecap_counter(ratecap.clone()),
+    );
+    run_findings(r, vec![finding(1), finding(2), finding(3)]).await;
+    assert_eq!(calls.load(Ordering::SeqCst), 2, "two fire, the third is capped");
+    assert_eq!(suppressed.load(Ordering::SeqCst), 1, "the capped action bumps the total");
+    assert_eq!(
+        ratecap.load(Ordering::SeqCst),
+        1,
+        "a rate-cap trip is a genuine circuit-breaker event"
+    );
+}
+
+#[tokio::test]
 async fn operator_panic_fire_bypasses_the_discipline_gates() {
     // `fire` (selfdefctl panic) is operator-commanded: it must bypass dedup +
     // rate-cap, exactly as it bypasses the severity floor. With dedup AND a

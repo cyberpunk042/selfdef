@@ -81,6 +81,11 @@ pub struct Metrics {
     /// rate-cap circuit-breakers. Shares the responder's `Arc<AtomicU64>`; unset
     /// (no series emitted) until the daemon wires it.
     responder_suppressed: OnceLock<Arc<AtomicU64>>,
+    /// Rate-cap circuit-breaker trips ONLY (not routine dedup). Shares the
+    /// responder's `Arc<AtomicU64>`; unset until the daemon wires it. This is
+    /// the series the circuit-breaker alert keys on, so a benign duplicate
+    /// suppression doesn't raise it.
+    responder_ratecap_tripped: OnceLock<Arc<AtomicU64>>,
 
     /// M060 mirror-export per-artifact publish counters. Keys are the
     /// canonical artifact filename (e.g. `"grants.json"`); values are
@@ -117,6 +122,7 @@ impl Metrics {
             responder_lag: OnceLock::new(),
             correlator_lag: OnceLock::new(),
             responder_suppressed: OnceLock::new(),
+            responder_ratecap_tripped: OnceLock::new(),
             m060_publish_counts: Mutex::new(HashMap::new()),
             m060_last_publish_unix: Mutex::new(HashMap::new()),
         }
@@ -232,6 +238,15 @@ impl Metrics {
     /// is not emitted. Idempotent (`OnceLock`).
     pub fn set_responder_suppressed_source(&self, suppressed: Arc<AtomicU64>) {
         let _ = self.responder_suppressed.set(suppressed);
+    }
+
+    /// Wire the rate-cap circuit-breaker trip counter shared with the responder
+    /// (the same `Arc` handed to `Responder::with_ratecap_counter`). Distinct
+    /// from `set_responder_suppressed_source`: this series counts ONLY genuine
+    /// rate-cap trips, so the circuit-breaker alert doesn't fire on routine
+    /// dedup. Call once at startup; idempotent (`OnceLock`).
+    pub fn set_responder_ratecap_tripped_source(&self, tripped: Arc<AtomicU64>) {
+        let _ = self.responder_ratecap_tripped.set(tripped);
     }
 
     /// Render the current counters as a Prometheus exposition-format
@@ -428,6 +443,18 @@ impl Metrics {
             writeln!(
                 out,
                 "selfdef_responder_suppressed_destructive_total {}",
+                c.load(Ordering::Relaxed)
+            )
+            .unwrap();
+        }
+        if let Some(c) = self.responder_ratecap_tripped.get() {
+            out.push_str(
+                "# HELP selfdef_responder_ratecap_tripped_total Times the responder's destructive-action rate-cap circuit-breaker tripped (global flood breaker; excludes routine per-target dedup).\n",
+            );
+            out.push_str("# TYPE selfdef_responder_ratecap_tripped_total counter\n");
+            writeln!(
+                out,
+                "selfdef_responder_ratecap_tripped_total {}",
                 c.load(Ordering::Relaxed)
             )
             .unwrap();
@@ -799,6 +826,43 @@ mod tests {
         assert!(
             wired.contains("selfdef_correlator_lag_events_total 2"),
             "{wired}"
+        );
+    }
+
+    #[test]
+    fn ratecap_tripped_series_is_distinct_from_the_aggregate_suppressed_total() {
+        // F-2026-114: the circuit-breaker alert keys on the rate-cap-trip series,
+        // which must be a SEPARATE counter from the aggregate suppressed total
+        // (the latter also counts routine dedup). Both are absent until wired and
+        // read their shared Arc live.
+        let m = Metrics::new("h");
+        let unwired = m.render(0);
+        assert!(
+            !unwired.contains("selfdef_responder_ratecap_tripped_total"),
+            "rate-cap series must be absent until wired:\n{unwired}"
+        );
+
+        let suppressed = Arc::new(AtomicU64::new(0));
+        let ratecap = Arc::new(AtomicU64::new(0));
+        m.set_responder_suppressed_source(Arc::clone(&suppressed));
+        m.set_responder_ratecap_tripped_source(Arc::clone(&ratecap));
+
+        // Model a run with 3 dedup suppressions + 1 rate-cap trip: the aggregate
+        // counts all 4; the rate-cap series counts only the genuine breaker trip.
+        suppressed.fetch_add(4, Ordering::Relaxed);
+        ratecap.fetch_add(1, Ordering::Relaxed);
+        let wired = m.render(0);
+        assert!(
+            wired.contains("# TYPE selfdef_responder_ratecap_tripped_total counter"),
+            "{wired}"
+        );
+        assert!(
+            wired.contains("selfdef_responder_ratecap_tripped_total 1"),
+            "rate-cap series must read its Arc live:\n{wired}"
+        );
+        assert!(
+            wired.contains("selfdef_responder_suppressed_destructive_total 4"),
+            "aggregate total stays separate (includes dedup):\n{wired}"
         );
     }
 

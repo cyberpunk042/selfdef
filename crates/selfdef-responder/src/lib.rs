@@ -103,12 +103,20 @@ pub struct Responder {
     /// Synchronously locked (prune + count + push), never across an `.await`;
     /// pruned to the last 60s so it stays bounded.
     destructive_fire_log: Mutex<Vec<Instant>>,
-    /// Optional cumulative counter of destructive actions SUPPRESSED by the
-    /// dedup or rate-cap gates. The daemon wires this to a `/metrics` counter
-    /// (`selfdef_responder_suppressed_destructive_total`) so circuit-breaker
-    /// trips are observable + alertable — a spike means a flood/attack or a
-    /// mis-tuned window. `None` ⇒ not metered (e.g. in tests).
+    /// Optional cumulative counter of destructive actions SUPPRESSED by EITHER
+    /// gate (dedup OR rate-cap). The daemon wires this to a `/metrics` counter
+    /// (`selfdef_responder_suppressed_destructive_total`) — an aggregate
+    /// "how much is being suppressed" signal for dashboards. `None` ⇒ not
+    /// metered (e.g. in tests).
     suppressed_counter: Option<Arc<std::sync::atomic::AtomicU64>>,
+    /// Optional cumulative counter of rate-cap circuit-breaker trips ONLY (the
+    /// global flood breaker), distinct from routine per-target dedup. Wired to
+    /// `selfdef_responder_ratecap_tripped_total`. This is the signal the
+    /// `SelfdefResponderCircuitBreakerTripped` alert keys on: a non-zero rate
+    /// means the daemon hit its destructive-action ceiling (a genuine flood),
+    /// whereas dedup suppressing a duplicate finding is routine and must NOT
+    /// raise a circuit-breaker alert. `None` ⇒ not metered.
+    ratecap_tripped_counter: Option<Arc<std::sync::atomic::AtomicU64>>,
 }
 
 /// Default per-action execution ceiling. Generous — a forensics bundle
@@ -220,6 +228,7 @@ impl Responder {
             destructive_cap_per_min: 0,
             destructive_fire_log: Mutex::new(Vec::new()),
             suppressed_counter: None,
+            ratecap_tripped_counter: None,
         }
     }
 
@@ -232,6 +241,16 @@ impl Responder {
         counter: Arc<std::sync::atomic::AtomicU64>,
     ) -> Self {
         self.suppressed_counter = Some(counter);
+        self
+    }
+
+    /// Set the counter bumped ONLY when the rate-cap circuit-breaker trips (the
+    /// global flood breaker), as opposed to routine per-target dedup. The daemon
+    /// wires it to `selfdef_responder_ratecap_tripped_total`, which the
+    /// circuit-breaker alert keys on. Chainable.
+    #[must_use]
+    pub fn with_ratecap_counter(mut self, counter: Arc<std::sync::atomic::AtomicU64>) -> Self {
+        self.ratecap_tripped_counter = Some(counter);
         self
     }
 
@@ -478,6 +497,12 @@ impl Responder {
                          suppressing further destructive actions until the 60s window drains"
                     );
                     if let Some(c) = &self.suppressed_counter {
+                        c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    // Distinct from dedup: only the rate-cap trip raises the
+                    // circuit-breaker alert (a genuine flood), not a routine
+                    // duplicate suppression.
+                    if let Some(c) = &self.ratecap_tripped_counter {
                         c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                     continue;

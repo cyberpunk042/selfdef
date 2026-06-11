@@ -341,10 +341,10 @@ groups:
       # deployment has enabled [responder].dedup_window_secs or
       # max_destructive_actions_per_min.
       - alert: SelfdefResponderCircuitBreakerTripped
-        expr: increase(selfdef_responder_suppressed_destructive_total[10m]) > 0
+        expr: increase(selfdef_responder_ratecap_tripped_total[10m]) > 0
         for: 0m
         labels:
           severity: warning
         annotations:
-          summary: "selfdef responder circuit-breaker suppressed {{ $value }} destructive actions in 10m on {{ $labels.instance }}"
-          description: "selfdef_responder_suppressed_destructive_total rose by {{ $value }} in the last 10m — the responder's burst-dedup and/or rate-cap circuit-breaker suppressed destructive actions (kill/quarantine/block/isolate). Suppression is the SAFE outcome (it prevents the IPS hammering the same target, or going into mass destruction during a flood), but a sustained non-zero rate signals an upstream cause worth investigating: an event burst, a correlation storm, a poisoned/spoofed event stream, or a mis-tuned [responder].dedup_window_secs / max_destructive_actions_per_min. Correlate with selfdef_findings_total and the bus-lag series; check `journalctl -u selfdefd` for the 'rate cap reached (circuit breaker)' / 'suppressed duplicate destructive action' lines."
+          summary: "selfdef responder rate-cap circuit-breaker tripped {{ $value }} times in 10m on {{ $labels.instance }}"
+          description: "selfdef_responder_ratecap_tripped_total rose by {{ $value }} in the last 10m — the responder's GLOBAL destructive-action rate-cap (flood breaker) hit its ceiling and suppressed further kill/quarantine/block/isolate actions. This is the genuine circuit-breaker signal (routine per-target dedup is excluded — it does NOT raise this alert). Tripping is the SAFE outcome (it stops the IPS going into mass destruction during a flood), but it means destructive actions reached [responder].max_destructive_actions_per_min, so investigate the upstream cause: an event burst, a correlation storm, a poisoned/spoofed event stream, or a mis-tuned cap. Correlate with selfdef_findings_total, selfdef_responder_suppressed_destructive_total (aggregate, includes dedup), and the bus-lag series; check `journalctl -u selfdefd` for the 'rate cap reached (circuit breaker)' lines."
