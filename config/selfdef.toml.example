@@ -162,6 +162,24 @@ overlap_warn_only = false
 # "ignore" (silent) | "block" (treat like agent-guard for overlap; strict).
 third_party_policy_stance = "warn"
 
+[grants]
+# Grant-governance discipline over the daemon-resident grant-issuance verb
+# (`POST /v1/grants/issue`). The grant-side analogue of the responder's
+# destructive-action circuit-breaker: the issuance verb is already wired,
+# this layers discipline onto it.
+#
+# overlap_policy: how to treat a newly-issued grant whose scope OVERLAPS an
+# existing *active* grant of the same kind (path-prefix for filesystem,
+# domain-suffix for network, exact for the rest):
+#   "off"    — no check; issuance proceeds unconditionally (default; the
+#              historical behavior).
+#   "warn"   — issue the grant, but log a warning on overlap.
+#   "refuse" — reject (HTTP 409) and never persist the overlapping grant.
+#              Fail-safe: refusing to ADD an overlapping grant can never
+#              narrow or revoke existing access — it only bounds grant-sprawl
+#              and overlap-escalation by a compromised control capability.
+overlap_policy = "off"
+
 [collectors]
 # Each collector has its own table; all default to disabled.
 # `read_from` (where present) accepts "start" (replay from the beginning of

@@ -239,3 +239,41 @@ that actually does real work. The remaining effector-wiring is **blocked on the
 real backends existing** — the simulations can't be meaningfully wired until
 their MS5a production adapters (real cgroup-freeze, real netns, …) are built.
 That backend-implementation effort, not glue-wiring, is the next real-depth step.
+
+## Update (2026-06-11): grant-governance — overlap gate wired into issuance
+
+The **grant-side analogue of the responder circuit-breaker** named earlier in
+this doc as "a clean next increment". The grant-issuance verb
+(`POST /v1/grants/issue`, `selfdef-api/src/grants.rs`) was wired but
+**ungoverned** — a holder of the control capability could mint an unbounded
+sprawl of overlapping / escalating grants, each widening the sandbox. The
+orphaned `selfdef-grant-overlap-detector` crate held the real overlap logic
+(path-prefix for filesystem, domain-suffix for network, exact for the rest) but
+nothing called it.
+
+What landed:
+- `selfdef-api` now depends on `selfdef-grant-overlap-detector`. After
+  `issue()` mints the candidate (still `Pending`), the handler projects it as
+  active and scans it against the registry's existing **active** grants via
+  `selfdef_grant_overlap_detector::scan` (single source of truth — the live
+  registry, no second state file).
+- New `[grants].overlap_policy` config (`off` | `warn` | `refuse`), mapped by
+  the daemon onto an api-local `GrantsOverlapPolicy` (so `selfdef-api` keeps no
+  `selfdef-config` dependency). Threaded into `ApiState` via
+  `with_grants_overlap_policy`.
+- `refuse` → 409 and the mint is **never persisted** (load is per-request, so
+  dropping the unsaved registry discards it). `warn` → issue + WARN log.
+- **Fail-safe + default-off**: `off` is the default (historical behavior). The
+  gate only ever blocks *adding* an overlapping grant — it can never narrow or
+  revoke existing access — so the failure direction is always toward *less*
+  privilege, never a lockout.
+- Test-locked (`candidate_overlap_*` + `refuse_skips_save_off_persists`,
+  4 new tests driving the registry + gate exactly as the handler does);
+  api suite 221 green, config 75 green, clippy clean.
+
+This proves the **grant-governance** layer extends the same proven integration
+pattern (identify discipline → wire into the verb default-off → serde-safe
+config → docs → test) onto the grants verb. The remaining grant-governance
+crates (`grant-issuance-cooldown` for per-template rate-limiting,
+`grant-spend-*` for budget caps) are the next increments on this same
+foundation; each is a clean default-off addition to the same handler.

@@ -70,6 +70,12 @@ pub struct Config {
     /// `deployment.target = sain01`, `check_overlap_on_apply` defaults
     /// to true. When `target = generic`, this block is ignored.
     pub perimeter: PerimeterConfig,
+    /// Grant-governance discipline over the daemon-resident grant-issuance
+    /// verb (`POST /v1/grants/issue`). Default-off so a config without a
+    /// `[grants]` block behaves exactly as before. See
+    /// `docs/review/crate-wiring-analysis.md` (grant-governance layer).
+    #[serde(default)]
+    pub grants: GrantsConfig,
 }
 
 // ---------------------------------------------------------------- deployment (SDD-013)
@@ -292,6 +298,50 @@ pub struct SecurityConfig {
     /// rule signatures. Required when
     /// [`require_signed_rules`] is `true`; ignored otherwise.
     pub signing_public_key_file: Option<PathBuf>,
+}
+
+// ---------------------------------------------------------------- grants governance
+
+/// Grant-governance config — discipline gates over the daemon-resident
+/// grant-issuance verb. This is the grant-side analogue of the responder's
+/// destructive-action circuit-breaker: the issuance verb is already wired,
+/// this layers discipline onto it. All knobs default-off; a config without a
+/// `[grants]` block behaves exactly as before.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct GrantsConfig {
+    /// How to treat a newly-issued grant whose scope overlaps an existing
+    /// *active* grant of the same kind (path-prefix for `filesystem`,
+    /// domain-suffix for `network`, exact for the rest). Default `off`.
+    pub overlap_policy: GrantsOverlapPolicy,
+}
+
+/// Grant overlap-governance policy. `#[serde(rename_all = "lowercase")]` so
+/// the TOML form is `overlap_policy = "off" | "warn" | "refuse"`. Unknown
+/// values fail-loud at parse time.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum GrantsOverlapPolicy {
+    /// No overlap check — issuance proceeds unconditionally (current behavior).
+    #[default]
+    Off,
+    /// Issue the grant, but log a warning when it overlaps an active grant.
+    Warn,
+    /// Refuse (HTTP 409) a new grant that overlaps an existing active grant.
+    /// Fail-safe direction: this only ever blocks *adding* access; it can
+    /// never revoke or narrow an existing grant.
+    Refuse,
+}
+
+impl GrantsOverlapPolicy {
+    /// Operator-readable token (matches the TOML serialization).
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Warn => "warn",
+            Self::Refuse => "refuse",
+        }
+    }
 }
 
 impl Config {

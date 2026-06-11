@@ -30,6 +30,7 @@ selfdef-notifier-engine = { workspace = true }
 selfdef-notifier-orchestrator = { workspace = true }
 selfdef-flex-profile = { workspace = true }
 selfdef-grant-registry = { workspace = true }
+selfdef-grant-overlap-detector = { workspace = true }
 selfdef-capability-registry = { workspace = true }
 selfdef-sandbox-registry = { workspace = true }
 selfdef-quarantine-registry = { workspace = true }

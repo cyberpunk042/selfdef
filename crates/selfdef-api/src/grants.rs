@@ -16,12 +16,15 @@
 use std::path::{Path, PathBuf};
 
 use axum::Json;
+use axum::extract::State;
 use axum::http::StatusCode;
 use selfdef_grant_registry::{
-    GrantEntry, GrantRegistry, GrantRequest, GrantsMirrorSnapshot, RegistryError,
+    GrantEntry, GrantRegistry, GrantRequest, GrantState, GrantsMirrorSnapshot, RegistryError,
 };
 use serde::Deserialize;
 use time::OffsetDateTime;
+
+use crate::state::{ApiState, GrantsOverlapPolicy};
 
 /// Resident grant store path. Honors `SELFDEF_GRANTS_PATH` (kept in sync
 /// with the daemon's mirror-export reader), else the crate default.
@@ -73,7 +76,16 @@ pub(crate) async fn show() -> Result<Json<GrantsMirrorSnapshot>, (StatusCode, St
 /// `POST /v1/grants/issue` — body is the operator-signed [`GrantRequest`].
 /// The daemon mints the `grant_id` + `trace_id` (callers never supply
 /// them) and stamps `now`. Returns the issued (Pending) grant.
+///
+/// Grant-governance: when `[grants].overlap_policy` is `warn`/`refuse`, the
+/// freshly-minted grant is checked against the registry's existing *active*
+/// grants (path-prefix for filesystem, domain-suffix for network, exact for
+/// the rest) via [`selfdef_grant_overlap_detector`]. Under `refuse` an
+/// overlapping grant is rejected with 409 and never persisted — fail-safe,
+/// since refusing to *add* an overlapping grant can never narrow existing
+/// access. Default `off` preserves the historical unconditional issue.
 pub(crate) async fn issue(
+    State(state): State<ApiState>,
     _cap: crate::control::RequireControl,
     Json(req): Json<GrantRequest>,
 ) -> Result<Json<GrantEntry>, (StatusCode, String)> {
@@ -86,6 +98,38 @@ pub(crate) async fn issue(
     let id = reg
         .issue(&req, &grant_id, &trace_id, now)
         .map_err(map_err)?;
+
+    // Overlap-governance gate. The candidate is `Pending` immediately after
+    // `issue`; the detector only pairs `Active` grants, so we project the
+    // candidate as active for the scan and look for any pair naming it.
+    let policy = state.grants_overlap_policy();
+    if policy != GrantsOverlapPolicy::Off {
+        if let Some(other) = candidate_overlap(reg.grants(), &id) {
+            match policy {
+                GrantsOverlapPolicy::Refuse => {
+                    // Drop the in-memory registry WITHOUT saving: load is
+                    // per-request, so the mint never lands on disk.
+                    return Err((
+                        StatusCode::CONFLICT,
+                        format!(
+                            "grant {id} ({}) overlaps active grant {}: {}",
+                            req.scope, other.grant_id, other.reason
+                        ),
+                    ));
+                }
+                GrantsOverlapPolicy::Warn => {
+                    tracing::warn!(
+                        grant_id = %id,
+                        overlaps = %other.grant_id,
+                        reason = %other.reason,
+                        "grants: issued grant overlaps an existing active grant (warn policy)"
+                    );
+                }
+                GrantsOverlapPolicy::Off => unreachable!("guarded above"),
+            }
+        }
+    }
+
     save(&reg, &path)?;
     let entry = reg
         .grants()
@@ -97,6 +141,32 @@ pub(crate) async fn issue(
             "issued grant missing from registry".to_string(),
         ))?;
     Ok(Json(entry))
+}
+
+/// The overlap pair (if any) naming the just-issued candidate. The candidate
+/// is `Pending` in `grants`, so we build a scan view of (existing active
+/// grants + the candidate forced active) and return the *other* grant in the
+/// first pair the detector reports for the candidate.
+fn candidate_overlap(grants: &[GrantEntry], candidate_id: &str) -> Option<GrantEntry> {
+    let mut for_scan: Vec<GrantEntry> = grants
+        .iter()
+        .filter(|g| g.state == GrantState::Active || g.grant_id == candidate_id)
+        .cloned()
+        .collect();
+    for g in &mut for_scan {
+        if g.grant_id == candidate_id {
+            g.state = GrantState::Active;
+        }
+    }
+    let pair = selfdef_grant_overlap_detector::scan(&for_scan)
+        .into_iter()
+        .find(|p| p.grant_a == candidate_id || p.grant_b == candidate_id)?;
+    let other_id = if pair.grant_a == candidate_id {
+        pair.grant_b
+    } else {
+        pair.grant_a
+    };
+    for_scan.into_iter().find(|g| g.grant_id == other_id)
 }
 
 /// `POST /v1/grants/revoke` — revoke a grant by id. 404 when unknown.
@@ -203,5 +273,103 @@ mod tests {
             .map_err(map_err)
             .unwrap_err();
         assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    }
+
+    // ---- grant-overlap governance gate (candidate_overlap) ----
+
+    fn fs_req(scope: &str) -> GrantRequest {
+        let mut r = req(GrantKind::Filesystem);
+        r.scope = scope.into();
+        r
+    }
+
+    /// A freshly-issued grant whose scope is a path-prefix child of an
+    /// existing *active* grant must be flagged by `candidate_overlap` — the
+    /// exact signal the handler turns into a 409 under `refuse`.
+    #[test]
+    fn candidate_overlap_flags_filesystem_prefix() {
+        let now = OffsetDateTime::now_utc();
+        let mut reg = GrantRegistry::new();
+        let existing = reg.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        reg.activate(&existing, now).unwrap();
+        // Candidate under /workspace — overlaps the active parent grant.
+        let cand = reg
+            .issue(&fs_req("/workspace/foo"), "gr-2", "tr-2", now)
+            .unwrap();
+        let other = candidate_overlap(reg.grants(), &cand).expect("overlap expected");
+        assert_eq!(other.grant_id, existing);
+    }
+
+    /// Disjoint scopes do not overlap — issuance under any policy proceeds.
+    #[test]
+    fn candidate_overlap_none_when_disjoint() {
+        let now = OffsetDateTime::now_utc();
+        let mut reg = GrantRegistry::new();
+        let existing = reg.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        reg.activate(&existing, now).unwrap();
+        let cand = reg.issue(&fs_req("/var/log"), "gr-2", "tr-2", now).unwrap();
+        assert!(candidate_overlap(reg.grants(), &cand).is_none());
+    }
+
+    /// An existing grant that is NOT active (e.g. Pending/Revoked) is not a
+    /// scan target — the detector only governs against live access.
+    #[test]
+    fn candidate_overlap_ignores_inactive_existing() {
+        let now = OffsetDateTime::now_utc();
+        let mut reg = GrantRegistry::new();
+        // gr-1 stays Pending (never activated).
+        let _existing = reg.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        let cand = reg
+            .issue(&fs_req("/workspace/foo"), "gr-2", "tr-2", now)
+            .unwrap();
+        assert!(candidate_overlap(reg.grants(), &cand).is_none());
+    }
+
+    /// Mirrors the handler decision: under `refuse`, an overlapping mint is
+    /// dropped WITHOUT saving (load is per-request, so it never lands); under
+    /// `off`, the same mint persists. Drives the registry + `candidate_overlap`
+    /// exactly as the handler does (sans the axum State/Json wrappers).
+    #[test]
+    fn refuse_skips_save_off_persists() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("grants.json");
+        let now = OffsetDateTime::now_utc();
+
+        // Seed an active parent grant on disk.
+        let mut seed = GrantRegistry::load(&path).unwrap();
+        let parent = seed.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        seed.activate(&parent, now).unwrap();
+        save(&seed, &path).unwrap();
+
+        // Helper that runs the handler's core: load, issue, gate, conditional save.
+        let attempt = |policy: GrantsOverlapPolicy| -> bool {
+            let mut reg = GrantRegistry::load(&path).unwrap();
+            let id = reg
+                .issue(&fs_req("/workspace/foo"), "gr-2", "tr-2", now)
+                .unwrap();
+            let overlap = candidate_overlap(reg.grants(), &id);
+            if policy == GrantsOverlapPolicy::Refuse && overlap.is_some() {
+                // handler returns 409 here, dropping `reg` unsaved.
+                return false;
+            }
+            save(&reg, &path).unwrap();
+            true
+        };
+
+        // Refuse → not persisted.
+        assert!(!attempt(GrantsOverlapPolicy::Refuse));
+        assert_eq!(
+            GrantRegistry::load(&path).unwrap().grants().len(),
+            1,
+            "refuse must not persist the overlapping grant"
+        );
+
+        // Off → persisted (historical behavior preserved).
+        assert!(attempt(GrantsOverlapPolicy::Off));
+        assert_eq!(
+            GrantRegistry::load(&path).unwrap().grants().len(),
+            2,
+            "off must persist as before"
+        );
     }
 }

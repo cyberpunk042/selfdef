@@ -70,6 +70,26 @@ pub struct ApiState {
     /// the route returns 503 in that case. Wired in by the daemon
     /// at startup when the engine path is active.
     pub(crate) escalation_engine: Option<Arc<EscalationEngine>>,
+    /// Grant-governance: how `POST /v1/grants/issue` treats a new grant
+    /// whose scope overlaps an existing *active* grant. Defaults to
+    /// [`GrantsOverlapPolicy::Off`] (no check — historical behavior);
+    /// the daemon raises it from `[grants].overlap_policy`. Kept as an
+    /// api-local enum so this crate doesn't depend on `selfdef-config`.
+    pub(crate) grants_overlap_policy: GrantsOverlapPolicy,
+}
+
+/// Grant overlap-governance policy (api-local mirror of the config enum).
+/// The daemon maps `selfdef_config::GrantsOverlapPolicy` onto this at
+/// startup so the handler layer carries no config dependency.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GrantsOverlapPolicy {
+    /// No overlap check — issuance proceeds unconditionally.
+    #[default]
+    Off,
+    /// Issue, but log a warning when the new grant overlaps an active one.
+    Warn,
+    /// Refuse (HTTP 409) a new grant that overlaps an existing active grant.
+    Refuse,
 }
 
 /// SDD-007 D-4: operator-tunable SSE cap overrides. The daemon
@@ -101,7 +121,22 @@ impl ApiState {
             sse_subscribers_per_token: Arc::new(Mutex::new(HashMap::new())),
             sse_caps: SseCaps::default(),
             escalation_engine: None,
+            grants_overlap_policy: GrantsOverlapPolicy::Off,
         }
+    }
+
+    /// Builder-style: set the grant overlap-governance policy. The daemon
+    /// calls this from `[grants].overlap_policy`. Default is
+    /// [`GrantsOverlapPolicy::Off`] (no check).
+    #[must_use]
+    pub fn with_grants_overlap_policy(mut self, policy: GrantsOverlapPolicy) -> Self {
+        self.grants_overlap_policy = policy;
+        self
+    }
+
+    /// Accessor for the grant overlap-governance policy (handlers + tests).
+    pub(crate) fn grants_overlap_policy(&self) -> GrantsOverlapPolicy {
+        self.grants_overlap_policy
     }
 
     /// SDD-008 D-4: install the escalation engine handle so the

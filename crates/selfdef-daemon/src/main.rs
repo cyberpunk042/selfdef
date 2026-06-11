@@ -838,10 +838,27 @@ async fn main() -> Result<()> {
     };
 
     let (api_task, api_token_reloader) = if cfg.api.enabled {
-        use selfdef_api::{ApiServer, ApiState, SseCaps};
+        use selfdef_api::{ApiServer, ApiState, GrantsOverlapPolicy, SseCaps};
         let cfg_api = build_api_config(&cfg.api);
+        // Grant-governance: map the config overlap policy onto the
+        // api-local enum (api carries no selfdef-config dependency).
+        let grants_overlap_policy = match cfg.grants.overlap_policy {
+            selfdef_config::GrantsOverlapPolicy::Off => GrantsOverlapPolicy::Off,
+            selfdef_config::GrantsOverlapPolicy::Warn => GrantsOverlapPolicy::Warn,
+            selfdef_config::GrantsOverlapPolicy::Refuse => GrantsOverlapPolicy::Refuse,
+        };
+        if !matches!(
+            cfg.grants.overlap_policy,
+            selfdef_config::GrantsOverlapPolicy::Off
+        ) {
+            info!(
+                policy = cfg.grants.overlap_policy.as_str(),
+                "grants: overlap-governance enabled on /v1/grants/issue"
+            );
+        }
         let mut state = ApiState::new(Arc::clone(&store), Arc::clone(&bus), host_tag.clone())
             .with_publisher(publisher.clone())
+            .with_grants_overlap_policy(grants_overlap_policy)
             // SDD-007 D-4: thread the operator-overrideable SSE
             // caps into ApiState. Empty/None falls back to the
             // compiled-in defaults (64 global, 8 per-token).

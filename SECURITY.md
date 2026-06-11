@@ -318,6 +318,12 @@ posture is:
   (`[bus.nats].signing_key_file` + `[bus.nats.peer_keys]`) so only
   cryptographically-authenticated cross-host findings can drive destructive
   response.
+- **If you expose the grant-issuance API** (`POST /v1/grants/issue`), set
+  `[grants].overlap_policy = "refuse"` (or `"warn"`) so a compromised control
+  capability cannot mint an unbounded sprawl of overlapping / escalating
+  grants. Default `off` keeps the historical unconditional-issue behavior; the
+  gate is fail-safe (it only ever blocks *adding* an overlapping grant, never
+  narrows existing access).
 
 This block is intentionally short — copy it into your deployment runbook.
 

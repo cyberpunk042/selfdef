@@ -85,7 +85,7 @@ mod tui_mirror;
 pub mod watchdog_metrics;
 
 pub use metrics::{Metrics, run_ingest as run_metrics_ingest};
-pub use state::{ApiState, ControlHandles, SseCaps};
+pub use state::{ApiState, ControlHandles, GrantsOverlapPolicy, SseCaps};
 pub use transport::{
     ApiConfig, ApiServer, Capability, ServerError, TlsConfig, TokenFingerprint, TokenReloader,
     with_capability,
