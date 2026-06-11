@@ -270,9 +270,13 @@ impl Responder {
     }
 
     /// Direct-fire: dispatch all allowed actions for a single event without
-    /// going through the bus. Used by `selfdefctl panic`.
+    /// going through the bus. Used by `selfdefctl panic` — an operator-commanded
+    /// emergency, so it bypasses the autonomous-only decision-discipline gates
+    /// (dedup / rate-cap), exactly as it bypasses the severity floor: when the
+    /// operator hits panic they want every allowed action to fire, not be
+    /// throttled.
     pub async fn fire(&self, event: &Event) {
-        self.handle_finding(event).await;
+        self.handle_finding(event, false).await;
     }
 
     /// Run a single named action against the given event, bypassing the
@@ -363,7 +367,9 @@ impl Responder {
                                     "finding below autonomous-response floor; not dispatching"
                                 );
                             } else {
-                                self.handle_finding(&event).await;
+                                // Bus path = autonomous: subject to the
+                                // decision-discipline gates (dedup / rate-cap).
+                                self.handle_finding(&event, true).await;
                             }
                         }
                         Ok(_) => {}
@@ -384,7 +390,10 @@ impl Responder {
         }
     }
 
-    async fn handle_finding(&self, event: &Event) {
+    /// `autonomous` = this dispatch came from the bus path (subject to the
+    /// decision-discipline gates), vs an operator-commanded `fire`/panic (which
+    /// bypasses them, like the severity floor).
+    async fn handle_finding(&self, event: &Event, autonomous: bool) {
         debug!(event_id = %event.id, severity = %event.severity_id, "handling finding");
 
         for action in &self.actions {
@@ -397,7 +406,7 @@ impl Responder {
             // target within the window — guards against a finding burst hammering
             // the same kill/quarantine. The lock is held only for the synchronous
             // prune + check + insert, and dropped before the `.await` below.
-            if !self.dedup_window.is_zero() && is_destructive_action(name) {
+            if autonomous && !self.dedup_window.is_zero() && is_destructive_action(name) {
                 let key = format!("{name}|{}", event_target_sig(event));
                 let now = Instant::now();
                 let mut recent = self
@@ -425,7 +434,7 @@ impl Responder {
             // further destructive actions until the window drains — catches a
             // multi-target FLOOD that per-target dedup can't. Lock held only for
             // the synchronous prune + count + push, never across the `.await`.
-            if self.destructive_cap_per_min > 0 && is_destructive_action(name) {
+            if autonomous && self.destructive_cap_per_min > 0 && is_destructive_action(name) {
                 let now = Instant::now();
                 let window = Duration::from_secs(60);
                 let mut log = self
