@@ -826,6 +826,14 @@ fn build_finding(
         ev = ev.with_attack(technique);
     }
 
+    // Propagate the federation taint from the trigger. The finding carries the
+    // LOCAL daemon's host_tag, so without this the remote origin would be
+    // laundered through correlation and the responder couldn't tell a
+    // remote-driven finding from a local one (F-2026-111).
+    if triggering.federated {
+        ev = ev.with_federated(true);
+    }
+
     ev
 }
 
@@ -998,6 +1006,36 @@ level: medium
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].class_uid, ClassUid::DETECTION_FINDING);
         assert_eq!(findings[0].severity_id, SeverityId::Medium);
+        // A finding derived from a LOCAL trigger is not federated.
+        assert!(!findings[0].federated, "local-origin finding must not be tainted");
+    }
+
+    #[test]
+    fn finding_inherits_federation_taint_from_its_trigger() {
+        // F-2026-111: a finding derived from a federated (remote-origin) event
+        // must carry the taint, even though the finding itself is stamped with
+        // the LOCAL host_tag — otherwise correlation launders the remote origin.
+        let yaml = r#"
+id: test-fed
+title: Any auth failure
+detection:
+  failed:
+    class_uid: 3002
+    status_id: 2
+  condition: failed
+level: medium
+"#;
+        let raw: RawRule = serde_yaml_ng::from_str(yaml).unwrap();
+        let rule = compile_rule(raw, PathBuf::from("inline.yml")).unwrap();
+        let engine = Engine { rules: vec![rule] };
+        let seq = AtomicU64::new(0);
+        let federated_trigger = ssh_failure_event().with_federated(true);
+        let findings = engine.process(&federated_trigger, "host", &seq);
+        assert_eq!(findings.len(), 1);
+        assert!(
+            findings[0].federated,
+            "a finding from a federated trigger must inherit the taint"
+        );
     }
 
     #[test]

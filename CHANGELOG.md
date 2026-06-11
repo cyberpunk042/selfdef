@@ -43,6 +43,27 @@ F-2026-111 observability step):
     `token_eq` constant-time comparison + its prefix-token-bypass
     guard with unit tests (previously untested).
 
+### Added — federation trust boundary: fail-closed on remote-driven destructive response (2026-06-11)
+
+Closes F-2026-111. With NATS multi-host fan-out, events from other
+hosts enter this daemon's correlator → responder path, so a
+compromised broker or peer could forge a finding naming a LOCAL
+pid/user and drive a destructive action (kill / quarantine /
+isolate / egress-lockdown) here. Added an end-to-end origin taint:
+
+  - `selfdef_core::Event` carries a `#[serde(skip)] federated` marker
+    (local-only provenance, never on the wire or in the store, can't
+    be preset by a peer).
+  - The NATS inbound path stamps it on every event from another host;
+    the correlator propagates it onto derived findings (so the local
+    host_tag no longer launders the remote origin).
+  - New `[responder].act_on_federated` (**default `true`** — prior
+    cross-host-response behavior preserved). Set `false` to FAIL
+    CLOSED: destructive actions are refused for federated-origin
+    findings (alerts / evidence / escalation still delivered;
+    operator `selfdefctl` actions always act). Refusals are counted
+    by `selfdef_responder_federated_refused_total`.
+
 ### Improved — 12 small L2 suites strengthened with delta-detection + observability + advisory-exit invariants (2026-06-06)
 
 Follows the 100% L2 module coverage pass. The 12 smallest L2

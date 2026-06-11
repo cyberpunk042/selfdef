@@ -117,6 +117,21 @@ pub struct Responder {
     /// whereas dedup suppressing a duplicate finding is routine and must NOT
     /// raise a circuit-breaker alert. `None` ⇒ not metered.
     ratecap_tripped_counter: Option<Arc<std::sync::atomic::AtomicU64>>,
+
+    /// Federation trust-boundary policy (F-2026-111). When `false`, a DESTRUCTIVE
+    /// action is NOT auto-fired for a finding whose trigger came from another
+    /// host via the NATS bridge (`event.federated`) — a compromised broker or
+    /// peer can forge a finding carrying a local pid/user, so fail-closed refuses
+    /// to act on remote-driven destructive triggers. Defaults to `true`
+    /// (act-on-federated = the prior behavior; cross-host response preserved);
+    /// set `false` to fail closed. Autonomous path only — operator `fire`/panic
+    /// always acts. Notify/snapshot/forensic/escalation are never refused.
+    act_on_federated: bool,
+    /// Counter bumped when a destructive action is refused because its finding
+    /// was federated-origin and `act_on_federated` is off. Distinct from the
+    /// circuit-breaker counters — this is a trust-boundary refusal, not a flood.
+    /// Wired to `selfdef_responder_federated_refused_total`.
+    federated_refused_counter: Option<Arc<std::sync::atomic::AtomicU64>>,
 }
 
 /// Default per-action execution ceiling. Generous — a forensics bundle
@@ -229,6 +244,10 @@ impl Responder {
             destructive_fire_log: Mutex::new(Vec::new()),
             suppressed_counter: None,
             ratecap_tripped_counter: None,
+            // Default preserves prior behavior: federated findings DO drive
+            // response. Operators opt into fail-closed via with_act_on_federated.
+            act_on_federated: true,
+            federated_refused_counter: None,
         }
     }
 
@@ -251,6 +270,28 @@ impl Responder {
     #[must_use]
     pub fn with_ratecap_counter(mut self, counter: Arc<std::sync::atomic::AtomicU64>) -> Self {
         self.ratecap_tripped_counter = Some(counter);
+        self
+    }
+
+    /// Set the federation trust-boundary policy (F-2026-111). `true` (default)
+    /// keeps prior behavior — federated-origin findings drive destructive
+    /// response. `false` fails closed: destructive actions are refused for
+    /// findings whose trigger arrived from another host via NATS. Chainable.
+    #[must_use]
+    pub fn with_act_on_federated(mut self, act: bool) -> Self {
+        self.act_on_federated = act;
+        self
+    }
+
+    /// Set the counter bumped when a destructive action is refused due to the
+    /// federation trust boundary (`act_on_federated` off + a federated finding).
+    /// Wired to `selfdef_responder_federated_refused_total`. Chainable.
+    #[must_use]
+    pub fn with_federated_refused_counter(
+        mut self,
+        counter: Arc<std::sync::atomic::AtomicU64>,
+    ) -> Self {
+        self.federated_refused_counter = Some(counter);
         self
     }
 
@@ -436,6 +477,29 @@ impl Responder {
         for action in &self.actions {
             let name = action.name();
             if !self.allowed_actions.contains(name) {
+                continue;
+            }
+            // Federation trust boundary (F-2026-111). When fail-closed
+            // (`act_on_federated` off), refuse a DESTRUCTIVE action whose finding
+            // came from another host via NATS — a compromised broker/peer could
+            // forge a finding naming a local pid/user. Checked before the
+            // circuit-breakers (a refused action need not consume dedup/cap
+            // budget). Autonomous path only; non-destructive actions (alert /
+            // evidence / escalation) are always delivered.
+            if autonomous
+                && !self.act_on_federated
+                && event.federated
+                && is_destructive_action(name)
+            {
+                warn!(
+                    action = name,
+                    event_id = %event.id,
+                    "refusing destructive action for a federated-origin finding \
+                     ([responder].act_on_federated is off — fail-closed)"
+                );
+                if let Some(c) = &self.federated_refused_counter {
+                    c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
                 continue;
             }
             // Burst-dedup gate (opt-in; disabled when dedup_window == 0, the

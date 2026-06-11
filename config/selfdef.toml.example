@@ -539,6 +539,19 @@ dedup_window_secs = 0
 # drains. 0 = no cap.
 max_destructive_actions_per_min = 0
 
+# Federation trust boundary (F-2026-111). With NATS multi-host fan-out, events
+# from OTHER hosts enter this daemon's correlator -> responder path. A
+# compromised broker or peer could forge a finding naming a LOCAL pid/user and
+# drive a destructive action here. When true (default), federated-origin
+# findings drive response exactly like local ones (prior behavior). Set false to
+# FAIL CLOSED: destructive actions (kill / quarantine / isolate / egress-
+# lockdown) are refused for federated-origin findings — alerts, evidence, and
+# escalation are still delivered, and operator `selfdefctl` actions always act.
+# Recommended false unless you deliberately rely on cross-host response (and even
+# then, ensure NATS transport auth: mTLS / NKey / JWT). Watch
+# selfdef_responder_federated_refused_total to see refusals.
+act_on_federated = true
+
 # Where snapshot_proc writes per-event directories.
 snapshot_dir = "/var/lib/selfdef/snapshots"
 

@@ -227,6 +227,16 @@ destructive actions). Confirm it tracks only the peers you trust;
 an unexpected rate is the first sign of a misconfigured subject
 prefix or an untrusted publisher on the broker.
 
+To close that trust boundary, set `responder.act_on_federated = false`
+(see [config](config.md)): the responder then refuses destructive
+actions (kill / quarantine / isolate / egress-lockdown) for any
+finding whose trigger arrived from another host, while still
+delivering alerts, evidence, and escalation. Each refusal increments
+`selfdef_responder_federated_refused_total`, so you can see exactly
+how much remote-driven destructive activity the boundary is stopping.
+Operator-commanded `selfdefctl` actions are never gated — the human
+remains the authority in an emergency.
+
 ### SSE live tail
 
 The `/events/stream` endpoint subscribes to a fresh bus subscriber per

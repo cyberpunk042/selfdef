@@ -87,6 +87,12 @@ pub struct Metrics {
     /// suppression doesn't raise it.
     responder_ratecap_tripped: OnceLock<Arc<AtomicU64>>,
 
+    /// Destructive actions refused because their finding was federated-origin and
+    /// `[responder].act_on_federated` is off (F-2026-111 fail-closed). Shares the
+    /// responder's `Arc<AtomicU64>`; unset until wired. Distinct from the
+    /// circuit-breaker counters — a trust-boundary refusal, not a flood.
+    responder_federated_refused: OnceLock<Arc<AtomicU64>>,
+
     /// Cumulative inbound federated events (from OTHER hosts via the NATS
     /// bridge) republished onto the local bus — i.e. events that entered the
     /// local correlator→responder path from across the trust boundary. Shares
@@ -130,6 +136,7 @@ impl Metrics {
             correlator_lag: OnceLock::new(),
             responder_suppressed: OnceLock::new(),
             responder_ratecap_tripped: OnceLock::new(),
+            responder_federated_refused: OnceLock::new(),
             nats_federated_inbound: OnceLock::new(),
             m060_publish_counts: Mutex::new(HashMap::new()),
             m060_last_publish_unix: Mutex::new(HashMap::new()),
@@ -263,6 +270,15 @@ impl Metrics {
     /// startup; when unset the series is not emitted. Idempotent (`OnceLock`).
     pub fn set_nats_federated_inbound_source(&self, federated: Arc<AtomicU64>) {
         let _ = self.nats_federated_inbound.set(federated);
+    }
+
+    /// Wire the federation-refusal counter shared with the responder (the same
+    /// `Arc` handed to `Responder::with_federated_refused_counter`). Exposes
+    /// `selfdef_responder_federated_refused_total` — destructive actions refused
+    /// by the fail-closed federation trust boundary. Call once at startup;
+    /// idempotent (`OnceLock`).
+    pub fn set_responder_federated_refused_source(&self, refused: Arc<AtomicU64>) {
+        let _ = self.responder_federated_refused.set(refused);
     }
 
     /// Render the current counters as a Prometheus exposition-format
@@ -471,6 +487,18 @@ impl Metrics {
             writeln!(
                 out,
                 "selfdef_responder_ratecap_tripped_total {}",
+                c.load(Ordering::Relaxed)
+            )
+            .unwrap();
+        }
+        if let Some(c) = self.responder_federated_refused.get() {
+            out.push_str(
+                "# HELP selfdef_responder_federated_refused_total Destructive actions refused because the finding was federated-origin and [responder].act_on_federated is off (fail-closed trust boundary).\n",
+            );
+            out.push_str("# TYPE selfdef_responder_federated_refused_total counter\n");
+            writeln!(
+                out,
+                "selfdef_responder_federated_refused_total {}",
                 c.load(Ordering::Relaxed)
             )
             .unwrap();
@@ -891,6 +919,29 @@ mod tests {
         assert!(
             wired.contains("selfdef_responder_suppressed_destructive_total 4"),
             "aggregate total stays separate (includes dedup):\n{wired}"
+        );
+    }
+
+    #[test]
+    fn federated_refused_series_appears_only_when_wired_and_reads_live() {
+        // F-2026-111 fail-closed observability: refusals of federated-origin
+        // destructive actions are absent until wired, then read the Arc live.
+        let m = Metrics::new("h");
+        assert!(
+            !m.render(0).contains("selfdef_responder_federated_refused_total"),
+            "refusal series must be absent until wired"
+        );
+        let refused = Arc::new(AtomicU64::new(0));
+        m.set_responder_federated_refused_source(Arc::clone(&refused));
+        refused.fetch_add(3, Ordering::Relaxed);
+        let wired = m.render(0);
+        assert!(
+            wired.contains("# TYPE selfdef_responder_federated_refused_total counter"),
+            "{wired}"
+        );
+        assert!(
+            wired.contains("selfdef_responder_federated_refused_total 3"),
+            "{wired}"
         );
     }
 

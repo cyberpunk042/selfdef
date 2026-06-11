@@ -77,6 +77,11 @@ fn finding(seq: u64) -> Event {
     Event::new(ClassUid::DETECTION_FINDING, 1, SeverityId::High, "host", "test", seq)
 }
 
+/// A finding whose trigger came from another host via NATS (F-2026-111).
+fn federated_finding(seq: u64) -> Event {
+    finding(seq).with_federated(true)
+}
+
 /// Drive findings through the autonomous bus path and let the responder drain.
 /// The subscriber is created before `run` is spawned, so events published
 /// afterward are received.
@@ -256,6 +261,67 @@ async fn rate_cap_trip_increments_both_the_total_and_the_circuit_breaker_counter
         1,
         "a rate-cap trip is a genuine circuit-breaker event"
     );
+}
+
+#[tokio::test]
+async fn fail_closed_refuses_destructive_action_for_a_federated_finding() {
+    // act_on_federated=false: a destructive action for a federated-origin
+    // finding must be refused (a compromised peer can't drive a local kill).
+    let (a, calls) = action("kill_pid");
+    let refused = Arc::new(AtomicU64::new(0));
+    let r = Arc::new(
+        Responder::new(vec![a], vec!["kill_pid".into()], false)
+            .with_act_on_federated(false)
+            .with_federated_refused_counter(refused.clone()),
+    );
+    run_findings(r, vec![federated_finding(1)]).await;
+    assert_eq!(calls.load(Ordering::SeqCst), 0, "federated destructive action must be refused");
+    assert_eq!(refused.load(Ordering::SeqCst), 1, "the refusal must bump the counter");
+}
+
+#[tokio::test]
+async fn default_acts_on_federated_findings_preserving_prior_behavior() {
+    // Default (act_on_federated=true): a federated finding still drives the
+    // destructive action — no behavior change for cross-host-response setups.
+    let (a, calls) = action("kill_pid");
+    let r = Arc::new(Responder::new(vec![a], vec!["kill_pid".into()], false));
+    run_findings(r, vec![federated_finding(1)]).await;
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "default must preserve cross-host response");
+}
+
+#[tokio::test]
+async fn fail_closed_still_acts_on_local_findings() {
+    // act_on_federated=false must only gate FEDERATED findings — a local finding
+    // fires normally.
+    let (a, calls) = action("kill_pid");
+    let r = Arc::new(
+        Responder::new(vec![a], vec!["kill_pid".into()], false).with_act_on_federated(false),
+    );
+    run_findings(r, vec![finding(1)]).await;
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "local findings are unaffected by the federation gate");
+}
+
+#[tokio::test]
+async fn operator_panic_acts_on_a_federated_finding_even_when_fail_closed() {
+    // The federation gate is autonomous-only: an operator-commanded fire (panic)
+    // on a federated finding must STILL act even with act_on_federated=false —
+    // the human is the authority in an emergency.
+    let (a, calls) = action("kill_pid");
+    let r = Responder::new(vec![a], vec!["kill_pid".into()], false).with_act_on_federated(false);
+    r.fire(&federated_finding(1)).await;
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "operator panic must bypass the federation gate");
+}
+
+#[tokio::test]
+async fn fail_closed_never_refuses_non_destructive_actions_for_federated_findings() {
+    // Even fail-closed, a federated finding must still produce its alert/evidence
+    // — notify is never refused.
+    let (a, calls) = action("notify");
+    let r = Arc::new(
+        Responder::new(vec![a], vec!["notify".into()], false).with_act_on_federated(false),
+    );
+    run_findings(r, vec![federated_finding(1)]).await;
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "notify must always fire, even for federated findings");
 }
 
 #[tokio::test]

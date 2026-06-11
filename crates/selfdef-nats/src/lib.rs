@@ -514,7 +514,7 @@ fn republish_inbound(
     federated_inbound: Option<&AtomicU64>,
 ) {
     match decode_event(payload) {
-        Ok(event) => {
+        Ok(mut event) => {
             if event.host_tag == local_host_tag {
                 debug!(id = %event.id, "nats inbound: dropping self-echo");
                 return;
@@ -522,6 +522,12 @@ fn republish_inbound(
             if let Some(c) = federated_inbound {
                 c.fetch_add(1, Ordering::Relaxed);
             }
+            // Local-only provenance taint: this event came from another host, so
+            // mark it federated before it enters the local bus. The correlator
+            // propagates this onto derived findings and the responder applies the
+            // federation trust-boundary policy (F-2026-111). `federated` is
+            // `#[serde(skip)]`, so a peer can't preset it — it's stamped here.
+            event.federated = true;
             publisher.publish_lossy(event);
         }
         Err(e) => warn!(error = %e, len = payload.len(), "nats inbound: decode failed"),
@@ -626,6 +632,10 @@ mod tests {
             .expect("bus recv ok")
             .expect("federated event must be republished locally");
         assert_eq!(got.host_tag, "other-host");
+        assert!(
+            got.federated,
+            "an inbound event from another host must be tainted federated-origin"
+        );
     }
 
     #[test]

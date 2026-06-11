@@ -82,6 +82,17 @@ pub struct Event {
     /// Original collector payload, preserved for forensics. Always carry it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw: Option<serde_json::Value>,
+
+    /// Local provenance marker: `true` when this event entered THIS daemon from
+    /// another host via the NATS bridge (set at inbound republish), rather than
+    /// from a local collector. It is a per-receiving-daemon view, never part of
+    /// the wire form — `#[serde(skip)]` keeps it off the NATS payload and out of
+    /// the forensic store, and it defaults to `false` on decode. The correlator
+    /// propagates it onto derived findings so the responder can apply a
+    /// federation trust-boundary policy (see F-2026-111) without the local
+    /// host_tag laundering the remote origin.
+    #[serde(skip)]
+    pub federated: bool,
 }
 
 impl Event {
@@ -118,6 +129,7 @@ impl Event {
             attack: Vec::new(),
             metadata: Metadata::now(sequence),
             raw: None,
+            federated: false,
         }
     }
 
@@ -178,6 +190,15 @@ impl Event {
     #[must_use]
     pub fn with_raw(mut self, raw: serde_json::Value) -> Self {
         self.raw = Some(raw);
+        self
+    }
+
+    /// Mark this event as federated-origin (received from another host via the
+    /// NATS bridge). Set at inbound republish; propagated onto correlator
+    /// findings. See the `federated` field. Builder-style.
+    #[must_use]
+    pub fn with_federated(mut self, federated: bool) -> Self {
+        self.federated = federated;
         self
     }
 
@@ -298,6 +319,23 @@ mod tests {
     fn validate_accepts_normal_event() {
         let e = make_auth_failure();
         assert!(e.validate().is_ok());
+    }
+
+    #[test]
+    fn federated_marker_defaults_false_is_skipped_from_wire_and_builds() {
+        let e = make_auth_failure();
+        assert!(!e.federated, "events are local-origin by default");
+        // The marker is a local-only provenance view: it must NOT appear on the
+        // wire/store form, and an event decoded from the wire is local (false).
+        let v = serde_json::to_value(&e).unwrap();
+        assert!(
+            v.get("federated").is_none(),
+            "federated must be #[serde(skip)] — never serialized"
+        );
+        let back: Event = serde_json::from_value(v).unwrap();
+        assert!(!back.federated, "decode defaults the marker to false (local)");
+        // Builder sets it (used by the NATS inbound republish path).
+        assert!(e.with_federated(true).federated);
     }
 
     #[test]

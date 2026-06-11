@@ -437,6 +437,7 @@ async fn main() -> Result<()> {
     let correlator_lag = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let responder_suppressed = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let responder_ratecap_tripped = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let responder_federated_refused = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let nats_federated_inbound = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
     // The shared Metrics handle. Constructed here (before the retention +
@@ -476,6 +477,8 @@ async fn main() -> Result<()> {
         m.set_responder_ratecap_tripped_source(Arc::clone(&responder_ratecap_tripped));
         // Cross-host federated-event ingress into the local response path.
         m.set_nats_federated_inbound_source(Arc::clone(&nats_federated_inbound));
+        // Destructive actions refused by the fail-closed federation boundary.
+        m.set_responder_federated_refused_source(Arc::clone(&responder_federated_refused));
     }
 
     // SD-R retention sweep (SDD-081): enforce StoreConfig::hot_retention_days.
@@ -688,7 +691,12 @@ async fn main() -> Result<()> {
         )
         .with_lag_counter(Arc::clone(&responder_lag))
         .with_suppressed_counter(Arc::clone(&responder_suppressed))
-        .with_ratecap_counter(Arc::clone(&responder_ratecap_tripped));
+        .with_ratecap_counter(Arc::clone(&responder_ratecap_tripped))
+        // Federation trust boundary (F-2026-111): default true preserves prior
+        // cross-host-response behavior; `[responder].act_on_federated = false`
+        // fails closed on remote-driven destructive triggers.
+        .with_act_on_federated(cfg.responder.act_on_federated)
+        .with_federated_refused_counter(Arc::clone(&responder_federated_refused));
         // Opt-in destructive-action burst-dedup: suppress a destructive action
         // repeated on the same target within the configured window. Default 0 =
         // disabled (no behavior change). Notify/snapshot/forensic never deduped.
@@ -708,6 +716,14 @@ async fn main() -> Result<()> {
             info!(
                 cap_per_min = cfg.responder.max_destructive_actions_per_min,
                 "responder destructive-action rate-cap circuit-breaker enabled"
+            );
+        }
+        // Federation trust boundary (F-2026-111). Log only the non-default
+        // (fail-closed) posture so an operator can confirm it's active.
+        if !cfg.responder.act_on_federated {
+            info!(
+                "responder federation boundary FAIL-CLOSED — destructive actions \
+                 refused for federated-origin (NATS-received) findings"
             );
         }
         // Surface allowlisted action names that match no registered action. The

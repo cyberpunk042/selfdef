@@ -1778,6 +1778,16 @@ pub struct ResponderConfig {
     /// destruction. Notify / snapshot / forensic actions are never capped.
     /// Default `0` = disabled (no cap); operators opt in.
     pub max_destructive_actions_per_min: u32,
+    /// Federation trust boundary (F-2026-111). When `true` (default), findings
+    /// triggered by events received from OTHER hosts via the NATS bridge drive
+    /// destructive response exactly like local findings — the prior behavior.
+    /// Set `false` to FAIL CLOSED: a destructive action (kill / quarantine /
+    /// isolate / egress-lockdown) is refused for a federated-origin finding,
+    /// since a compromised broker or peer could forge a finding naming a local
+    /// pid/user. Recommended `false` for any deployment NOT relying on
+    /// cross-host response. Alerts / evidence / escalation are never refused, and
+    /// operator-commanded `selfdefctl` actions always act.
+    pub act_on_federated: bool,
     /// Directory under which `snapshot_proc` writes per-event dumps.
     pub snapshot_dir: PathBuf,
     /// Script invoked by `lockdown_egress` action.
@@ -1805,6 +1815,9 @@ impl Default for ResponderConfig {
             dedup_window_secs: 0,
             // Disabled by default — no destructive-action rate cap.
             max_destructive_actions_per_min: 0,
+            // Default `true` preserves prior cross-host-response behavior; set
+            // `false` to fail closed on federated-origin destructive triggers.
+            act_on_federated: true,
             snapshot_dir: PathBuf::from("/var/lib/selfdef/snapshots"),
             lockdown_script: PathBuf::from("/usr/local/sbin/selfdef-lockdown.sh"),
             revoke_session_script: PathBuf::from("/usr/local/sbin/selfdef-revoke-session.sh"),
