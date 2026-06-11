@@ -1,3 +1,6 @@
+//! Destructive effector backend — unsafe forbidden (F-2026-101): a
+//! future `unsafe` in a host-mutating applier must be compiler-rejected.
+#![forbid(unsafe_code)]
 //! SDD-069 MS1 — MFA-grant revocation backend trait + InMemoryBackend.
 //!
 //! Fifth IPS enforcement primitive — extends the quartet

@@ -1,3 +1,6 @@
+//! Destructive effector backend — unsafe forbidden (F-2026-101): a
+//! future `unsafe` in a host-mutating applier must be compiler-rejected.
+#![forbid(unsafe_code)]
 //! SDD-071 MS1 — mount-binding unbind backend trait + InMemoryBackend.
 //!
 //! Seventh IPS enforcement primitive — extends hexet (SDD-065..070)

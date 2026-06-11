@@ -1,3 +1,6 @@
+//! Destructive effector backend — unsafe forbidden (F-2026-101): a
+//! future `unsafe` in a host-mutating applier must be compiler-rejected.
+#![forbid(unsafe_code)]
 //! SDD-074 MS1 — process-env scrub backend trait + InMemoryBackend.
 //!
 //! Tenth IPS enforcement primitive — extends nonet (SDD-065..073)

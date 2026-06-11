@@ -1,3 +1,6 @@
+//! Destructive effector backend — unsafe forbidden (F-2026-101): a
+//! future `unsafe` in a host-mutating applier must be compiler-rejected.
+#![forbid(unsafe_code)]
 //! SDD-068 MS1 — API/web-token revocation backend trait + InMemoryBackend.
 //!
 //! Fourth enforcement primitive in the IPS quartet (SDD-065

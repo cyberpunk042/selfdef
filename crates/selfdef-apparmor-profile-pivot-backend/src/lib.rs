@@ -1,3 +1,6 @@
+//! Destructive effector backend — unsafe forbidden (F-2026-101): a
+//! future `unsafe` in a host-mutating applier must be compiler-rejected.
+#![forbid(unsafe_code)]
 //! SDD-077 MS1 — AppArmor live profile-pivot backend trait + InMemoryBackend + FsBackend.
 //!
 //! Thirteenth IPS enforcement primitive — extends duodectet

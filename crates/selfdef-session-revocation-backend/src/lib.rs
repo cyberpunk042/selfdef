@@ -1,3 +1,6 @@
+//! Destructive effector backend — unsafe forbidden (F-2026-101): a
+//! future `unsafe` in a host-mutating applier must be compiler-rejected.
+#![forbid(unsafe_code)]
 //! SDD-067 MS1 — session-revocation backend trait + InMemoryBackend.
 //!
 //! Third enforcement primitive in the SDD-065/066/067 IPS trio.

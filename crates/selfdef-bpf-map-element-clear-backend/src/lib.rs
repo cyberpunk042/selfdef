@@ -1,3 +1,6 @@
+//! Destructive effector backend — unsafe forbidden (F-2026-101): a
+//! future `unsafe` in a host-mutating applier must be compiler-rejected.
+#![forbid(unsafe_code)]
 //! SDD-078 MS1 — eBPF map element clear backend trait + InMemoryBackend + FsBackend.
 //!
 //! Fourteenth IPS enforcement primitive — extends tridectet

@@ -1,3 +1,6 @@
+//! Destructive effector backend — unsafe forbidden (F-2026-101): a
+//! future `unsafe` in a host-mutating applier must be compiler-rejected.
+#![forbid(unsafe_code)]
 //! SDD-066 MS1 — process-quarantine backend trait + InMemoryBackend.
 //!
 //! The contract: a `ProcessQuarantineBackend` accepts a
