@@ -249,7 +249,14 @@ impl Effector for RealEffector {
             .write(true)
             .open(console)
             .map_err(|e| format!("open {}: {e}", console.display()))?;
-        writeln!(f, "\x07{message}").map_err(|e| format!("write: {e}"))?;
+        // Terminal-escape-injection guard (F-2026-124): `message` embeds
+        // attacker-influenceable event fields (binary_path, cgroup, event_id),
+        // and this writes to /dev/console — raw ANSI/control sequences there
+        // could clear the screen, spoof the guardian's alert, or hide it. Strip
+        // every control character from the message (the only intended control is
+        // the `\x07` BEL prefix this function adds itself) before writing.
+        let safe: String = message.chars().filter(|c| !c.is_control()).collect();
+        writeln!(f, "\x07{safe}").map_err(|e| format!("write: {e}"))?;
         Ok(())
     }
 }
@@ -876,6 +883,31 @@ mod tests {
         let log = dir.path().join("nested/deeply/a.log");
         RealEffector.append_audit_log(&log, "x").unwrap();
         assert!(log.exists());
+    }
+
+    #[test]
+    fn real_effector_console_alert_strips_terminal_escapes() {
+        // F-2026-124: attacker-influenced event fields flow into the console
+        // message; ANSI/control sequences must be stripped before reaching
+        // /dev/console (here a tempfile), leaving only the intended BEL prefix.
+        let dir = TempDir::new().unwrap();
+        let console = dir.path().join("console");
+        std::fs::File::create(&console).unwrap(); // console_alert opens, doesn't create
+        RealEffector
+            .console_alert(&console, "[Guardian] binary=\x1b[2J\x1b[Hspoofed\x07\r evt=1")
+            .unwrap();
+        let written = fs::read_to_string(&console).unwrap();
+        // Only the leading BEL this function adds + a trailing newline are control
+        // chars; the injected ESC / BEL / CR from the message are gone.
+        assert!(written.starts_with('\x07'), "BEL prefix kept: {written:?}");
+        assert!(!written.contains('\x1b'), "ESC must be stripped: {written:?}");
+        assert!(!written.contains('\r'), "CR must be stripped: {written:?}");
+        assert_eq!(
+            written.matches('\x07').count(),
+            1,
+            "only the prefix BEL, not the injected one: {written:?}"
+        );
+        assert!(written.contains("spoofed"), "printable text preserved");
     }
 
     #[test]
