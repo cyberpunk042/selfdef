@@ -6,6 +6,43 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed / Improved — responder decision-discipline hardening + federation observability (2026-06-11)
+
+Correctness + observability pass over the wired responder /
+circuit-breaker / NATS surface (findings ledger F-2026-112..114 +
+F-2026-111 observability step):
+
+  - **Failed destructive action now retries** (F-2026-112). The
+    burst-dedup gate recorded its `(action, target)` entry before
+    executing, so a destructive action that FAILED or timed out
+    (e.g. `kill_pid` losing the race) was dedup-suppressed on the
+    next finding — the target survived. The dedup record is now
+    committed only on success; the rate-cap (counting attempts)
+    still bounds any hammering.
+  - **Complete destructive-action classification** (F-2026-113).
+    Three built effectors (`kernel_keyring_eviction`,
+    `apparmor_profile_pivot`, `bpf_map_element_clear`) were absent
+    from the circuit-breaker's destructiveness list and would have
+    escaped both gates if wired. Added them + an anti-drift test
+    enumerating all 21 action names.
+  - **Circuit-breaker alert no longer cries wolf** (F-2026-114).
+    `SelfdefResponderCircuitBreakerTripped` fired on routine
+    per-target dedup, not just genuine floods. Split out
+    `selfdef_responder_ratecap_tripped_total` (rate-cap trips only)
+    and repointed the alert to it; the aggregate
+    `selfdef_responder_suppressed_destructive_total` is retained
+    for dashboards.
+  - **Cross-host federation ingress is now observable** (F-2026-111
+    step). Added `selfdef_nats_inbound_federated_events_total` —
+    the count of events from other hosts entering the local
+    correlator → responder path. Refactored the duplicated core +
+    JetStream inbound decode/echo-drop/publish into one tested
+    `republish_inbound` helper. No behavior change; makes the
+    federation trust boundary measurable.
+  - **Auth-path regression guard.** Locked the bearer-token
+    `token_eq` constant-time comparison + its prefix-token-bypass
+    guard with unit tests (previously untested).
+
 ### Improved — 12 small L2 suites strengthened with delta-detection + observability + advisory-exit invariants (2026-06-06)
 
 Follows the 100% L2 module coverage pass. The 12 smallest L2

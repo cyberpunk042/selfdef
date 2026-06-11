@@ -203,6 +203,30 @@ findings below the floor by the total tells you how much the floor
 is suppressing, so a too-high floor silently swallowing real
 detections is visible rather than invisible.
 
+If you enable the responder's destructive-action circuit-breakers
+(`responder.dedup_window_secs` and/or
+`responder.max_destructive_actions_per_min` — both default off), two
+series make the suppression observable. `selfdef_responder_suppressed_destructive_total`
+is the aggregate: every destructive action skipped by EITHER gate —
+routine per-target burst-dedup (a duplicate finding on the same
+pid/IP/user) OR the global rate-cap. `selfdef_responder_ratecap_tripped_total`
+counts ONLY genuine rate-cap trips (the global flood breaker hitting
+its ceiling), and is what the `SelfdefResponderCircuitBreakerTripped`
+alert keys on — so a single benign duplicate suppression does not
+raise the alert, while a real destructive-action flood does. Notify /
+snapshot / forensic / escalation actions are never suppressed, so
+every alert and evidence artifact is always delivered.
+
+If you bridge events between hosts over NATS (`[bus.nats]`), watch
+`selfdef_nats_inbound_federated_events_total`: the count of events
+received from OTHER hosts and republished onto the local bus — i.e.
+cross-host events entering this daemon's correlator → responder path.
+A non-zero, growing series means remote events can drive local
+detection (and, if you have auto-response configured, local
+destructive actions). Confirm it tracks only the peers you trust;
+an unexpected rate is the first sign of a misconfigured subject
+prefix or an untrusted publisher on the broker.
+
 ### SSE live tail
 
 The `/events/stream` endpoint subscribes to a fresh bus subscriber per
