@@ -96,9 +96,13 @@ surfaces the shipped modules introduce.
 - Notification *failures* themselves are events — silent silence is suspicious.
 
 ### Tamper detection
-- Self-watchdog: daemon publishes a heartbeat; absence of heartbeat for
-  > 60s is itself logged to journal and (via fallback path) attempts to
-  notify.
+- Self-watchdog: the daemon emits `sd_notify WATCHDOG=1` every 30s
+  (run_heartbeat); the unit's `WatchdogSec=60` (a 2-beat window) makes
+  systemd detect a HUNG daemon — alive but not beating, which
+  `Restart=on-failure` alone can't catch — at the deadline, log the
+  watchdog timeout to the journal, and restart it. Operator notification on
+  that restart is an optional `OnFailure=` drop-in (not shipped by default
+  to avoid a notify-storm under a crash-loop).
 - AIDE baseline includes the daemon binary, config, and rules.
 - Tetragon TracingPolicy specifically watches `/usr/bin/selfdefd`,
   `/etc/selfdef/`, `/var/lib/selfdef/` for modification by anything that
