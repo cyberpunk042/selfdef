@@ -731,6 +731,45 @@ mod fingerprint_tests {
 }
 
 #[cfg(test)]
+mod token_eq_tests {
+    //! Locks the bearer-token comparison's security behavior. `token_eq` is
+    //! constant-time (XOR-fold, no early return) BY DESIGN — a refactor back to
+    //! `presented == expected` would silently reintroduce a byte-by-byte timing
+    //! leak. Most importantly, the length pre-check prevents a PREFIX-TOKEN AUTH
+    //! BYPASS: the fold uses `zip`, which iterates only `min(len)` pairs, so
+    //! without the length check a short presented token that is a prefix of the
+    //! real token would authenticate. These tests fail if either guard is lost.
+    use super::token_eq;
+
+    #[test]
+    fn equal_tokens_match() {
+        assert!(token_eq("s3cret-control-token", "s3cret-control-token"));
+        assert!(token_eq("", ""));
+    }
+
+    #[test]
+    fn single_byte_difference_anywhere_is_rejected() {
+        // First, middle, and last byte mismatches must all reject — documents
+        // that the compare does not early-return on the first differing byte.
+        assert!(!token_eq("Xabcdefabcdef", "aabcdefabcdef"), "first-byte diff");
+        assert!(!token_eq("abcdefXabcdef", "abcdefaabcdef"), "middle-byte diff");
+        assert!(!token_eq("abcdefabcdefX", "abcdefabcdefa"), "last-byte diff");
+    }
+
+    #[test]
+    fn length_mismatch_is_rejected_no_prefix_bypass() {
+        // The load-bearing auth-bypass guard: a presented token that is a prefix
+        // of (or extends) the real token must NOT authenticate, even though the
+        // overlapping bytes all match. Without the explicit length check the
+        // zip-fold would return true here.
+        assert!(!token_eq("abc", "abcdef"), "presented is a prefix of expected");
+        assert!(!token_eq("abcdef", "abc"), "presented extends expected");
+        assert!(!token_eq("", "a"), "empty presented vs non-empty");
+        assert!(!token_eq("a", ""), "non-empty presented vs empty");
+    }
+}
+
+#[cfg(test)]
 mod token_reload_tests {
     //! SDD-004 F-2026-023 follow-up: TokenReloader covers
     //! atomic swap, error handling on bad files, and the
