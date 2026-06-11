@@ -9,20 +9,23 @@
 //!
 //! ## Auth boundary
 //!
-//! For this milestone, *any* authenticated request can call control
-//! verbs — there's no separate `read` vs `control` capability split.
-//! The threat model:
+//! Control verbs require the **Full** capability and reject Read-only
+//! callers with `403 Forbidden` — enforced by the `RequireControl`
+//! extractor, which every mutating handler in this module takes as its
+//! first argument (`rules_reload`, `panic_fire`, `actions_run`). The
+//! capability is assigned per transport / per token:
 //!
-//! - UNIX socket transport: trusted by filesystem permissions. Anyone
-//!   who can write to the socket already has equivalent of `sudo
-//!   systemctl reload selfdefd` via the unit file's `ExecReload`, so a
-//!   `/rules/reload` doesn't widen the attack surface.
-//! - TCP transport: gated by the bearer token in `[api].token_file`.
-//!   Operators who expose the API publicly should put a reverse proxy
-//!   in front with TLS + audit logging.
-//!
-//! Per-token capabilities can be added as a 2-line config addition
-//! later without changing the route layout.
+//! - UNIX socket transport: granted `Capability::Full` unconditionally —
+//!   trusted by filesystem permissions. Anyone who can write to the socket
+//!   already has the equivalent of `sudo systemctl reload selfdefd` via the
+//!   unit file's `ExecReload`, so a `/rules/reload` doesn't widen the
+//!   attack surface.
+//! - TCP transport: the bearer token in `[api].token_file` decides the
+//!   grant — the `control` token earns `Capability::Full`; the `read`
+//!   token earns `Capability::Read`, accepted on read/GET verbs but
+//!   returning `403` on every control verb above. Operators who expose the
+//!   API publicly should still put a reverse proxy in front with TLS +
+//!   audit logging.
 
 use axum::Json;
 use axum::extract::{FromRequestParts, Path, State};
