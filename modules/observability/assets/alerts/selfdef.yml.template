@@ -327,3 +327,24 @@ groups:
           summary: "Tetragon BPF map errors on {{ $labels.instance }} ({{ $value }} in 10m) — kernel detection source degrading"
           description: "Tetragon reported {{ $value }} BPF map errors in the last 10m (tetragon_map_errors_total rising) — the in-kernel detection layer is under pressure (process-cache map full / map op failures). Under this pressure Tetragon can silently DROP or mishandle exec/file/socket events before selfdef's collector receives them (the Tetragon-socket-dropout gotcha), so detection degrades with no signal on selfdef's own event bus. This is the external analog of the bus-lag alerts: the source itself is lossy. Investigate Tetragon resource limits (process-cache size, ringbuf/map sizing) and event volume; correlate with tetragon_events_total flattening. See runbook."
           runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/tetragon-map-errors.md"
+
+      # The RESPONDER over-reacting — the decision-discipline circuit-breakers
+      # firing. selfdef_responder_suppressed_destructive_total rises when the
+      # burst-dedup or rate-cap gate suppresses a destructive action (kill /
+      # quarantine / block / isolate): the daemon was about to re-fire the same
+      # action on the same target, OR a destructive-action FLOOD hit the
+      # per-minute cap. Suppression is the SAFE outcome (it stops the IPS
+      # hammering one target or going into mass destruction), so this is a
+      # proactive warn, not a page — but a sustained non-zero rate means an
+      # upstream cause: an event burst, a correlation storm, a poisoned/spoofed
+      # event stream, or a mis-tuned window. Series only present when a
+      # deployment has enabled [responder].dedup_window_secs or
+      # max_destructive_actions_per_min.
+      - alert: SelfdefResponderCircuitBreakerTripped
+        expr: increase(selfdef_responder_suppressed_destructive_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "selfdef responder circuit-breaker suppressed {{ $value }} destructive actions in 10m on {{ $labels.instance }}"
+          description: "selfdef_responder_suppressed_destructive_total rose by {{ $value }} in the last 10m — the responder's burst-dedup and/or rate-cap circuit-breaker suppressed destructive actions (kill/quarantine/block/isolate). Suppression is the SAFE outcome (it prevents the IPS hammering the same target, or going into mass destruction during a flood), but a sustained non-zero rate signals an upstream cause worth investigating: an event burst, a correlation storm, a poisoned/spoofed event stream, or a mis-tuned [responder].dedup_window_secs / max_destructive_actions_per_min. Correlate with selfdef_findings_total and the bus-lag series; check `journalctl -u selfdefd` for the 'rate cap reached (circuit breaker)' / 'suppressed duplicate destructive action' lines."
