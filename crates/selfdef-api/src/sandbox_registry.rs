@@ -60,8 +60,13 @@ pub(crate) struct ReleaseRequest {
 }
 
 /// `GET /v1/sandboxes/snapshot` — current resident snapshot.
+///
+/// Applies presentation-time TTL expiry (in-memory, not persisted) so this
+/// surface never reports a past-TTL allocation as running, matching the
+/// sovereign-os mirror's hygiene (`mirror_export_loop::publish_sandboxes`).
 pub(crate) async fn snapshot() -> Result<Json<SandboxMirrorSnapshot>, (StatusCode, String)> {
-    let reg = load(&state_path())?;
+    let mut reg = load(&state_path())?;
+    let _ = reg.expire_due(OffsetDateTime::now_utc());
     Ok(Json(reg.snapshot().clone()))
 }
 

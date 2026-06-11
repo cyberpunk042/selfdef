@@ -65,8 +65,13 @@ pub(crate) struct RevokeRequest {
 }
 
 /// `GET /v1/capability-tokens/snapshot` — current resident snapshot.
+///
+/// Applies presentation-time TTL expiry (in-memory, not persisted) so this
+/// surface never reports a past-TTL token as Active, matching the sovereign-os
+/// mirror's hygiene (`mirror_export_loop::publish_capability_tokens`).
 pub(crate) async fn snapshot() -> Result<Json<CapabilityMirrorSnapshot>, (StatusCode, String)> {
-    let reg = load(&state_path())?;
+    let mut reg = load(&state_path())?;
+    let _ = reg.expire_due(OffsetDateTime::now_utc());
     Ok(Json(reg.snapshot().clone()))
 }
 
