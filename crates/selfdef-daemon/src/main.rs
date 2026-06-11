@@ -671,12 +671,24 @@ async fn main() -> Result<()> {
         )),
     ];
     let responder = {
-        let base = Responder::new(
+        let mut base = Responder::new(
             actions,
             cfg.responder.allowed_actions.clone(),
             cfg.responder.dry_run,
         )
         .with_lag_counter(Arc::clone(&responder_lag));
+        // Opt-in destructive-action burst-dedup: suppress a destructive action
+        // repeated on the same target within the configured window. Default 0 =
+        // disabled (no behavior change). Notify/snapshot/forensic never deduped.
+        if cfg.responder.dedup_window_secs > 0 {
+            base = base.with_dedup_window(std::time::Duration::from_secs(
+                cfg.responder.dedup_window_secs,
+            ));
+            info!(
+                window_secs = cfg.responder.dedup_window_secs,
+                "responder destructive-action burst-dedup enabled"
+            );
+        }
         // Surface allowlisted action names that match no registered action. The
         // dispatch loop only runs registered+allowed actions, so such an entry is
         // inert — almost always a typo (e.g. `kil_pid`) that silently means the

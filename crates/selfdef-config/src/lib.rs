@@ -1762,6 +1762,14 @@ pub struct ResponderConfig {
     /// (`selfdefctl panic`, the authenticated `/actions/{name}/run` API) bypass
     /// the floor by design.
     pub min_severity: String,
+    /// Burst-dedup window in SECONDS for destructive actions (decision-discipline).
+    /// When > 0, a destructive action (kill / quarantine / block / isolate / …)
+    /// repeated on the same target (pid|src-ip|user) within this many seconds is
+    /// suppressed — a guard against a finding burst hammering the same action on
+    /// the same target. Notify / snapshot / forensic actions are never deduped
+    /// (every alert + evidence capture is kept). Default `0` = disabled (exact
+    /// pre-dedup behavior); operators opt in.
+    pub dedup_window_secs: u64,
     /// Directory under which `snapshot_proc` writes per-event dumps.
     pub snapshot_dir: PathBuf,
     /// Script invoked by `lockdown_egress` action.
@@ -1785,6 +1793,8 @@ impl Default for ResponderConfig {
             // No floor by default: matches the pre-F-2026-092 behavior where
             // every finding is processed. Operators opt into a higher floor.
             min_severity: "none".to_owned(),
+            // Disabled by default — no behavior change vs the pre-dedup responder.
+            dedup_window_secs: 0,
             snapshot_dir: PathBuf::from("/var/lib/selfdef/snapshots"),
             lockdown_script: PathBuf::from("/usr/local/sbin/selfdef-lockdown.sh"),
             revoke_session_script: PathBuf::from("/usr/local/sbin/selfdef-revoke-session.sh"),
