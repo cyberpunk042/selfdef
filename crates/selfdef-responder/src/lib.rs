@@ -90,6 +90,19 @@ pub struct Responder {
     /// `.await`. Pruned to in-window entries on each check, so it can't grow
     /// unbounded.
     recent_fires: Mutex<HashMap<String, Instant>>,
+    /// Circuit-breaker: max DESTRUCTIVE actions dispatched per rolling 60s
+    /// (decision-discipline, opt-in). When > 0, once this many destructive
+    /// actions have fired in the last minute, further destructive actions are
+    /// suppressed until the window drains — a guard against a poisoned / noisy
+    /// event FLOOD (many distinct targets, which dedup can't catch) driving the
+    /// IPS into mass destruction. Defaults to `0` (disabled). Enable with
+    /// [`Responder::with_destructive_cap_per_min`]. Like dedup, only destructive
+    /// actions count; notify/snapshot/forensic are never capped.
+    destructive_cap_per_min: u32,
+    /// Timestamps of recent destructive fires, backing the rate cap above.
+    /// Synchronously locked (prune + count + push), never across an `.await`;
+    /// pruned to the last 60s so it stays bounded.
+    destructive_fire_log: Mutex<Vec<Instant>>,
 }
 
 /// Default per-action execution ceiling. Generous — a forensics bundle
@@ -180,6 +193,8 @@ impl Responder {
             // responder. Opt in with `with_dedup_window`.
             dedup_window: Duration::ZERO,
             recent_fires: Mutex::new(HashMap::new()),
+            destructive_cap_per_min: 0,
+            destructive_fire_log: Mutex::new(Vec::new()),
         }
     }
 
@@ -190,6 +205,18 @@ impl Responder {
     #[must_use]
     pub fn with_dedup_window(mut self, window: Duration) -> Self {
         self.dedup_window = window;
+        self
+    }
+
+    /// Enable the destructive-action rate-cap circuit-breaker: at most `cap`
+    /// destructive actions per rolling 60s (opt-in; `0` = disabled, the default).
+    /// Once `cap` destructive actions have fired in the last minute, further
+    /// destructive actions are suppressed until the window drains — a guard
+    /// against an event FLOOD (many distinct targets) driving mass destruction.
+    /// Notify/snapshot/forensic actions are never capped. Builder-style.
+    #[must_use]
+    pub fn with_destructive_cap_per_min(mut self, cap: u32) -> Self {
+        self.destructive_cap_per_min = cap;
         self
     }
 
@@ -370,6 +397,31 @@ impl Responder {
                 }
                 recent.insert(key, now);
                 drop(recent);
+            }
+            // Rate-cap circuit-breaker (opt-in; disabled when cap == 0). Once
+            // `cap` destructive actions have fired in the last 60s, suppress
+            // further destructive actions until the window drains — catches a
+            // multi-target FLOOD that per-target dedup can't. Lock held only for
+            // the synchronous prune + count + push, never across the `.await`.
+            if self.destructive_cap_per_min > 0 && is_destructive_action(name) {
+                let now = Instant::now();
+                let window = Duration::from_secs(60);
+                let mut log = self
+                    .destructive_fire_log
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                log.retain(|t| now.duration_since(*t) < window);
+                if log.len() as u32 >= self.destructive_cap_per_min {
+                    warn!(
+                        action = name,
+                        cap = self.destructive_cap_per_min,
+                        "destructive-action rate cap reached (circuit breaker) — \
+                         suppressing further destructive actions until the 60s window drains"
+                    );
+                    continue;
+                }
+                log.push(now);
+                drop(log);
             }
             // Per-action deadline: actions run SEQUENTIALLY and this loop
             // sits between the bus and the next finding — one wedged

@@ -689,6 +689,15 @@ async fn main() -> Result<()> {
                 "responder destructive-action burst-dedup enabled"
             );
         }
+        // Opt-in destructive-action rate-cap circuit-breaker: at most N
+        // destructive actions per rolling 60s. Default 0 = disabled (no cap).
+        if cfg.responder.max_destructive_actions_per_min > 0 {
+            base = base.with_destructive_cap_per_min(cfg.responder.max_destructive_actions_per_min);
+            info!(
+                cap_per_min = cfg.responder.max_destructive_actions_per_min,
+                "responder destructive-action rate-cap circuit-breaker enabled"
+            );
+        }
         // Surface allowlisted action names that match no registered action. The
         // dispatch loop only runs registered+allowed actions, so such an entry is
         // inert — almost always a typo (e.g. `kil_pid`) that silently means the

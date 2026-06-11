@@ -90,3 +90,44 @@ async fn dedup_never_suppresses_non_destructive_actions() {
         "notify must never be deduped — every alert is delivered"
     );
 }
+
+#[tokio::test]
+async fn rate_cap_suppresses_destructive_flood_beyond_cap() {
+    // cap=2: with dedup OFF, three destructive fires — first two run, the
+    // third trips the circuit breaker (catches a multi-target flood).
+    let calls = Arc::new(AtomicUsize::new(0));
+    let action: Arc<dyn Action> = Arc::new(CountingAction {
+        name: "kill_pid",
+        calls: calls.clone(),
+    });
+    let r = Responder::new(vec![action], vec!["kill_pid".into()], false)
+        .with_destructive_cap_per_min(2);
+    r.fire(&finding(1)).await;
+    r.fire(&finding(2)).await;
+    r.fire(&finding(3)).await;
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        2,
+        "destructive actions beyond the per-minute cap must be suppressed"
+    );
+}
+
+#[tokio::test]
+async fn rate_cap_never_caps_non_destructive_actions() {
+    // notify is not destructive — never circuit-broken, every alert delivered.
+    let calls = Arc::new(AtomicUsize::new(0));
+    let action: Arc<dyn Action> = Arc::new(CountingAction {
+        name: "notify",
+        calls: calls.clone(),
+    });
+    let r = Responder::new(vec![action], vec!["notify".into()], false)
+        .with_destructive_cap_per_min(1);
+    r.fire(&finding(1)).await;
+    r.fire(&finding(2)).await;
+    r.fire(&finding(3)).await;
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        3,
+        "notify must never be rate-capped — every alert is delivered"
+    );
+}

@@ -1770,6 +1770,14 @@ pub struct ResponderConfig {
     /// (every alert + evidence capture is kept). Default `0` = disabled (exact
     /// pre-dedup behavior); operators opt in.
     pub dedup_window_secs: u64,
+    /// Circuit-breaker: max DESTRUCTIVE actions dispatched per rolling 60s
+    /// (decision-discipline). When > 0, once this many destructive actions have
+    /// fired in the last minute, further destructive actions are suppressed
+    /// until the window drains — a guard against an event FLOOD (many distinct
+    /// targets, which per-target dedup can't catch) driving the IPS into mass
+    /// destruction. Notify / snapshot / forensic actions are never capped.
+    /// Default `0` = disabled (no cap); operators opt in.
+    pub max_destructive_actions_per_min: u32,
     /// Directory under which `snapshot_proc` writes per-event dumps.
     pub snapshot_dir: PathBuf,
     /// Script invoked by `lockdown_egress` action.
@@ -1795,6 +1803,8 @@ impl Default for ResponderConfig {
             min_severity: "none".to_owned(),
             // Disabled by default — no behavior change vs the pre-dedup responder.
             dedup_window_secs: 0,
+            // Disabled by default — no destructive-action rate cap.
+            max_destructive_actions_per_min: 0,
             snapshot_dir: PathBuf::from("/var/lib/selfdef/snapshots"),
             lockdown_script: PathBuf::from("/usr/local/sbin/selfdef-lockdown.sh"),
             revoke_session_script: PathBuf::from("/usr/local/sbin/selfdef-revoke-session.sh"),
