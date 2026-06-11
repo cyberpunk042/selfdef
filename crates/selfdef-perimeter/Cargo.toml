@@ -22,3 +22,7 @@ selfdef-perimeter-mirror = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# F-2026-095 dual-control tests: generate real minisign keypairs and produce
+# the two kid-bound detached signatures load_signed now verifies. Matches the
+# `minisign` CLI operators sign with; verification uses minisign-verify.
+minisign = "0.9"

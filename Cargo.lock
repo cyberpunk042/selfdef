@@ -5553,6 +5553,7 @@ dependencies = [
 name = "selfdef-perimeter"
 version = "0.1.0"
 dependencies = [
+ "minisign",
  "minisign-verify",
  "selfdef-perimeter-mirror",
  "serde",

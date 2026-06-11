@@ -1108,11 +1108,14 @@ mod ms047 {
         Ok(0)
     }
 
-    /// Install a new MS003-signed allowlist-extension manifest. The
-    /// `signed` argument is the path to the `.json` manifest; its
-    /// `.minisig` sibling must exist. The runtime crate enforces:
-    /// MS003 multi-sig + TTL ≤ 30 days + binary-path validation +
-    /// non-redundancy vs the verbatim sain-01 §6 default allowlist.
+    /// Install a new dual-control-signed allowlist-extension manifest. The
+    /// `signed` argument is the path to the `.json` manifest; its TWO kid-bound
+    /// detached signatures (`<manifest>.json.<signer_kid>.minisig` and
+    /// `<manifest>.json.<auditor_kid>.minisig`) must exist. The runtime crate
+    /// enforces (F-2026-095): genuine two-person control — each kid's own
+    /// trust-root key must independently sign — plus TTL ≤ 30 days, binary-path
+    /// validation, and non-redundancy vs the verbatim sain-01 §6 default
+    /// allowlist.
     pub(crate) fn run_extend(signed: &Path, json: bool) -> Result<i32> {
         let now = now_ms();
         let manifest = ExtensionStore::load_signed(signed, &trust_roots_dir(), now)
@@ -1126,9 +1129,28 @@ mod ms047 {
         }
         std::fs::copy(signed, &dest)
             .map_err(|e| anyhow!("copy {} → {}: {e}", signed.display(), dest.display()))?;
-        let sig_src = signed.with_extension("json.minisig");
-        let sig_dest = dest.with_extension("json.minisig");
-        std::fs::copy(&sig_src, &sig_dest).map_err(|e| anyhow!("copy sig: {e}"))?;
+
+        // Copy BOTH kid-bound dual-control signatures. The runtime resolves the
+        // sig name from the installed manifest's filename, which differs from
+        // the source, so re-key src→dest by filename per kid.
+        let src_name = signed
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| anyhow!("source manifest path has no file name"))?;
+        let dest_name = dest
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| anyhow!("dest manifest path has no file name"))?;
+        let src_dir = signed.parent().unwrap_or_else(|| Path::new("."));
+        let dest_dir = dest.parent().unwrap_or_else(|| Path::new("."));
+        let mut sig_dests = Vec::new();
+        for kid in [&manifest.signer_kid, &manifest.auditor_kid] {
+            let sig_src = src_dir.join(format!("{src_name}.{kid}.minisig"));
+            let sig_dest = dest_dir.join(format!("{dest_name}.{kid}.minisig"));
+            std::fs::copy(&sig_src, &sig_dest)
+                .map_err(|e| anyhow!("copy dual-control sig for kid {kid:?}: {e}"))?;
+            sig_dests.push(sig_dest);
+        }
 
         if json {
             println!(
@@ -1139,6 +1161,7 @@ mod ms047 {
                     "binary_paths": manifest.binary_paths,
                     "expires_at_ms": manifest.expires_at_ms,
                     "installed_to": dest,
+                    "signatures": sig_dests,
                 }))?
             );
         } else {
@@ -1151,7 +1174,9 @@ mod ms047 {
             }
             println!("  expires_at_ms: {}", manifest.expires_at_ms);
             println!("  manifest: {}", dest.display());
-            println!("  signature: {}", sig_dest.display());
+            for s in &sig_dests {
+                println!("  signature: {}", s.display());
+            }
             println!("  NOTE: Tetragon will need to reload — `systemctl reload tetragon.service`.");
         }
         Ok(0)
@@ -1165,12 +1190,34 @@ mod ms047 {
             return Err(anyhow!("extension_id is empty"));
         }
         let manifest_path = default_extension_path(extension_id);
-        let sig_path = manifest_path.with_extension("json.minisig");
         let mut removed = Vec::<PathBuf>::new();
-        for p in [&manifest_path, &sig_path] {
-            if p.exists() {
-                std::fs::remove_file(p).map_err(|e| anyhow!("remove {}: {e}", p.display()))?;
-                removed.push(p.clone());
+        if manifest_path.exists() {
+            std::fs::remove_file(&manifest_path)
+                .map_err(|e| anyhow!("remove {}: {e}", manifest_path.display()))?;
+            removed.push(manifest_path.clone());
+        }
+        // Remove ALL detached signatures for this manifest: the F-2026-095
+        // kid-bound `<id>.json.<kid>.minisig` pair AND any legacy single
+        // `<id>.json.minisig` left by an older install — so revoke is clean
+        // across the format change.
+        let manifest_file = format!("{extension_id}.json");
+        let sig_prefix = format!("{manifest_file}.");
+        if let Some(dir) = manifest_path.parent() {
+            if let Ok(rd) = std::fs::read_dir(dir) {
+                let mut sigs: Vec<PathBuf> = rd
+                    .flatten()
+                    .map(|e| e.path())
+                    .filter(|p| {
+                        p.file_name()
+                            .and_then(|s| s.to_str())
+                            .is_some_and(|n| n.starts_with(&sig_prefix) && n.ends_with(".minisig"))
+                    })
+                    .collect();
+                sigs.sort();
+                for p in sigs {
+                    std::fs::remove_file(&p).map_err(|e| anyhow!("remove {}: {e}", p.display()))?;
+                    removed.push(p);
+                }
             }
         }
         if json {

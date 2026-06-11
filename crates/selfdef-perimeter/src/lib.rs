@@ -204,6 +204,21 @@ impl ExtensionManifest {
                 "signer_kid and auditor_kid must be distinct".into(),
             ));
         }
+        // F-2026-095: kids now index trust-root key + detached-signature
+        // FILENAMES (`<kid>.pub`, `<manifest>.json.<kid>.minisig`), so they
+        // MUST be path-safe — a kid like "../../etc/x" would otherwise let a
+        // crafted manifest steer verification at an arbitrary file. Constrain
+        // to `[A-Za-z0-9_-]` (no '.', no '/'): no traversal, no hidden-file.
+        for (label, kid) in [("signer_kid", &self.signer_kid), ("auditor_kid", &self.auditor_kid)] {
+            if !kid
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
+                return Err(PerimeterError::ExtensionInvalid(format!(
+                    "{label} {kid:?} must be [A-Za-z0-9_-] (it indexes key/signature filenames)"
+                )));
+            }
+        }
         if self.expires_at_ms <= self.issued_at_ms {
             return Err(PerimeterError::ExtensionInvalid(
                 "expires_at_ms must be > issued_at_ms".into(),
@@ -292,29 +307,37 @@ impl ExtensionStore {
     }
 
     /// Load a single manifest from disk; validate schema + content;
-    /// verify detached minisign signature against trust roots.
+    /// validate + verify **cryptographic dual-control** signatures.
     ///
-    /// ## Cryptographic guarantee (read before trusting "multi-sig")
+    /// ## Cryptographic guarantee (F-2026-095)
     ///
-    /// Exactly **one** detached signature is verified: `<manifest>.json.minisig`
-    /// against any `.pub` in `trust_roots_dir`. `ExtensionManifest::validate`
-    /// additionally requires `signer_kid` and `auditor_kid` to be present and
-    /// distinct, but those are **recorded metadata covered by the single
-    /// signature — NOT a second, independently-verified co-signature**. So the
-    /// enforced property is "one trusted key signed a manifest that *names* two
-    /// distinct kids", i.e. single-control with an attestation field, not
-    /// cryptographic two-person control: a holder of one trust-root key can set
-    /// both kids freely. See finding **F-2026-095** (`docs/review/99-findings-ledger.md`)
-    /// for the dual-control gap and the A/B decision (add a second
-    /// distinct-signer signature à la `selfdef-threshold-sig-store`, vs. keep
-    /// attested single-sig). Stated here so callers don't read "multi-sig" as
-    /// cryptographic dual-control.
+    /// TWO detached signatures are verified — one per declared kid —
+    /// **each bound to that kid's key**:
+    ///
+    /// - signer: `<manifest>.json.<signer_kid>.minisig` against
+    ///   `<trust_roots_dir>/<signer_kid>.pub`
+    /// - auditor: `<manifest>.json.<auditor_kid>.minisig` against
+    ///   `<trust_roots_dir>/<auditor_kid>.pub`
+    ///
+    /// `validate()` already requires the two kids to be present, distinct, and
+    /// path-safe. So the enforced property is genuine **two-person control**:
+    /// the holder of one trust-root key can no longer forge a manifest and name
+    /// two kids freely — each named kid's *own* key must independently sign the
+    /// manifest. (Replaces the prior single-signature model, which verified one
+    /// sig against *any* trust root and so degraded dual-control to
+    /// single-control; see the finding for the A/B decision — this is option A.)
+    ///
+    /// Migration: a legacy single-`.minisig` manifest no longer loads (no
+    /// kid-named signatures) and is SKIPPED by [`ExtensionStore::load_dir`]
+    /// (fail-closed — its binaries are not allowlisted). Re-sign with both kids'
+    /// keys and place keys at `<kid>.pub`.
     ///
     /// # Errors
     /// Returns `PerimeterError::Io` on read failure,
     /// `PerimeterError::Serde` on parse failure,
     /// `PerimeterError::ExtensionInvalid` on business-rule failure,
-    /// `PerimeterError::Signature` on signature failure.
+    /// `PerimeterError::Signature` on any signature failure (missing sig,
+    /// missing kid key, or a sig that does not verify under its kid's key).
     pub fn load_signed(
         manifest_path: &Path,
         trust_roots_dir: &Path,
@@ -324,15 +347,33 @@ impl ExtensionStore {
         let manifest: ExtensionManifest =
             serde_json::from_slice(&bytes).map_err(|e| PerimeterError::Serde(e.to_string()))?;
         manifest.validate(now_ms)?;
-        let sig_path = manifest_path.with_extension("json.minisig");
-        if !sig_path.exists() {
-            return Err(PerimeterError::Signature(format!(
-                "detached signature not found at {}",
-                sig_path.display()
-            )));
+
+        // Two independent, kid-bound signatures (validate() guarantees the kids
+        // are present, distinct, and path-safe). Both must verify or the
+        // manifest is rejected — no single key can stand in for both.
+        let file_name = manifest_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| PerimeterError::Signature("manifest path has no file name".into()))?;
+        let dir = manifest_path.parent().unwrap_or_else(|| Path::new("."));
+        for kid in [&manifest.signer_kid, &manifest.auditor_kid] {
+            let sig_path = dir.join(format!("{file_name}.{kid}.minisig"));
+            if !sig_path.exists() {
+                return Err(PerimeterError::Signature(format!(
+                    "dual-control signature for kid {kid:?} not found at {}",
+                    sig_path.display()
+                )));
+            }
+            let key_path = trust_roots_dir.join(format!("{kid}.pub"));
+            if !key_path.exists() {
+                return Err(PerimeterError::Signature(format!(
+                    "trust-root key for kid {kid:?} not found at {}",
+                    key_path.display()
+                )));
+            }
+            verify_minisign_with_key(&bytes, &sig_path, &key_path)
+                .map_err(|e| PerimeterError::Signature(format!("kid {kid:?}: {e}")))?;
         }
-        verify_minisign(&bytes, &sig_path, trust_roots_dir)
-            .map_err(|e| PerimeterError::Signature(e.to_string()))?;
         Ok(manifest)
     }
 
@@ -394,54 +435,28 @@ impl ExtensionStore {
     }
 }
 
-/// Verify a detached minisign signature against the trust roots
-/// directory. Returns Ok(()) on success; returns Err with detail on
-/// failure.
+/// Verify a detached minisign signature against ONE specific trust-root key
+/// (the key bound to a kid, at `<trust_roots_dir>/<kid>.pub`). Unlike the prior
+/// try-any-key approach (F-2026-095), a signature must verify under the named
+/// kid's own key — which is what makes the two kid-bound signatures genuine
+/// two-person control rather than two attestations under a single key.
 ///
 /// # Errors
-/// Returns an error if no public key in `trust_roots_dir` validates
-/// the signature, OR if the signature/public-key files are malformed.
-fn verify_minisign(payload: &[u8], sig_path: &Path, trust_roots_dir: &Path) -> Result<(), String> {
+/// Returns an error if the signature/public-key files are malformed, or if the
+/// signature does not verify under `key_path`.
+fn verify_minisign_with_key(payload: &[u8], sig_path: &Path, key_path: &Path) -> Result<(), String> {
     use minisign_verify::{PublicKey, Signature};
 
     let sig_bytes = fs::read(sig_path).map_err(|e| format!("read sig: {e}"))?;
     let sig_str = std::str::from_utf8(&sig_bytes).map_err(|e| format!("sig utf8: {e}"))?;
     let signature = Signature::decode(sig_str).map_err(|e| format!("decode sig: {e}"))?;
 
-    if !trust_roots_dir.exists() {
-        return Err(format!(
-            "trust-roots dir missing at {}",
-            trust_roots_dir.display()
-        ));
-    }
-    let mut tried = 0;
-    for dirent in fs::read_dir(trust_roots_dir).map_err(|e| format!("read trust dir: {e}"))? {
-        let dirent = dirent.map_err(|e| format!("trust entry: {e}"))?;
-        let p = dirent.path();
-        if p.extension().is_none_or(|e| e != "pub") {
-            continue;
-        }
-        tried += 1;
-        let pk_bytes = match fs::read(&p) {
-            Ok(b) => b,
-            Err(_) => continue,
-        };
-        let pk_str = match std::str::from_utf8(&pk_bytes) {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
-        let pk = match PublicKey::decode(pk_str.trim()) {
-            Ok(k) => k,
-            Err(_) => continue,
-        };
-        if pk.verify(payload, &signature, false).is_ok() {
-            return Ok(());
-        }
-    }
-    Err(format!(
-        "no trust-root in {} validated the signature ({tried} pub keys tried)",
-        trust_roots_dir.display()
-    ))
+    let pk_bytes = fs::read(key_path).map_err(|e| format!("read key: {e}"))?;
+    let pk_str = std::str::from_utf8(&pk_bytes).map_err(|e| format!("key utf8: {e}"))?;
+    let pk = PublicKey::decode(pk_str.trim()).map_err(|e| format!("decode key: {e}"))?;
+
+    pk.verify(payload, &signature, false)
+        .map_err(|e| format!("signature does not verify under {}: {e}", key_path.display()))
 }
 
 /// Read the entire ring buffer directory into Verdicts (newest-first).
@@ -874,6 +889,123 @@ mod tests {
         let err =
             ExtensionStore::load_signed(&manifest_path, &trust, 1_700_000_000_001).unwrap_err();
         assert!(matches!(err, PerimeterError::Signature(_)));
+    }
+
+    // ---- F-2026-095: cryptographic dual-control verification ----
+
+    /// Generate a keypair, write `<dir>/<kid>.pub`, return the secret key.
+    fn kid_keypair(dir: &Path, kid: &str) -> minisign::SecretKey {
+        let kp = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
+        fs::write(
+            dir.join(format!("{kid}.pub")),
+            kp.pk.to_box().unwrap().to_string(),
+        )
+        .unwrap();
+        kp.sk
+    }
+
+    /// Sign `body` with `sk`, writing `<manifest>.json.<kid>.minisig`.
+    fn write_kid_sig(sk: &minisign::SecretKey, manifest_path: &Path, kid: &str, body: &[u8]) {
+        let sig = minisign::sign(None, sk, body, None, None).unwrap();
+        let fname = manifest_path.file_name().unwrap().to_str().unwrap();
+        let dir = manifest_path.parent().unwrap();
+        fs::write(
+            dir.join(format!("{fname}.{kid}.minisig")),
+            sig.to_string(),
+        )
+        .unwrap();
+    }
+
+    /// Write `sample_manifest()` to `<dir>/e.json`; return (manifest_path, bytes).
+    fn write_sample(dir: &Path) -> (PathBuf, Vec<u8>) {
+        let manifest_path = dir.join("e.json");
+        let bytes = serde_json::to_vec(&sample_manifest()).unwrap();
+        fs::write(&manifest_path, &bytes).unwrap();
+        (manifest_path, bytes)
+    }
+
+    #[test]
+    fn dual_control_loads_with_two_kid_bound_signatures() {
+        let dir = TempDir::new().unwrap();
+        let trust = dir.path().join("trust");
+        fs::create_dir_all(&trust).unwrap();
+        let (mp, body) = write_sample(dir.path());
+        // Two DISTINCT keys, one per kid, each signs the manifest.
+        let sk_signer = kid_keypair(&trust, "kid-operator-A");
+        let sk_auditor = kid_keypair(&trust, "kid-auditor-B");
+        write_kid_sig(&sk_signer, &mp, "kid-operator-A", &body);
+        write_kid_sig(&sk_auditor, &mp, "kid-auditor-B", &body);
+
+        let m = ExtensionStore::load_signed(&mp, &trust, 1_700_000_000_001).unwrap();
+        assert_eq!(m.extension_id, "custom-tools-2026q2");
+    }
+
+    #[test]
+    fn one_key_cannot_forge_both_kids() {
+        // THE F-2026-095 property: a holder of ONE trust-root key must not pass.
+        // The attacker holds the signer key and signs BOTH detached sigs with
+        // it, naming a real auditor kid — but the auditor's trust-root key is a
+        // DIFFERENT key, so the auditor sig fails to verify under it.
+        let dir = TempDir::new().unwrap();
+        let trust = dir.path().join("trust");
+        fs::create_dir_all(&trust).unwrap();
+        let (mp, body) = write_sample(dir.path());
+        let sk_attacker = kid_keypair(&trust, "kid-operator-A"); // attacker's key
+        let _sk_auditor = kid_keypair(&trust, "kid-auditor-B"); // a real, separate auditor key
+        // Attacker signs BOTH with their single key.
+        write_kid_sig(&sk_attacker, &mp, "kid-operator-A", &body);
+        write_kid_sig(&sk_attacker, &mp, "kid-auditor-B", &body);
+
+        let err = ExtensionStore::load_signed(&mp, &trust, 1_700_000_000_001).unwrap_err();
+        assert!(
+            matches!(err, PerimeterError::Signature(_)),
+            "a single key signing both kids must NOT pass dual-control"
+        );
+    }
+
+    #[test]
+    fn missing_one_kid_signature_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let trust = dir.path().join("trust");
+        fs::create_dir_all(&trust).unwrap();
+        let (mp, body) = write_sample(dir.path());
+        let sk_signer = kid_keypair(&trust, "kid-operator-A");
+        let _sk_auditor = kid_keypair(&trust, "kid-auditor-B");
+        // Only the signer signs — auditor co-signature absent.
+        write_kid_sig(&sk_signer, &mp, "kid-operator-A", &body);
+
+        let err = ExtensionStore::load_signed(&mp, &trust, 1_700_000_000_001).unwrap_err();
+        assert!(matches!(err, PerimeterError::Signature(_)));
+    }
+
+    #[test]
+    fn tampered_manifest_fails_both_signatures() {
+        let dir = TempDir::new().unwrap();
+        let trust = dir.path().join("trust");
+        fs::create_dir_all(&trust).unwrap();
+        let (mp, body) = write_sample(dir.path());
+        let sk_signer = kid_keypair(&trust, "kid-operator-A");
+        let sk_auditor = kid_keypair(&trust, "kid-auditor-B");
+        write_kid_sig(&sk_signer, &mp, "kid-operator-A", &body);
+        write_kid_sig(&sk_auditor, &mp, "kid-auditor-B", &body);
+        // Tamper the manifest after signing (add a binary path).
+        let mut tampered = sample_manifest();
+        tampered.binary_paths.push("/usr/local/bin/evil".into());
+        fs::write(&mp, serde_json::to_vec(&tampered).unwrap()).unwrap();
+
+        let err = ExtensionStore::load_signed(&mp, &trust, 1_700_000_000_001).unwrap_err();
+        assert!(matches!(err, PerimeterError::Signature(_)));
+    }
+
+    #[test]
+    fn path_traversal_kid_is_rejected_by_validate() {
+        let mut m = sample_manifest();
+        m.signer_kid = "../../etc/evil".into();
+        let err = m.validate(1_700_000_000_001).unwrap_err();
+        assert!(
+            matches!(err, PerimeterError::ExtensionInvalid(_)),
+            "a kid with path separators must be refused before it indexes a filename"
+        );
     }
 
     #[test]
