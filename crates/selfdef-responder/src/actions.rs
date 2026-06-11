@@ -628,6 +628,19 @@ impl Action for VelociraptorEscalateAction {
     }
 
     async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        // Argv-injection guard (F-2026-125): `event.host_tag` is attacker-
+        // influenceable for a FEDERATED event, and `render_args` substitutes
+        // `{host_tag}` into the operator's argv — a standalone `{host_tag}` arg
+        // resolving to "--flag" would inject a flag into the Velociraptor binary.
+        // A real host_tag never starts with '-'; refuse it fail-closed before any
+        // substitution. (`{event_id}` is a UUID, never flag-like.) Checked before
+        // the dry-run branch so a dry run previews the refusal.
+        if event.host_tag.starts_with('-') {
+            return Ok(ActionOutcome::skipped(format!(
+                "refusing host_tag with leading '-' (possible argv injection): {:?}",
+                event.host_tag
+            )));
+        }
         let rendered = self.render_args(event);
 
         if dry_run {
@@ -2214,6 +2227,23 @@ mod tests {
         // Placeholders themselves must be gone.
         assert!(!outcome.notes.contains("{event_id}"));
         assert!(!outcome.notes.contains("{host_tag}"));
+    }
+
+    #[tokio::test]
+    async fn velociraptor_refuses_flag_like_host_tag() {
+        // F-2026-125: a federated event's host_tag is attacker-influenceable and
+        // is substituted into the operator's argv. A leading-'-' value (flag
+        // injection into the Velociraptor binary) must be refused before any
+        // substitution — verified in dry-run so no subprocess is spawned.
+        let action = VelociraptorEscalateAction::new(
+            PathBuf::from("/usr/local/bin/velociraptor"),
+            vec!["{host_tag}".into()],
+        );
+        let mut event = finding_with_pid(42);
+        event.host_tag = "--config=/evil.yaml".into();
+        let outcome = action.execute(&event, false).await.unwrap();
+        assert_eq!(outcome.status, Status::Skipped, "flag-like host_tag must be refused");
+        assert!(outcome.notes.contains("argv injection"), "note: {}", outcome.notes);
     }
 
     #[test]
