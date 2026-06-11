@@ -57,13 +57,18 @@ fn run() -> Result<()> {
     }
 
     let policy_file = policy::load(policy_path().as_deref()).context("loading ssh-wrap policy")?;
-    let tokens = argv::classify(&raw_args);
-    let target = argv::extract_target(&tokens);
 
-    let Some(target) = target else {
+    // ssh stops option parsing at the target; the target spec AND the remote
+    // command after it must reach the server byte-for-byte. Classify/filter only
+    // the pre-target options, then append raw_args[target_idx..] untouched — so
+    // a remote command like `mytool --recursive` (or a remote flag that collides
+    // with a denied ssh flag) is never reinterpreted or dropped.
+    let Some(target_idx) = argv::target_index(&raw_args) else {
         // No target — let real ssh print its usage error.
         return exec_passthrough(&raw_args);
     };
+    let target = raw_args[target_idx].as_str();
+    let tokens = argv::classify(&raw_args[..target_idx]);
 
     let (user, host, port) = argv::parse_target(target);
     let resolved = policy::ResolvedPolicy::resolve(&policy_file, &host);
@@ -77,6 +82,8 @@ fn run() -> Result<()> {
     let filtered = argv::filter(&tokens, &denied_flags, &denied_o);
     let mut final_args = resolved.to_ssh_args();
     final_args.extend(filtered);
+    // Target spec + remote command, verbatim.
+    final_args.extend(raw_args[target_idx..].iter().cloned());
 
     // Best-effort: does ~/.ssh/known_hosts contain this host?
     let first_seen = host_first_seen(&host).unwrap_or(false);
