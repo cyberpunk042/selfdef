@@ -170,3 +170,18 @@ composite `decision-router`) wired at `handle_finding`, keyed on
 `(action, event-target)`, with interior-mutable state. Concrete, fail-safe,
 and now precisely located — but a real change (concurrency + key design +
 tests), not a tail-end increment.
+
+## Update (2026-06-10): #1 target — first slice WIRED
+
+Destructive-action **burst-dedup** is now built into the running `Responder`
+(`with_dedup_window`, default `Duration::ZERO` = disabled). At `handle_finding`,
+when enabled, a destructive action repeated on the same `(action, target)`
+(pid|src-ip|user) within the window is suppressed; notify/snapshot/forensic
+actions are never deduped. **Default-off ⇒ zero behavior change**; a deployment
+opts in. Lock held only synchronously (prune+check+insert), never across the
+`.await`; the map self-prunes to in-window entries. Test-locked
+(`tests/dedup.rs`): suppress-within-window, disabled-by-default-runs-twice,
+notify-never-deduped. This is the first concrete catalog→code "discipline onto
+the verbs" increment — the remaining decision-discipline (throttle rate,
+per-profile budget, cool-off, conflict-detection via `decision-router`) follows
+the same opt-in, fail-safe pattern, plus daemon config to expose the knob.

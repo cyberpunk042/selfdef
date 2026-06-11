@@ -26,9 +26,9 @@
 
 pub mod actions;
 
-use std::collections::HashSet;
-use std::sync::Arc;
-use std::time::Duration;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use selfdef_bus::{BusError, Subscriber};
 use selfdef_core::category::CategoryUid;
@@ -76,6 +76,20 @@ pub struct Responder {
     /// subprocesses are spawned `kill_on_drop`, so a timed-out future takes
     /// its child with it.
     action_deadline: Duration,
+    /// Burst-dedup window for DESTRUCTIVE actions (decision-discipline, opt-in).
+    /// When > 0, a destructive action whose `(name, event-target)` was already
+    /// fired within this window is suppressed — guarding against a finding burst
+    /// hammering the same kill/quarantine on the same target. Defaults to
+    /// [`Duration::ZERO`] (disabled): the bare [`Responder::new`] behaves exactly
+    /// as before. Enable with [`Responder::with_dedup_window`]. Notify / snapshot
+    /// / forensic actions are never deduped — every alert and evidence capture is
+    /// preserved.
+    dedup_window: Duration,
+    /// `(action.name | target-key)` -> last-fire instant, backing the dedup gate.
+    /// Locked only synchronously (check + prune + insert), never across an
+    /// `.await`. Pruned to in-window entries on each check, so it can't grow
+    /// unbounded.
+    recent_fires: Mutex<HashMap<String, Instant>>,
 }
 
 /// Default per-action execution ceiling. Generous — a forensics bundle
@@ -83,6 +97,59 @@ pub struct Responder {
 /// seconds — while still bounding a wedged script to one minute instead of
 /// forever.
 pub const DEFAULT_ACTION_DEADLINE: Duration = Duration::from_secs(60);
+
+/// Actions whose repeated firing on the SAME target within a short window is
+/// always a wasteful duplicate (re-killing an already-killed pid, re-blocking an
+/// already-blocked IP), never an intentional repeat — so they are eligible for
+/// burst-dedup. Notify, snapshot, and forensic-bundle actions are intentionally
+/// EXCLUDED: every alert and every evidence capture must be preserved.
+fn is_destructive_action(name: &str) -> bool {
+    matches!(
+        name,
+        "kill_pid"
+            | "lockdown_egress"
+            | "revoke_session"
+            | "block_ip"
+            | "quarantine_process"
+            | "session_revocation"
+            | "api_token_revocation"
+            | "mfa_grant_revocation"
+            | "netns_isolation"
+            | "mount_binding_unbind"
+            | "process_tree_freeze"
+            | "socket_fd_revocation"
+            | "process_env_scrub"
+            | "capability_drop"
+    )
+}
+
+/// Stable per-event target signature for the dedup key: actor pid + source IP +
+/// user. Two findings aimed at the same process / host / user collapse to the
+/// same signature, so the same destructive action against that target is
+/// deduped across a finding burst. Mirrors the per-action target extraction the
+/// actions themselves use (`pid_from_event` / `source_ip_from_event` / user).
+fn event_target_sig(event: &Event) -> String {
+    let pid = event
+        .actor
+        .as_ref()
+        .and_then(|a| a.process.as_ref())
+        .map(|p| p.pid)
+        .or_else(|| event.process.as_ref().map(|p| p.pid))
+        .unwrap_or(0);
+    let ip = event
+        .src_endpoint
+        .as_ref()
+        .and_then(|e| e.ip)
+        .map(|i| i.to_string())
+        .unwrap_or_default();
+    let user = event
+        .actor
+        .as_ref()
+        .and_then(|a| a.user.as_ref())
+        .and_then(|u| u.name.clone())
+        .unwrap_or_default();
+    format!("{pid}|{ip}|{user}")
+}
 
 impl std::fmt::Debug for Responder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -109,7 +176,21 @@ impl Responder {
             min_severity: SeverityId::Unknown,
             lag_counter: None,
             action_deadline: DEFAULT_ACTION_DEADLINE,
+            // Disabled by default — no behavior change vs the pre-dedup
+            // responder. Opt in with `with_dedup_window`.
+            dedup_window: Duration::ZERO,
+            recent_fires: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Enable destructive-action burst-dedup with the given window (opt-in;
+    /// the default is disabled). A destructive action repeated on the same
+    /// `(action, event-target)` within `window` is suppressed; notify / snapshot
+    /// / forensic actions are never deduped. Builder-style.
+    #[must_use]
+    pub fn with_dedup_window(mut self, window: Duration) -> Self {
+        self.dedup_window = window;
+        self
     }
 
     /// Set the per-action execution ceiling ([`DEFAULT_ACTION_DEADLINE`]).
@@ -264,6 +345,31 @@ impl Responder {
             let name = action.name();
             if !self.allowed_actions.contains(name) {
                 continue;
+            }
+            // Burst-dedup gate (opt-in; disabled when dedup_window == 0, the
+            // default). Suppress a DESTRUCTIVE action already fired on the same
+            // target within the window — guards against a finding burst hammering
+            // the same kill/quarantine. The lock is held only for the synchronous
+            // prune + check + insert, and dropped before the `.await` below.
+            if !self.dedup_window.is_zero() && is_destructive_action(name) {
+                let key = format!("{name}|{}", event_target_sig(event));
+                let now = Instant::now();
+                let mut recent = self
+                    .recent_fires
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                // Prune expired entries so the map can't grow unbounded.
+                recent.retain(|_, t| now.duration_since(*t) < self.dedup_window);
+                if recent.contains_key(&key) {
+                    debug!(
+                        action = name,
+                        target = %event_target_sig(event),
+                        "suppressed duplicate destructive action within dedup window"
+                    );
+                    continue;
+                }
+                recent.insert(key, now);
+                drop(recent);
             }
             // Per-action deadline: actions run SEQUENTIALLY and this loop
             // sits between the bus and the next finding — one wedged
