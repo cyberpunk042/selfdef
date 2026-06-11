@@ -131,6 +131,13 @@ struct State {
 
 pub struct InMemoryBackend {
     inner: Mutex<State>,
+    /// Users whose sessions must NEVER be revoked — the self-lockout guard.
+    /// `revoke_sessions` refuses these with [`RevocationError::ExcludedUser`].
+    /// Populate with the operator account, the daemon's own service user, and
+    /// any break-glass admin, so an attacker-crafted event naming one of them
+    /// can't lock the responder (or the operator) out of the very host under
+    /// attack. Empty by default — the daemon wires the deployment's set.
+    excluded_users: std::collections::HashSet<String>,
 }
 
 impl Default for InMemoryBackend {
@@ -143,7 +150,18 @@ impl InMemoryBackend {
     pub fn new() -> Self {
         Self {
             inner: Mutex::new(State::default()),
+            excluded_users: std::collections::HashSet::new(),
         }
+    }
+
+    /// Set the never-revoke exclusion list (self-lockout guard). Chainable.
+    #[must_use]
+    pub fn with_excluded_users(
+        mut self,
+        users: impl IntoIterator<Item = String>,
+    ) -> Self {
+        self.excluded_users = users.into_iter().collect();
+        self
     }
 
     pub async fn active_count(&self) -> usize {
@@ -177,6 +195,13 @@ fn validate(req: &RevokeRequest) -> Result<(), RevocationError> {
 impl SessionRevocationBackend for InMemoryBackend {
     async fn revoke_sessions(&self, req: RevokeRequest) -> Result<RevokeReceipt, RevocationError> {
         validate(&req)?;
+        // Self-lockout guard: never revoke a protected principal (operator /
+        // daemon service user / break-glass admin). An attacker-crafted event
+        // naming such a user must not be able to lock the responder — or the
+        // operator — out of the host under attack.
+        if self.excluded_users.contains(&req.user) {
+            return Err(RevocationError::ExcludedUser { user: req.user });
+        }
         let req_authority = req.authority;
         let req_user = req.user.clone();
         let req_reason = req.reason.clone();

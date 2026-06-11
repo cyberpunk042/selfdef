@@ -43,6 +43,41 @@ async fn revoke_returns_receipt_with_active_handle() {
 }
 
 #[tokio::test]
+async fn excluded_users_are_never_revoked_self_lockout_guard() {
+    // The ExcludedUser guard must actually fire: a protected principal (operator
+    // / daemon user / break-glass admin) must NOT be revocable, so an attacker-
+    // crafted event naming one of them can't lock the responder/operator out.
+    let b = InMemoryBackend::new()
+        .with_excluded_users(["operator-fp".to_string(), "root".to_string()]);
+    for protected in ["operator-fp", "root"] {
+        let r = req(
+            protected,
+            600,
+            AuthorityTier::Responder,
+            RevocationScope::Local,
+            "attacker-crafted finding naming a protected user",
+        );
+        let err = b
+            .revoke_sessions(r)
+            .await
+            .expect_err("a protected user must NOT be revoked");
+        assert!(
+            matches!(err, RevocationError::ExcludedUser { user } if user == protected),
+            "expected ExcludedUser for {protected}",
+        );
+    }
+    // A non-excluded user still revokes — the guard doesn't over-refuse.
+    let ok = req(
+        "mallory",
+        600,
+        AuthorityTier::Responder,
+        RevocationScope::Local,
+        "real threat",
+    );
+    b.revoke_sessions(ok).await.expect("non-excluded user must still revoke");
+}
+
+#[tokio::test]
 async fn empty_user_is_rejected() {
     let b = InMemoryBackend::new();
     let r = req("", 60, AuthorityTier::Operator, RevocationScope::Local, "x");
