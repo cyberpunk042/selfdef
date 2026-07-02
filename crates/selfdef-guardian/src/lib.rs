@@ -805,7 +805,10 @@ mod tests {
             sigkills.borrow().is_empty(),
             "must not invoke kill on the guardian's own pid"
         );
-        assert!(matches!(v.response_steps[0].outcome, StepOutcome::Skipped(_)));
+        assert!(matches!(
+            v.response_steps[0].outcome,
+            StepOutcome::Skipped(_)
+        ));
         assert!(!v.sigkill_ok());
         // Audit + console still run (the threat is recorded, just not self-killed).
         assert!(v.audit_append_ok());
@@ -894,13 +897,19 @@ mod tests {
         let console = dir.path().join("console");
         std::fs::File::create(&console).unwrap(); // console_alert opens, doesn't create
         RealEffector
-            .console_alert(&console, "[Guardian] binary=\x1b[2J\x1b[Hspoofed\x07\r evt=1")
+            .console_alert(
+                &console,
+                "[Guardian] binary=\x1b[2J\x1b[Hspoofed\x07\r evt=1",
+            )
             .unwrap();
         let written = fs::read_to_string(&console).unwrap();
         // Only the leading BEL this function adds + a trailing newline are control
         // chars; the injected ESC / BEL / CR from the message are gone.
         assert!(written.starts_with('\x07'), "BEL prefix kept: {written:?}");
-        assert!(!written.contains('\x1b'), "ESC must be stripped: {written:?}");
+        assert!(
+            !written.contains('\x1b'),
+            "ESC must be stripped: {written:?}"
+        );
         assert!(!written.contains('\r'), "CR must be stripped: {written:?}");
         assert_eq!(
             written.matches('\x07').count(),

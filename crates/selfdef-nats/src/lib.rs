@@ -207,9 +207,31 @@ pub async fn run_bridge(
     info!(url = %cfg.url, prefix = %cfg.subject_prefix, signed = signing.is_some(), "nats: connected");
 
     if cfg.jetstream.enabled {
-        run_jetstream_bridge(client, cfg, host_tag, publisher, subscriber, shutdown, federated_inbound, signing, verified_inbound).await
+        run_jetstream_bridge(
+            client,
+            cfg,
+            host_tag,
+            publisher,
+            subscriber,
+            shutdown,
+            federated_inbound,
+            signing,
+            verified_inbound,
+        )
+        .await
     } else {
-        run_core_bridge(client, cfg, host_tag, publisher, subscriber, shutdown, federated_inbound, signing, verified_inbound).await
+        run_core_bridge(
+            client,
+            cfg,
+            host_tag,
+            publisher,
+            subscriber,
+            shutdown,
+            federated_inbound,
+            signing,
+            verified_inbound,
+        )
+        .await
     }
 }
 
@@ -353,7 +375,8 @@ async fn run_jetstream_bridge(
         let sd = shutdown.clone();
         let signing = signing.clone();
         tokio::spawn(async move {
-            run_jetstream_outbound(js_for_out, subscriber, host_tag, out_subject, sd, signing).await;
+            run_jetstream_outbound(js_for_out, subscriber, host_tag, out_subject, sd, signing)
+                .await;
         })
     };
 
@@ -564,7 +587,9 @@ impl FederationSigning {
         // loader; the password path (`from_box`) errors on an unencrypted key and
         // would otherwise block at an interactive prompt.
         let secret = minisign::SecretKey::from_unencrypted_box(sk_box).map_err(|e| {
-            NatsError::KeyLoad(format!("load unencrypted secret key (use `minisign -G -W`): {e}"))
+            NatsError::KeyLoad(format!(
+                "load unencrypted secret key (use `minisign -G -W`): {e}"
+            ))
         })?;
         let mut peer_keys = std::collections::HashMap::new();
         for (host, path) in peers {
@@ -598,8 +623,8 @@ impl FederationSigning {
             .peer_keys
             .get(&env.kid)
             .ok_or_else(|| format!("no trusted key for peer kid {:?}", env.kid))?;
-        let signature = minisign_verify::Signature::decode(&env.sig)
-            .map_err(|e| format!("decode sig: {e}"))?;
+        let signature =
+            minisign_verify::Signature::decode(&env.sig).map_err(|e| format!("decode sig: {e}"))?;
         let event_bytes = env.event.as_bytes();
         pk.verify(event_bytes, &signature, false)
             .map_err(|e| format!("signature invalid for peer {:?}: {e}", env.kid))?;
@@ -801,7 +826,11 @@ mod tests {
 
         republish_inbound(&bytes, "this-host", &publisher, Some(&counter), None, None);
 
-        assert_eq!(counter.load(Ordering::Relaxed), 1, "federated event must be counted");
+        assert_eq!(
+            counter.load(Ordering::Relaxed),
+            1,
+            "federated event must be counted"
+        );
         // The event reached the local bus.
         let mut sub = sub;
         let got = sub
@@ -827,9 +856,16 @@ mod tests {
 
         republish_inbound(&bytes, "this-host", &publisher, Some(&counter), None, None);
 
-        assert_eq!(counter.load(Ordering::Relaxed), 0, "self-echo must not count as federated");
+        assert_eq!(
+            counter.load(Ordering::Relaxed),
+            0,
+            "self-echo must not count as federated"
+        );
         let mut sub = sub;
-        assert!(matches!(sub.try_recv(), Ok(None)), "self-echo must not be republished");
+        assert!(
+            matches!(sub.try_recv(), Ok(None)),
+            "self-echo must not be republished"
+        );
     }
 
     #[test]
@@ -840,7 +876,14 @@ mod tests {
         let publisher = bus.publisher();
         let counter = AtomicU64::new(0);
 
-        republish_inbound(b"not json", "this-host", &publisher, Some(&counter), None, None);
+        republish_inbound(
+            b"not json",
+            "this-host",
+            &publisher,
+            Some(&counter),
+            None,
+            None,
+        );
 
         assert_eq!(counter.load(Ordering::Relaxed), 0);
         let mut sub = sub;
@@ -876,8 +919,7 @@ mod tests {
         let (sk_a, pk_a) = gen_key();
         let sender = FederationSigning::new(sk_a, HashMap::new());
         let (sk_r, _) = gen_key();
-        let receiver =
-            FederationSigning::new(sk_r, HashMap::from([("peer-a".to_string(), pk_a)]));
+        let receiver = FederationSigning::new(sk_r, HashMap::from([("peer-a".to_string(), pk_a)]));
 
         let env = encode_outbound(&synth_event("peer-a"), "peer-a", Some(&sender)).unwrap();
 
@@ -885,12 +927,26 @@ mod tests {
         let sub = bus.subscribe();
         let publisher = bus.publisher();
         let (fc, vc) = (AtomicU64::new(0), AtomicU64::new(0));
-        republish_inbound(&env, "this-host", &publisher, Some(&fc), Some(&receiver), Some(&vc));
+        republish_inbound(
+            &env,
+            "this-host",
+            &publisher,
+            Some(&fc),
+            Some(&receiver),
+            Some(&vc),
+        );
 
         assert_eq!(fc.load(Ordering::Relaxed), 1);
-        assert_eq!(vc.load(Ordering::Relaxed), 1, "a valid peer signature marks verified");
+        assert_eq!(
+            vc.load(Ordering::Relaxed),
+            1,
+            "a valid peer signature marks verified"
+        );
         let mut sub = sub;
-        let got = sub.try_recv().unwrap().expect("verified event reaches the bus");
+        let got = sub
+            .try_recv()
+            .unwrap()
+            .expect("verified event reaches the bus");
         assert!(got.federated && got.federation_verified);
     }
 
@@ -901,8 +957,7 @@ mod tests {
         let (sk_r, _) = gen_key();
         // Receiver trusts a DIFFERENT peer name — "peer-a" is unknown.
         let (_sk_b, pk_b) = gen_key();
-        let receiver =
-            FederationSigning::new(sk_r, HashMap::from([("peer-b".to_string(), pk_b)]));
+        let receiver = FederationSigning::new(sk_r, HashMap::from([("peer-b".to_string(), pk_b)]));
 
         let env = encode_outbound(&synth_event("peer-a"), "peer-a", Some(&sender)).unwrap();
 
@@ -910,12 +965,22 @@ mod tests {
         let sub = bus.subscribe();
         let publisher = bus.publisher();
         let (fc, vc) = (AtomicU64::new(0), AtomicU64::new(0));
-        republish_inbound(&env, "this-host", &publisher, Some(&fc), Some(&receiver), Some(&vc));
+        republish_inbound(
+            &env,
+            "this-host",
+            &publisher,
+            Some(&fc),
+            Some(&receiver),
+            Some(&vc),
+        );
 
         assert_eq!(fc.load(Ordering::Relaxed), 0);
         assert_eq!(vc.load(Ordering::Relaxed), 0);
         let mut sub = sub;
-        assert!(matches!(sub.try_recv(), Ok(None)), "untrusted-peer envelope must be dropped");
+        assert!(
+            matches!(sub.try_recv(), Ok(None)),
+            "untrusted-peer envelope must be dropped"
+        );
     }
 
     #[test]
@@ -923,8 +988,7 @@ mod tests {
         let (sk_a, pk_a) = gen_key();
         let sender = FederationSigning::new(sk_a, HashMap::new());
         let (sk_r, _) = gen_key();
-        let receiver =
-            FederationSigning::new(sk_r, HashMap::from([("peer-a".to_string(), pk_a)]));
+        let receiver = FederationSigning::new(sk_r, HashMap::from([("peer-a".to_string(), pk_a)]));
 
         let env = encode_outbound(&synth_event("peer-a"), "peer-a", Some(&sender)).unwrap();
         // Tamper: swap the inner event for a different one, keeping the old sig.
@@ -937,11 +1001,21 @@ mod tests {
         let sub = bus.subscribe();
         let publisher = bus.publisher();
         let (fc, vc) = (AtomicU64::new(0), AtomicU64::new(0));
-        republish_inbound(&tampered, "this-host", &publisher, Some(&fc), Some(&receiver), Some(&vc));
+        republish_inbound(
+            &tampered,
+            "this-host",
+            &publisher,
+            Some(&fc),
+            Some(&receiver),
+            Some(&vc),
+        );
 
         assert_eq!(vc.load(Ordering::Relaxed), 0);
         let mut sub = sub;
-        assert!(matches!(sub.try_recv(), Ok(None)), "a tampered event must fail verification");
+        assert!(
+            matches!(sub.try_recv(), Ok(None)),
+            "a tampered event must fail verification"
+        );
     }
 
     #[test]
@@ -966,8 +1040,19 @@ mod tests {
         let sub = bus.subscribe();
         let publisher = bus.publisher();
         let (fc, vc) = (AtomicU64::new(0), AtomicU64::new(0));
-        republish_inbound(&env, "this-host", &publisher, Some(&fc), Some(&fs), Some(&vc));
-        assert_eq!(vc.load(Ordering::Relaxed), 1, "loaded keys must verify a roundtrip");
+        republish_inbound(
+            &env,
+            "this-host",
+            &publisher,
+            Some(&fc),
+            Some(&fs),
+            Some(&vc),
+        );
+        assert_eq!(
+            vc.load(Ordering::Relaxed),
+            1,
+            "loaded keys must verify a roundtrip"
+        );
         let mut sub = sub;
         assert!(sub.try_recv().unwrap().unwrap().federation_verified);
     }
@@ -985,7 +1070,14 @@ mod tests {
         let sub = bus.subscribe();
         let publisher = bus.publisher();
         let (fc, vc) = (AtomicU64::new(0), AtomicU64::new(0));
-        republish_inbound(&raw, "this-host", &publisher, Some(&fc), Some(&receiver), Some(&vc));
+        republish_inbound(
+            &raw,
+            "this-host",
+            &publisher,
+            Some(&fc),
+            Some(&receiver),
+            Some(&vc),
+        );
 
         assert_eq!(fc.load(Ordering::Relaxed), 1);
         assert_eq!(vc.load(Ordering::Relaxed), 0);

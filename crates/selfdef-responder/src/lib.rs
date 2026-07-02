@@ -179,7 +179,7 @@ fn is_destructive_action(name: &str) -> bool {
             // (the live gate only sees registered actions).
             | "kernel_keyring_eviction"  // revokes kernel keyring keys
             | "apparmor_profile_pivot"   // confines a process into a stricter MAC profile
-            | "bpf_map_element_clear"    // wipes kernel BPF map state
+            | "bpf_map_element_clear" // wipes kernel BPF map state
     )
 }
 
@@ -255,10 +255,7 @@ impl Responder {
     /// suppressed by the dedup or rate-cap gate. The daemon wires it to
     /// `selfdef_responder_suppressed_destructive_total`. Chainable.
     #[must_use]
-    pub fn with_suppressed_counter(
-        mut self,
-        counter: Arc<std::sync::atomic::AtomicU64>,
-    ) -> Self {
+    pub fn with_suppressed_counter(mut self, counter: Arc<std::sync::atomic::AtomicU64>) -> Self {
         self.suppressed_counter = Some(counter);
         self
     }

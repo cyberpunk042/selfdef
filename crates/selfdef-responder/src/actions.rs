@@ -2242,8 +2242,16 @@ mod tests {
         let mut event = finding_with_pid(42);
         event.host_tag = "--config=/evil.yaml".into();
         let outcome = action.execute(&event, false).await.unwrap();
-        assert_eq!(outcome.status, Status::Skipped, "flag-like host_tag must be refused");
-        assert!(outcome.notes.contains("argv injection"), "note: {}", outcome.notes);
+        assert_eq!(
+            outcome.status,
+            Status::Skipped,
+            "flag-like host_tag must be refused"
+        );
+        assert!(
+            outcome.notes.contains("argv injection"),
+            "note: {}",
+            outcome.notes
+        );
     }
 
     #[test]
@@ -2534,8 +2542,16 @@ mod tests {
             .execute(&finding_with_user("operator-fp"), false)
             .await
             .unwrap();
-        assert_eq!(blocked.status, Status::Skipped, "protected user must be refused");
-        assert!(blocked.notes.contains("self-lockout"), "note: {}", blocked.notes);
+        assert_eq!(
+            blocked.status,
+            Status::Skipped,
+            "protected user must be refused"
+        );
+        assert!(
+            blocked.notes.contains("self-lockout"),
+            "note: {}",
+            blocked.notes
+        );
         // A non-excluded user still proceeds (no over-refusal).
         let ok = action
             .execute(&finding_with_user("mallory"), true)

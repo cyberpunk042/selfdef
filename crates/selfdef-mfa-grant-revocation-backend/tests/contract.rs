@@ -72,7 +72,9 @@ async fn excluded_principals_are_never_revoked_self_lockout_guard() {
         MfaGrantScope::All,
         "real threat",
     );
-    b.revoke_mfa_grants(ok).await.expect("non-excluded principal must still revoke");
+    b.revoke_mfa_grants(ok)
+        .await
+        .expect("non-excluded principal must still revoke");
 }
 
 #[tokio::test]

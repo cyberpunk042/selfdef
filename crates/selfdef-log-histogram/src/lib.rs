@@ -175,7 +175,10 @@ mod tests {
         let mut ok = LogHistogram::new();
         ok.observe(8);
         assert!(ok.validate().is_ok());
-        assert_eq!(ok.quantile(10000).unwrap(), bucket_lower_bound(bucket_for(8)));
+        assert_eq!(
+            ok.quantile(10000).unwrap(),
+            bucket_lower_bound(bucket_for(8))
+        );
     }
 
     #[test]

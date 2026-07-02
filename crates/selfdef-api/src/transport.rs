@@ -751,9 +751,18 @@ mod token_eq_tests {
     fn single_byte_difference_anywhere_is_rejected() {
         // First, middle, and last byte mismatches must all reject — documents
         // that the compare does not early-return on the first differing byte.
-        assert!(!token_eq("Xabcdefabcdef", "aabcdefabcdef"), "first-byte diff");
-        assert!(!token_eq("abcdefXabcdef", "abcdefaabcdef"), "middle-byte diff");
-        assert!(!token_eq("abcdefabcdefX", "abcdefabcdefa"), "last-byte diff");
+        assert!(
+            !token_eq("Xabcdefabcdef", "aabcdefabcdef"),
+            "first-byte diff"
+        );
+        assert!(
+            !token_eq("abcdefXabcdef", "abcdefaabcdef"),
+            "middle-byte diff"
+        );
+        assert!(
+            !token_eq("abcdefabcdefX", "abcdefabcdefa"),
+            "last-byte diff"
+        );
     }
 
     #[test]
@@ -762,7 +771,10 @@ mod token_eq_tests {
         // of (or extends) the real token must NOT authenticate, even though the
         // overlapping bytes all match. Without the explicit length check the
         // zip-fold would return true here.
-        assert!(!token_eq("abc", "abcdef"), "presented is a prefix of expected");
+        assert!(
+            !token_eq("abc", "abcdef"),
+            "presented is a prefix of expected"
+        );
         assert!(!token_eq("abcdef", "abc"), "presented extends expected");
         assert!(!token_eq("", "a"), "empty presented vs non-empty");
         assert!(!token_eq("a", ""), "non-empty presented vs empty");

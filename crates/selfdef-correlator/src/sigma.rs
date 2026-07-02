@@ -1013,7 +1013,10 @@ level: medium
         assert_eq!(findings[0].class_uid, ClassUid::DETECTION_FINDING);
         assert_eq!(findings[0].severity_id, SeverityId::Medium);
         // A finding derived from a LOCAL trigger is not federated.
-        assert!(!findings[0].federated, "local-origin finding must not be tainted");
+        assert!(
+            !findings[0].federated,
+            "local-origin finding must not be tainted"
+        );
     }
 
     #[test]

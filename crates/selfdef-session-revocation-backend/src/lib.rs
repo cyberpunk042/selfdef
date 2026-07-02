@@ -156,10 +156,7 @@ impl InMemoryBackend {
 
     /// Set the never-revoke exclusion list (self-lockout guard). Chainable.
     #[must_use]
-    pub fn with_excluded_users(
-        mut self,
-        users: impl IntoIterator<Item = String>,
-    ) -> Self {
+    pub fn with_excluded_users(mut self, users: impl IntoIterator<Item = String>) -> Self {
         self.excluded_users = users.into_iter().collect();
         self
     }

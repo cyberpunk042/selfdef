@@ -204,7 +204,9 @@ mod tests {
         let idx = argv::target_index(&argv).unwrap();
         let stripped = compute_stripped(&argv::classify(&argv[..idx]), &['L'], &[]);
         assert!(
-            stripped.iter().any(|x| x.contains("-L") && x.contains("8080")),
+            stripped
+                .iter()
+                .any(|x| x.contains("-L") && x.contains("8080")),
             "denied port-forward must be recorded for the audit event, got {stripped:?}"
         );
 

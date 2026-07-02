@@ -358,7 +358,9 @@ mod tests {
     fn candidate_overlap_flags_filesystem_prefix() {
         let now = OffsetDateTime::now_utc();
         let mut reg = GrantRegistry::new();
-        let existing = reg.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        let existing = reg
+            .issue(&fs_req("/workspace"), "gr-1", "tr-1", now)
+            .unwrap();
         reg.activate(&existing, now).unwrap();
         // Candidate under /workspace — overlaps the active parent grant.
         let cand = reg
@@ -373,7 +375,9 @@ mod tests {
     fn candidate_overlap_none_when_disjoint() {
         let now = OffsetDateTime::now_utc();
         let mut reg = GrantRegistry::new();
-        let existing = reg.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        let existing = reg
+            .issue(&fs_req("/workspace"), "gr-1", "tr-1", now)
+            .unwrap();
         reg.activate(&existing, now).unwrap();
         let cand = reg.issue(&fs_req("/var/log"), "gr-2", "tr-2", now).unwrap();
         assert!(candidate_overlap(reg.grants(), &cand).is_none());
@@ -386,7 +390,9 @@ mod tests {
         let now = OffsetDateTime::now_utc();
         let mut reg = GrantRegistry::new();
         // gr-1 stays Pending (never activated).
-        let _existing = reg.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        let _existing = reg
+            .issue(&fs_req("/workspace"), "gr-1", "tr-1", now)
+            .unwrap();
         let cand = reg
             .issue(&fs_req("/workspace/foo"), "gr-2", "tr-2", now)
             .unwrap();
@@ -405,7 +411,9 @@ mod tests {
 
         // Seed an active parent grant on disk.
         let mut seed = GrantRegistry::load(&path).unwrap();
-        let parent = seed.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        let parent = seed
+            .issue(&fs_req("/workspace"), "gr-1", "tr-1", now)
+            .unwrap();
         seed.activate(&parent, now).unwrap();
         save(&seed, &path).unwrap();
 
@@ -455,9 +463,13 @@ mod tests {
             .unwrap();
         let mut reg = GrantRegistry::new();
         // A prior grant of the same identity, issued "now".
-        let _prior = reg.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        let _prior = reg
+            .issue(&fs_req("/workspace"), "gr-1", "tr-1", now)
+            .unwrap();
         // Candidate of identical identity.
-        let cand = reg.issue(&fs_req("/workspace"), "gr-2", "tr-2", now).unwrap();
+        let cand = reg
+            .issue(&fs_req("/workspace"), "gr-2", "tr-2", now)
+            .unwrap();
         let key = grant_key_req(&fs_req("/workspace"));
         let now_ms = (now.unix_timestamp_nanos() / 1_000_000) as u64;
 
@@ -480,7 +492,9 @@ mod tests {
     fn cooldown_ignores_distinct_identity() {
         let now = OffsetDateTime::now_utc();
         let mut reg = GrantRegistry::new();
-        let _prior = reg.issue(&fs_req("/workspace"), "gr-1", "tr-1", now).unwrap();
+        let _prior = reg
+            .issue(&fs_req("/workspace"), "gr-1", "tr-1", now)
+            .unwrap();
         // Candidate with a DIFFERENT scope → different identity key.
         let cand = reg.issue(&fs_req("/var/log"), "gr-2", "tr-2", now).unwrap();
         let key = grant_key_req(&fs_req("/var/log"));

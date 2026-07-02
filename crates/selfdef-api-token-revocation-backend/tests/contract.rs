@@ -73,7 +73,9 @@ async fn excluded_principals_are_never_revoked_self_lockout_guard() {
         TokenClassMask::All,
         "real threat",
     );
-    b.revoke_tokens(ok).await.expect("non-excluded principal must still revoke");
+    b.revoke_tokens(ok)
+        .await
+        .expect("non-excluded principal must still revoke");
 }
 
 #[tokio::test]

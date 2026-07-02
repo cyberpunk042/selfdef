@@ -231,7 +231,9 @@ async fn a_normal_public_address_still_blocks() {
     let b = InMemoryBackend::new();
     let addr = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 7));
     let r = req(addr, 60, AuthorityTier::Operator, "real threat");
-    b.block_ip(r).await.expect("a public address must still block");
+    b.block_ip(r)
+        .await
+        .expect("a public address must still block");
 }
 
 // ───────────────────────── MS5 pending-extension queue tests ─────────────────────────

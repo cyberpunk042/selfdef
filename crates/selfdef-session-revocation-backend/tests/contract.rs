@@ -47,8 +47,8 @@ async fn excluded_users_are_never_revoked_self_lockout_guard() {
     // The ExcludedUser guard must actually fire: a protected principal (operator
     // / daemon user / break-glass admin) must NOT be revocable, so an attacker-
     // crafted event naming one of them can't lock the responder/operator out.
-    let b = InMemoryBackend::new()
-        .with_excluded_users(["operator-fp".to_string(), "root".to_string()]);
+    let b =
+        InMemoryBackend::new().with_excluded_users(["operator-fp".to_string(), "root".to_string()]);
     for protected in ["operator-fp", "root"] {
         let r = req(
             protected,
@@ -74,7 +74,9 @@ async fn excluded_users_are_never_revoked_self_lockout_guard() {
         RevocationScope::Local,
         "real threat",
     );
-    b.revoke_sessions(ok).await.expect("non-excluded user must still revoke");
+    b.revoke_sessions(ok)
+        .await
+        .expect("non-excluded user must still revoke");
 }
 
 #[tokio::test]

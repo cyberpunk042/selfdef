@@ -106,7 +106,10 @@ fn maybe_decode_auditd_hex(v: &str) -> Option<String> {
         i += 2;
     }
     // Only treat it as encoded if auditd would actually have encoded it.
-    if !decoded.iter().any(|&c| c == b'"' || !(0x21..=0x7e).contains(&c)) {
+    if !decoded
+        .iter()
+        .any(|&c| c == b'"' || !(0x21..=0x7e).contains(&c))
+    {
         return None;
     }
     String::from_utf8(decoded).ok()

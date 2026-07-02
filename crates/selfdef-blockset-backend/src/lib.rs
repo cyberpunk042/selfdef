@@ -416,7 +416,9 @@ pub mod nftables {
                 stdin
                     .write_all(nft_bootstrap_script().as_bytes())
                     .await
-                    .map_err(|e| BackendError::BackendUnreachable(format!("write nft script: {e}")))?;
+                    .map_err(|e| {
+                        BackendError::BackendUnreachable(format!("write nft script: {e}"))
+                    })?;
                 // Drop stdin to signal EOF.
             }
             let out = child

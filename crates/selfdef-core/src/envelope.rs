@@ -355,7 +355,10 @@ mod tests {
             "federated must be #[serde(skip)] — never serialized"
         );
         let back: Event = serde_json::from_value(v).unwrap();
-        assert!(!back.federated, "decode defaults the marker to false (local)");
+        assert!(
+            !back.federated,
+            "decode defaults the marker to false (local)"
+        );
         // Builder sets it (used by the NATS inbound republish path).
         assert!(e.with_federated(true).federated);
     }

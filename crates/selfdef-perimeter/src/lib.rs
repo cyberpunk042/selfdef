@@ -196,7 +196,8 @@ impl ExtensionManifest {
         }
         if self.auditor_kid.is_empty() {
             return Err(PerimeterError::ExtensionInvalid(
-                "auditor_kid is empty (production manifest must declare a distinct auditor kid)".into(),
+                "auditor_kid is empty (production manifest must declare a distinct auditor kid)"
+                    .into(),
             ));
         }
         if self.signer_kid == self.auditor_kid {
@@ -209,7 +210,10 @@ impl ExtensionManifest {
         // MUST be path-safe — a kid like "../../etc/x" would otherwise let a
         // crafted manifest steer verification at an arbitrary file. Constrain
         // to `[A-Za-z0-9_-]` (no '.', no '/'): no traversal, no hidden-file.
-        for (label, kid) in [("signer_kid", &self.signer_kid), ("auditor_kid", &self.auditor_kid)] {
+        for (label, kid) in [
+            ("signer_kid", &self.signer_kid),
+            ("auditor_kid", &self.auditor_kid),
+        ] {
             if !kid
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -444,7 +448,11 @@ impl ExtensionStore {
 /// # Errors
 /// Returns an error if the signature/public-key files are malformed, or if the
 /// signature does not verify under `key_path`.
-fn verify_minisign_with_key(payload: &[u8], sig_path: &Path, key_path: &Path) -> Result<(), String> {
+fn verify_minisign_with_key(
+    payload: &[u8],
+    sig_path: &Path,
+    key_path: &Path,
+) -> Result<(), String> {
     use minisign_verify::{PublicKey, Signature};
 
     let sig_bytes = fs::read(sig_path).map_err(|e| format!("read sig: {e}"))?;
@@ -455,8 +463,12 @@ fn verify_minisign_with_key(payload: &[u8], sig_path: &Path, key_path: &Path) ->
     let pk_str = std::str::from_utf8(&pk_bytes).map_err(|e| format!("key utf8: {e}"))?;
     let pk = PublicKey::decode(pk_str.trim()).map_err(|e| format!("decode key: {e}"))?;
 
-    pk.verify(payload, &signature, false)
-        .map_err(|e| format!("signature does not verify under {}: {e}", key_path.display()))
+    pk.verify(payload, &signature, false).map_err(|e| {
+        format!(
+            "signature does not verify under {}: {e}",
+            key_path.display()
+        )
+    })
 }
 
 /// Read the entire ring buffer directory into Verdicts (newest-first).
@@ -909,11 +921,7 @@ mod tests {
         let sig = minisign::sign(None, sk, body, None, None).unwrap();
         let fname = manifest_path.file_name().unwrap().to_str().unwrap();
         let dir = manifest_path.parent().unwrap();
-        fs::write(
-            dir.join(format!("{fname}.{kid}.minisig")),
-            sig.to_string(),
-        )
-        .unwrap();
+        fs::write(dir.join(format!("{fname}.{kid}.minisig")), sig.to_string()).unwrap();
     }
 
     /// Write `sample_manifest()` to `<dir>/e.json`; return (manifest_path, bytes).

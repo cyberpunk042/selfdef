@@ -677,7 +677,12 @@ async fn main() -> Result<()> {
         let backend = Arc::new(selfdef_blockset_backend::nftables::NftablesBackend::new(
             cfg.responder.block_ip_nft_path.clone(),
         ));
-        if cfg.responder.allowed_actions.iter().any(|a| a == "block_ip") {
+        if cfg
+            .responder
+            .allowed_actions
+            .iter()
+            .any(|a| a == "block_ip")
+        {
             match backend.ensure_table().await {
                 Ok(()) => info!("block_ip enabled: nft `inet selfdef-blocks` table ensured"),
                 Err(e) => error!(
@@ -928,31 +933,38 @@ async fn main() -> Result<()> {
         // F-2026-111 (c): build per-event federation signing if a key is set.
         // A load failure logs + runs UNSIGNED (raw) rather than killing the
         // bridge — fan-out availability beats a hard fail on a key typo.
-        let federation_signing: Option<Arc<selfdef_nats::FederationSigning>> =
-            if cfg.bus.nats.signing_key_file.is_empty() {
-                None
-            } else {
-                let peers: std::collections::HashMap<String, std::path::PathBuf> = cfg
-                    .bus
-                    .nats
-                    .peer_keys
-                    .iter()
-                    .map(|(h, p)| (h.clone(), std::path::PathBuf::from(p)))
-                    .collect();
-                match selfdef_nats::FederationSigning::load(
-                    std::path::Path::new(&cfg.bus.nats.signing_key_file),
-                    &peers,
-                ) {
-                    Ok(fs) => {
-                        info!(peers = peers.len(), "nats federation signing enabled (F-2026-111 c)");
-                        Some(Arc::new(fs))
-                    }
-                    Err(e) => {
-                        error!(error = %e, "nats federation signing key load failed; bridge runs UNSIGNED");
-                        None
-                    }
+        let federation_signing: Option<Arc<selfdef_nats::FederationSigning>> = if cfg
+            .bus
+            .nats
+            .signing_key_file
+            .is_empty()
+        {
+            None
+        } else {
+            let peers: std::collections::HashMap<String, std::path::PathBuf> = cfg
+                .bus
+                .nats
+                .peer_keys
+                .iter()
+                .map(|(h, p)| (h.clone(), std::path::PathBuf::from(p)))
+                .collect();
+            match selfdef_nats::FederationSigning::load(
+                std::path::Path::new(&cfg.bus.nats.signing_key_file),
+                &peers,
+            ) {
+                Ok(fs) => {
+                    info!(
+                        peers = peers.len(),
+                        "nats federation signing enabled (F-2026-111 c)"
+                    );
+                    Some(Arc::new(fs))
                 }
-            };
+                Err(e) => {
+                    error!(error = %e, "nats federation signing key load failed; bridge runs UNSIGNED");
+                    None
+                }
+            }
+        };
         info!(url = %nats_cfg.url, signed = federation_signing.is_some(), "nats bridge: starting");
         Some(tokio::spawn(async move {
             // Supervised retry loop. A single failed run previously killed the

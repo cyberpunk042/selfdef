@@ -537,8 +537,14 @@ mod tests {
             assert_eq!(p.forward_agent, first.forward_agent);
         }
         // Exact `db.internal` is most-specific → its values win.
-        assert!(first.port_forwarding, "exact host override wins port_forwarding");
-        assert!(!first.forward_agent, "exact host override wins forward_agent");
+        assert!(
+            first.port_forwarding,
+            "exact host override wins port_forwarding"
+        );
+        assert!(
+            !first.forward_agent,
+            "exact host override wins forward_agent"
+        );
 
         // Glob-vs-glob: `db.x.internal` matches `*.internal` (len 10) AND `db.*`
         // (len 4); the longer/more-specific `*.internal` wins → port_forwarding=true.

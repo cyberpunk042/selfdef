@@ -953,7 +953,8 @@ mod tests {
         // destructive actions are absent until wired, then read the Arc live.
         let m = Metrics::new("h");
         assert!(
-            !m.render(0).contains("selfdef_responder_federated_refused_total"),
+            !m.render(0)
+                .contains("selfdef_responder_federated_refused_total"),
             "refusal series must be absent until wired"
         );
         let refused = Arc::new(AtomicU64::new(0));
@@ -976,7 +977,8 @@ mod tests {
         // daemon wires the NATS bridge counter, then reads the shared Arc live.
         let m = Metrics::new("h");
         assert!(
-            !m.render(0).contains("selfdef_nats_inbound_federated_events_total"),
+            !m.render(0)
+                .contains("selfdef_nats_inbound_federated_events_total"),
             "federated-ingress series must be absent until wired"
         );
 
@@ -1000,7 +1002,8 @@ mod tests {
         // then reads the shared Arc live.
         let m = Metrics::new("h");
         assert!(
-            !m.render(0).contains("selfdef_nats_inbound_federated_verified_total"),
+            !m.render(0)
+                .contains("selfdef_nats_inbound_federated_verified_total"),
             "verified series must be absent until wired"
         );
         let verified = Arc::new(AtomicU64::new(0));
