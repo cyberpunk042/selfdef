@@ -159,11 +159,12 @@ checked-in template propagate.
 
 ## Alert rules
 
-`assets/alerts/selfdef.yml.template` ships 19 Prometheus alert rules
+`assets/alerts/selfdef.yml.template` ships 21 Prometheus alert rules
 across 4 groups: the MS027 four-watchdog set, the M060 cross-repo
 mirror-export loop, the SDD-062 detection-watchdog finding stream, and
 the meta-observability warnings (metrics-ingest lag + correlator bus lag
-+ responder bus lag).
++ responder bus lag + Tetragon map errors + responder circuit breaker +
+federated-action refusal).
 
 ### MS027 four-watchdog set (MS046 + MS047 + MS044 + MS048)
 
@@ -202,6 +203,9 @@ the meta-observability warnings (metrics-ingest lag + correlator bus lag
 | warning | SelfdefMetricsIngestLag | `selfdef_ingest_lag_events_total` rises in 10m — the metrics-ingest subscriber dropped bus events, so `/metrics` under-counts and the counter-based alerts above may not fire for events in a dropped batch |
 | warning | SelfdefCorrelatorBusLag | `selfdef_correlator_lag_events_total` rises in 10m — the correlator subscriber dropped raw events, so they were never rule-evaluated and produced no finding at all (a detection gap, not just a metrics gap) |
 | warning | SelfdefResponderBusLag | `selfdef_responder_lag_events_total` rises in 10m — the responder subscriber dropped findings, so no autonomous block/quarantine/notify action fired for them (a response gap) |
+| warning | SelfdefTetragonMapErrors | `tetragon_map_errors_total` rises in 10m — Tetragon's kernel-side BPF maps are erroring, so the kernel source silently loses fidelity while the collector stays connected (detection degrades with zero signal on selfdef's own bus) |
+| warning | SelfdefResponderCircuitBreakerTripped | `selfdef_responder_ratecap_tripped_total` rises in 10m — the GLOBAL destructive-action rate cap (flood breaker) hit `[responder].max_destructive_actions_per_min` and suppressed further destructive actions; routine per-target dedup is excluded (F-2026-114) |
+| warning | SelfdefFederatedDestructiveActionRefused | `selfdef_responder_federated_refused_total` rises in 10m — with `[responder].act_on_federated = false` (fail-closed), a destructive action was refused for a finding whose trigger arrived from another host via the NATS bridge (F-2026-111) |
 
 The ingest-lag alert watches the observability path itself: detection still
 happens (correlator + responder subscribe to the bus independently), but the
@@ -211,7 +215,10 @@ bypass detection entirely (correlator) or findings fire no response
 (responder). All three share the `[bus] inproc_capacity` overflow mechanism.
 Runbooks: `wiki/runbooks/metrics-ingest-lag.md`,
 `wiki/runbooks/metrics-correlator-lag.md`,
-`wiki/runbooks/metrics-responder-lag.md`.
+`wiki/runbooks/metrics-responder-lag.md`,
+`wiki/runbooks/tetragon-map-errors.md`,
+`wiki/runbooks/responder-circuit-breaker-tripped.md`,
+`wiki/runbooks/federated-destructive-action-refused.md`.
 
 Every alert carries `runbook_url` pointing at the matching
 remediation procedure. The four-watchdog + detection-watchdog + the
