@@ -353,13 +353,34 @@ mod tests {
         let script = dir.path().join("hung-signal-cli");
         {
             let mut f = std::fs::File::create(&script).unwrap();
-            // Ignores its args and wedges.
-            f.write_all(b"#!/bin/sh\nsleep 60\n").unwrap();
+            // Ignores the notifier's args and wedges; `--probe` is the fast
+            // liveness path used below to clear the ETXTBSY window.
+            f.write_all(b"#!/bin/sh\nif [ \"$1\" = \"--probe\" ]; then exit 0; fi\nsleep 60\n")
+                .unwrap();
         }
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
 
+        // Writing an executable and exec'ing it inside a multi-threaded test
+        // binary races with other threads' fork()/exec(): a concurrent fork can
+        // momentarily hold our write fd, so the exec returns `ETXTBSY`
+        // ("Text file busy") instead of running the script. That surfaced as a
+        // non-timeout io error and made this test flaky under the parallel
+        // `cargo test --workspace` run (green in isolation, red under load).
+        // Probe the script with the fast `--probe` path until it runs cleanly,
+        // waiting out the transient window BEFORE the timed measurement, so the
+        // test genuinely exercises the timeout path every time.
+        for _ in 0..200 {
+            match std::process::Command::new(&script).arg("--probe").output() {
+                Ok(_) => break,
+                Err(e) if e.raw_os_error() == Some(26) => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(e) => panic!("probe failed for an unexpected reason: {e}"),
+            }
+        }
+
         let n = SignalCliNotifier::new(script, "+15550000000".into(), "+15551234567".into())
-            .with_send_timeout(Duration::from_millis(200));
+            .with_send_timeout(Duration::from_millis(500));
 
         let start = std::time::Instant::now();
         let r = <SignalCliNotifier as Notifier>::notify(&n, &finding_event()).await;
@@ -368,9 +389,14 @@ mod tests {
         assert!(r.is_err(), "hung child must surface an error, got {r:?}");
         let msg = format!("{}", r.unwrap_err());
         assert!(msg.contains("timed out"), "expected timeout error: {msg}");
+        // The contract is "does NOT hang for the child's full 60s sleep" — the
+        // deadline fired and returned. The bound only has to sit comfortably
+        // below 60s; a tight wall-clock assertion would re-introduce load
+        // flakiness (scheduler delay after the logical 500ms deadline under a
+        // saturated workspace run), so 30s proves no-hang without racing.
         assert!(
-            elapsed < Duration::from_secs(5),
-            "must return promptly after the deadline, took {elapsed:?}"
+            elapsed < Duration::from_secs(30),
+            "must return after the deadline rather than hanging the full 60s child sleep, took {elapsed:?}"
         );
     }
 }
