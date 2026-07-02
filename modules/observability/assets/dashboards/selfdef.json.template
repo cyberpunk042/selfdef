@@ -672,6 +672,18 @@
       "targets": [
         { "expr": "rate(selfdef_store_retention_sweeps_total[1h])", "legendFormat": "sweeps/s" }
       ]
+    },
+    {
+      "id": 135,
+      "type": "timeseries",
+      "title": "federated ingress — verified vs total (F-2026-111)",
+      "description": "rate(selfdef_nats_inbound_federated_events_total[5m]) vs rate(selfdef_nats_inbound_federated_verified_total[5m]) — cross-host events arriving over the NATS bridge, and the subset whose envelope signature verified against a configured trusted-peer key (F-2026-111 option c). A persistent gap between the two lines means unverified peers are publishing; with [responder].act_on_federated = false those events cannot drive destructive actions (see the SelfdefFederatedDestructiveActionRefused alert), but the gap itself is the peer-trust signal to investigate.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 83 },
+      "targets": [
+        { "expr": "rate(selfdef_nats_inbound_federated_events_total[5m])", "legendFormat": "federated events (all)" },
+        { "expr": "rate(selfdef_nats_inbound_federated_verified_total[5m])", "legendFormat": "signature-verified" }
+      ]
     }
   ]
 }
