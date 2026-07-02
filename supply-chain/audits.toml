@@ -17,3 +17,9 @@
 # version = "1.2.3"
 # criteria = "safe-to-deploy"
 # notes = "Reviewed by @alice on 2026-05-12 — no unsafe, no network, deterministic."
+
+# The `audits` table itself must exist even when empty — cargo-vet 0.10.2
+# fails to parse the file without it ("missing field `audits`"), which made
+# the informational CI vet job die on parse instead of reporting unvetted
+# crates (weekly audit run 2026-06-29).
+[audits]
