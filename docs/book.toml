@@ -1,7 +1,6 @@
 [book]
-authors = ["You"]
+authors = ["cyberpunk042"]
 language = "en"
-multilingual = false
 src = "src"
 title = "selfdef"
 description = "Self-defense service for Linux hosts."
@@ -9,5 +8,5 @@ description = "Self-defense service for Linux hosts."
 [output.html]
 default-theme = "navy"
 preferred-dark-theme = "navy"
-git-repository-url = "https://example.org/you/selfdef"
-edit-url-template = "https://example.org/you/selfdef/edit/main/docs/{path}"
+git-repository-url = "https://github.com/cyberpunk042/selfdef"
+edit-url-template = "https://github.com/cyberpunk042/selfdef/edit/main/docs/{path}"

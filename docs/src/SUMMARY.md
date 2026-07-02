@@ -8,6 +8,8 @@
   - [Configuration](./ops/config.md)
   - [Notifications](./ops/notifications.md)
   - [HTTP API](./ops/api.md)
+  - [Operator surfaces](./ops/operator-surfaces.md)
+  - [The four-watchdog set](./ops/four-watchdog-set.md)
   - [NATS bridge](./ops/nats.md)
   - [SSH wrapper install](./ops/ssh-wrap-install.md)
   - [Verifying a release](./ops/verify_release.md)
