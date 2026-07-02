@@ -161,12 +161,13 @@ run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
 run_layer "L1: ruff (python lint — guardian-core / ux-harness / tests)" \
     bash scripts/test/L1-ruff-python.sh
 
-run_layer "L2: python suites (guardian / adversary / replay / ux-harness)" \
+run_layer "L2: python suites (guardian / adversary / replay / ux-harness / apply.sh e2e)" \
     python3 -m unittest \
         tests.integration.test_guardian_core \
         tests.adversary.test_ms042_mismatch_scenarios \
         tests.replay.test_audit_chain_continuity \
-        tests.ux-harness.test_ux_harness_l1
+        tests.ux-harness.test_ux_harness_l1 \
+        tests.observability.test_apply_sh_end_to_end_integration
 
 # --- L2 observability pytest suite ------------------------------------
 # tests/observability/ is pytest-style (parametrize + bare asserts), which
