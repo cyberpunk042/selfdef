@@ -12,7 +12,53 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
 
 `cyberpunk042/sovereign-os` is **Solution 1** — the runtime/cockpit. `cyberpunk042/devops-solutions-information-hub` is the **third piece** = read-only second-brain.
 
-## Current arc (2026-06-05): MS048 scheduler runtime loop closed end-to-end — COMPLETE
+## Current arc (2026-07-02): CI-green restoration + operator-surface live verification — COMPLETE
+
+Operator directive (verbatim): *"I want it bulletproof and I want the
+documentation super clear too and everything easy to use and a
+super-dashboard + the individual ones and I want them perfect."* and
+*"no need for branches on selfdef, we own it right now"* (commits go
+straight to `main`).
+
+**Found**: main CI silently RED since 2026-06-11 (the security-fix campaign's
+last commits landed without fmt/observability follow-through) and the weekly
+`audit` workflow RED since 2026-06-29. Fixed, all on `main`
+(6f67f6e..453d8e3 + the trio-hint commit after):
+
+- `cargo fmt --all` — 22-file drift cleared (rustfmt job green again).
+- 4 failing coherence layers, all observability: orphan metric
+  `selfdef_nats_inbound_federated_verified_total` → new dashboard panel
+  "federated ingress — verified vs total"; 2 alerts without `runbook_url`
+  (CircuitBreakerTripped / FederatedDestructiveActionRefused) → annotations
+  + 2 NEW info-hub runbooks (authored, `pipeline post` PASS, merged as
+  info-hub PR #22 — merge-ordered BEFORE selfdef CI so Gate 3b resolves);
+  README alert inventory 19→21; orphaned unittest suite
+  (test_apply_sh_end_to_end_integration) registered in coherence.sh L2.
+- `audit` workflow: RUSTSEC-2026-0185 (quinn-proto → 0.11.15), then the
+  same-day anyhow advisory (→ 1.0.103, caught by the dispatched deny run),
+  and the cargo-vet store completed ([audits] table + generated
+  imports.lock — vet now reports real unvetted-crates state instead of
+  dying on parse; still informational/continue-on-error until the graph
+  is certified, an operator-review process).
+- **Result: ci 11/11 jobs green on main (first since 06-11) + audit green.**
+
+**Live verification (not gate-inference)**: built `selfdefd` per-crate,
+booted it with a real config; ALL 44 GET endpoints 200; PWA fully served;
+control verbs 403 without control token (fail-closed live); token-file
+mode 644 refused with remediation (paranoia works). Headless-chromium
+render of the PWA (Playwright): **28/28 sections found AND populated,
+0 page errors, 0 failed requests** (one browser-inherent SW 401 on
+bearer-token TCP — documented, registration already best-effort).
+`selfdefctl` live: `trio` + `health` + `status` render honest states.
+
+**Docs**: 2 new mdbook chapters (`ops/operator-surfaces.md` — the
+super-dashboard + 4 individual surfaces; `ops/four-watchdog-set.md`),
+book.toml fixed (mdbook-0.5 `multilingual` removal + example.org
+placeholders → real coords; book verified building). `trio` footer
+conflation fixed (7575 is minimal-web, PWA is at the API transport's
+`/dashboard`).
+
+## Previous arc (2026-06-05): MS048 scheduler runtime loop closed end-to-end — COMPLETE
 
 The MS048 Goldilocks Scheduler had its substrate-observability half shipped
 (PSI + DCGM + IPS-human-gate trio → `BackpressureDriver::poll()` →

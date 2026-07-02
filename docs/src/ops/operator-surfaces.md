@@ -16,6 +16,13 @@ Beyond the host, the **sovereign-os cockpit** renders selfdef state read-only
 through the 14 `selfdef-*-mirror` crates (M060 publishers) — that is the
 cross-repo view, not a selfdef surface per se.
 
+> **PWA offline-shell caveat (bearer-token TCP):** browsers never attach
+> custom headers to a service-worker script fetch, so over the plain
+> bearer-token TCP transport the offline shell logs a one-time 401 and is
+> skipped (registration is best-effort by design; every section still
+> renders). The offline shell activates on transports where the browser
+> itself can authenticate — a reverse proxy in front, or mTLS.
+
 ## Coherence guarantees (why the surfaces can't drift)
 
 The surfaces are contract-locked, not convention-locked:

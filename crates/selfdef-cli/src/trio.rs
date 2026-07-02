@@ -395,7 +395,9 @@ fn render_once_with(json: bool, compact: bool) -> Result<i32> {
     println!(
         "  Drill down: `selfdefctl friction-audit show` / `perimeter show` / `guardian show` / `scheduler show`"
     );
-    println!("  Dashboard:  http://localhost:7575/dashboard (when selfdefd HTTP server is bound)");
+    println!(
+        "  Dashboard:  <api transport>/dashboard (bundled PWA served by selfdefd's [api] socket) · minimal web: https://localhost:7575 (selfdef-web fallback)"
+    );
     println!("  Runbooks:   ~/devops-solutions-information-hub/wiki/runbooks/");
     Ok(0)
 }
