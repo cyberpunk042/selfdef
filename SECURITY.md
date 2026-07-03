@@ -142,12 +142,20 @@ itself or the operator (findings F-2026-116 … F-2026-125):
 - Tetragon credential-access policy (`rules/tetragon/observe-sensitive-files.yaml`)
   observes file *opens* under `/etc/selfdef/secrets/` (action `Post`/observe,
   T1552), and the optional agent-guard `etc-write-guard` observes `/etc/`
-  writes broadly (T1565, `Post`). NOTE: a dedicated Tetragon policy watching
-  the daemon binary `/usr/bin/selfdefd` + full `/etc/selfdef/` +
-  `/var/lib/selfdef/` for *modification* with a daemon-update-path exclusion
-  is **not** shipped (see Known gap F-2026-099) — real-time daemon-binary/state
-  tamper detection relies on the periodic AIDE baseline (above), not an
-  in-kernel Tetragon policy.
+  writes broadly (T1565, `Post`). A dedicated Tetragon policy
+  (`rules/tetragon/observe-selfdef-tamper.yaml`) watches the daemon binary
+  `/usr/bin/selfdefd` + the config/rules tree `/etc/selfdef/` for access by any
+  binary outside the daemon/CLI/package-update exclusion set (`matchBinaries:
+  NotIn` selfdefd, selfdefctl, dpkg/apt, install, systemd — T1554, action
+  `Post`/observe). The `/var/lib/selfdef/` state dir is **deliberately not**
+  in this policy — the daemon rewrites it constantly, so a kernel watch there is
+  a high false-positive surface; its integrity relies on the periodic AIDE
+  baseline (above) instead. **Caveat (F-2026-099):** the policy ships as a
+  validation-pending draft (`selfdef.io/validation: REQUIRED-ON-TETRAGON-HOST`)
+  and keys on `security_file_open` (any open, not write-specific), so until it
+  is loaded + confirmed firing on a live Tetragon host, real-time daemon-binary
+  + config tamper detection still leans on the periodic AIDE baseline rather
+  than this in-kernel policy.
 
 ### Four-watchdog set (IPS spine, MS046+MS047+MS044+MS048)
 
@@ -465,24 +473,28 @@ This block is intentionally short — copy it into your deployment runbook.
   (and whether hard-fail-at-boot is even desirable vs. audit-only,
   given it could brick a host on a false-positive hardware
   reading) is a PO decision.
-- **No real-time Tetragon self-protection policy for the daemon
-  (F-2026-099).** The Tamper-detection section claimed a Tetragon
-  TracingPolicy watches `/usr/bin/selfdefd` + `/etc/selfdef/` +
-  `/var/lib/selfdef/` for modification (with a daemon-update-path
-  exclusion). Verified against the shipped policies: no such
-  policy exists — `observe-sensitive-files.yaml` watches
-  `/etc/selfdef/secrets/` for file *open* (observe-only, no
-  daemon-exclusion); the daemon binary and `/var/lib/selfdef/`
-  state are not watched by any Tetragon policy. So a root attacker
-  modifying `/usr/bin/selfdefd` or the state dir is **not** caught
-  in real time by a kernel policy — only by the periodic AIDE
-  baseline scan (`integrity-sentinel`, which covers config + rules
-  explicitly and the binary via AIDE's standard `/usr/bin`
-  coverage). Section corrected to state this. Shipping a real
-  `security_path_*`/`security_file_open(write)` Tetragon policy on
-  those paths with a `matchBinaries` exclusion for the updater is a
-  tracked enhancement (and the daemon-exclusion design — how the
-  legitimate update path is identified — is the non-trivial part).
+- **Tetragon daemon self-protection policy — DRAFTED, validation-pending
+  (F-2026-099).** The Tamper-detection section once claimed a Tetragon
+  TracingPolicy watching `/usr/bin/selfdefd` + `/etc/selfdef/` +
+  `/var/lib/selfdef/` for modification that was not shipped. It now IS
+  shipped as `rules/tetragon/observe-selfdef-tamper.yaml` — a
+  `security_file_open` observe policy (action `Post`, never blocks) on the
+  daemon binary `/usr/bin/selfdefd` + the config/rules tree `/etc/selfdef/`,
+  with a `matchBinaries: NotIn` exclusion for the legitimate writers
+  (selfdefd, selfdefctl, dpkg/dpkg-deb, apt/apt-get, install, systemd) — i.e.
+  the daemon-update-path exclusion (the non-trivial design part) is concrete.
+  Two honest caveats remain: (1) it carries
+  `selfdef.io/validation: REQUIRED-ON-TETRAGON-HOST` and has NOT been verified
+  to load + fire on a live Tetragon kernel (none in CI), so it is deliberately
+  not marked "fixed" — claiming it works unvalidated would repeat this
+  finding's own over-claim; observe-only ⇒ zero risk while unvalidated
+  (worst case it just doesn't fire = the prior state). (2) `/var/lib/selfdef/`
+  is deliberately **excluded** from the watch — the daemon rewrites it
+  constantly (high false-positive surface); its integrity relies on the
+  periodic AIDE baseline scan (`integrity-sentinel`, which also covers config
+  + rules explicitly and the binary via AIDE's standard `/usr/bin` coverage).
+  Optional future refinement: a write-specific (`security_path_*`) kprobe once
+  the open-mode policy is validated on a Tetragon host.
 - **Self-watchdog hang-detection — FIXED (F-2026-100).** The
   daemon emits `WATCHDOG=1` every 30s but `selfdefd.service` had no
   `WatchdogSec=`, so systemd ignored it and a *hung* daemon went

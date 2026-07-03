@@ -2796,12 +2796,14 @@ async fn hardware_routes_return_200_with_well_formed_bodies() {
 }
 
 #[tokio::test]
-async fn alerts_route_returns_200_with_fifteen_classified_rows() {
-    // MS027 + /v1/alerts: server-side classification of the 15-alert
+async fn alerts_route_returns_200_with_twentyone_classified_rows() {
+    // MS027 + /v1/alerts: server-side classification of the 21-alert
     // ALERTS catalog (9 four-watchdog + MS011 storage + M060 publish +
-    // MS019 watchdog-finding). Both the PWA dashboard and the
-    // selfdefctl alerts CLI consume this; we verify the shape +
-    // canonical ordering (so client code can index by position).
+    // MS019 watchdog-finding + 6 meta-observability: bus-lag ×3 +
+    // Tetragon map-errors + responder circuit-breaker + federated
+    // refusal). Both the PWA dashboard and the selfdefctl alerts CLI
+    // consume this; we verify the shape + canonical ordering (so client
+    // code can index by position).
     let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
     let req = Request::builder()
@@ -2821,7 +2823,7 @@ async fn alerts_route_returns_200_with_fifteen_classified_rows() {
     );
 
     let alerts = v["alerts"].as_array().expect("alerts must be array");
-    assert_eq!(alerts.len(), 15, "expected exactly 15 alert rows");
+    assert_eq!(alerts.len(), 21, "expected exactly 21 alert rows");
 
     let expected_names = [
         "FrictionAuditFailing",
@@ -2839,6 +2841,12 @@ async fn alerts_route_returns_200_with_fifteen_classified_rows() {
         "M060PublishStale",
         "M060PublishWedged",
         "WatchdogAlertFinding",
+        "MetricsIngestLag",
+        "CorrelatorBusLag",
+        "ResponderBusLag",
+        "TetragonMapErrors",
+        "ResponderCircuitBreakerTripped",
+        "FederatedDestructiveActionRefused",
     ];
     for (i, expected) in expected_names.iter().enumerate() {
         let row = &alerts[i];

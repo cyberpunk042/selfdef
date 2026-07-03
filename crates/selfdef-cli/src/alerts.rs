@@ -2,7 +2,7 @@
 //! 6th panel.
 //!
 //! Reads the daemon's `/metrics` endpoint (Prometheus text exposition
-//! format), parses out the 15 alert-relevant series, applies the same
+//! format), parses out the 21 alert-relevant series, applies the same
 //! threshold predicates as `modules/observability/assets/alerts/
 //! selfdef.yml.template`, and renders a per-alert row to the operator
 //! showing `NAME · MS · series · threshold · current value · STATE`.
@@ -16,7 +16,7 @@
 //!     selfdefctl alerts --quiet && deploy.sh
 //!
 //! Source: MS027 alert rules + dashboard `app.js::refreshAlerts` (the
-//! same 15 series + same predicates, but rendered for the terminal).
+//! same 21 series + same predicates, but rendered for the terminal).
 
 use std::process::Command;
 
@@ -222,6 +222,55 @@ const ALERTS: &[(&str, &str, &str, &str, Threshold)] = &[
         "> 0 / 10m",
         Threshold::WarnGreaterThanZero,
     ),
+    // ---- 6 meta-observability alerts (selfdef-meta-observability YAML
+    // group): bus-lag detection/response gaps + Tetragon BPF-map errors +
+    // responder flood-breaker + fail-closed federated refusal. These fire
+    // on `increase(<counter>[10m]) > 0` (any rise = warn). Added so the
+    // operator triage surface (`selfdefctl alerts`) mirrors the full
+    // 21-rule YAML — F-2026-084 (ingest-lag) / F-2026-111 (federated) /
+    // F-2026-114 (rate-cap). ----
+    (
+        "MetricsIngestLag",
+        "MS027",
+        "selfdef_ingest_lag_events_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "CorrelatorBusLag",
+        "MS003",
+        "selfdef_correlator_lag_events_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "ResponderBusLag",
+        "MS003",
+        "selfdef_responder_lag_events_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "TetragonMapErrors",
+        "MS016",
+        "tetragon_map_errors_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "ResponderCircuitBreakerTripped",
+        "MS003",
+        "selfdef_responder_ratecap_tripped_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "FederatedDestructiveActionRefused",
+        "MS003",
+        "selfdef_responder_federated_refused_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
 ];
 
 /// Parse Prometheus text exposition into a `(series_name → value)`
@@ -279,7 +328,7 @@ fn worst_state(rows: &[AlertRow]) -> &'static str {
     worst
 }
 
-/// Build the 15 rows from a parsed exposition map.
+/// Build the 21 rows from a parsed exposition map.
 pub(crate) fn classify(series: &std::collections::HashMap<String, f64>) -> Vec<AlertRow> {
     ALERTS
         .iter()
@@ -533,14 +582,21 @@ mod tests {
             0.0,
         );
         series.insert("selfdef_scheduler_audit_chain_events".to_string(), 12.0);
-        // 6 newly-added alerts (MS011 storage + M060 publish + MS019 watchdog).
+        // 6 storage/M060/watchdog alerts (MS011 storage + M060 publish + MS019 watchdog).
         series.insert("selfdef_storage_mount_used_ratio".to_string(), 0.42);
         series.insert("selfdef_m060_mirror_publish_failed_recent".to_string(), 0.0);
         series.insert("selfdef_m060_mirror_publish_stale_count".to_string(), 0.0);
         series.insert("selfdef_m060_mirror_publish_wedged_count".to_string(), 0.0);
         series.insert("selfdef_watchdog_alert_finding_total".to_string(), 0.0);
+        // 6 meta-observability alerts (bus-lag + tetragon-map + responder breaker/federated).
+        series.insert("selfdef_ingest_lag_events_total".to_string(), 0.0);
+        series.insert("selfdef_correlator_lag_events_total".to_string(), 0.0);
+        series.insert("selfdef_responder_lag_events_total".to_string(), 0.0);
+        series.insert("tetragon_map_errors_total".to_string(), 0.0);
+        series.insert("selfdef_responder_ratecap_tripped_total".to_string(), 0.0);
+        series.insert("selfdef_responder_federated_refused_total".to_string(), 0.0);
         let rows = classify(&series);
-        assert_eq!(rows.len(), 15);
+        assert_eq!(rows.len(), 21);
         for r in &rows {
             assert_eq!(r.state, "ok", "{} expected ok", r.name);
         }
