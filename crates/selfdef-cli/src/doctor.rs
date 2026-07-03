@@ -232,7 +232,7 @@ fn check_m060_chain(_cfg: &Config) -> Vec<CheckResult> {
 }
 
 /// MS027 — fold `selfdefctl alerts` into doctor. Tries to reach the
-/// local daemon's `/metrics` endpoint; classifies each of the 9 alert-
+/// local daemon's `/metrics` endpoint; classifies each of the 15 alert-
 /// relevant series. Emits one `CheckResult` per alert (so operators
 /// see WHICH alert is firing in the doctor output, not just a
 /// summary). Connection failure → skipped (daemon not up — that

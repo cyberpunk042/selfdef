@@ -56,6 +56,9 @@ run_layer "L1: perimeter YAML lint" \
 run_layer "L1: YAML parse + real-bug scan (all sigma/policy/template YAML)" \
     bash scripts/test/L1-yaml-parse-scan.sh
 
+run_layer "L1: Sigma rule ↔ test-corpus coverage (every rule tested, pos+neg)" \
+    bash scripts/test/L1-sigma-rule-test-coverage.sh
+
 run_layer "L1: JSON parse + dup-key scan (schemas / fixtures / manifest)" \
     bash scripts/test/L1-json-parse-scan.sh
 

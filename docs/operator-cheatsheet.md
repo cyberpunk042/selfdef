@@ -225,7 +225,7 @@ The daemon serves a 6-panel single-page operator dashboard. Sections:
 | Guardian (MS044) | 30 s | `GET /v1/guardian` |
 | Scheduler (MS048) | 10 s | `GET /v1/scheduler` |
 | Modules (MS006) | 60 s | `GET /v1/modules` |
-| Alerts overview (MS027) | 15 s | `GET /metrics` — client-side parse of 9 alert-relevant series; surfaces chain-broken + counter alerts without needing an external Prometheus |
+| Alerts overview (MS027) | 15 s | `GET /metrics` — client-side parse of 15 alert-relevant series; surfaces chain-broken + counter alerts (including MS011 storage thresholds + M060 publish-loop failure/staleness/wedge + MS019 watchdog findings) without needing an external Prometheus |
 
 Open over UNIX socket (`unix://`) or TCP with `Authorization: Bearer
 <token>`. PWA shell is offline-capable (service-worker cached) but

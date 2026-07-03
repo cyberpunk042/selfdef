@@ -173,8 +173,10 @@ case "$1" in
                 systemctl enable selfdef-cli-mirror-doctor.timer 2>/dev/null || true
                 systemctl start selfdef-cli-mirror-doctor.timer 2>/dev/null || true
             fi
-            # M060 chain-wide observer (covers D-02/13/14/15/17/18 — the
-            # 6 mirror domains exposed by the daemon's mirror_export_loop).
+            # M060 chain-wide observer (covers D-02/12/13/14/15/16/17/18 —
+            # the 8 mirror domains exposed by the daemon's mirror_export_loop;
+            # D-12 rules + D-16 audit were silently skipped before the
+            # domain-coverage audit).
             # Same enable+start gate: only when node_exporter is detected
             # via its textfile_collector dir.
             if [ -d /run/systemd/system ] \

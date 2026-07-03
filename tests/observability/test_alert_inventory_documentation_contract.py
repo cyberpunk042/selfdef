@@ -143,3 +143,42 @@ def test_alert_count_in_readme_matches_yaml():
         f"README total-alert sentence doesn't mention {total} "
         f"(actual YAML count)"
     )
+
+
+def test_rust_alerts_catalogs_match_yaml_count():
+    """The selfdef-cli `ALERTS` and selfdef-api `ALERTS` const arrays
+    drive the operator-facing `selfdefctl alerts` verb + `/v1/alerts`
+    API + dashboard 'Alerts overview' panel. They are kept identical
+    by convention but were originally pinned to a 9-alert subset; the
+    YAML rules have since grown beyond that. When the Rust catalogs
+    fall behind the YAML, operators triaging during an incident
+    silently miss alert states for the newly-added rules
+    (`SelfdefStorageMount*`, `SelfdefM060Publish*`, `SelfdefWatchdog*`).
+
+    This guard counts `Threshold::` lines in both Rust source files
+    (one per ALERTS entry) and asserts the count equals the YAML
+    alert count, so future drift between the YAML and the Rust
+    catalogs fails fast at push-time."""
+    yaml_count = len(_yaml_alerts())
+    cli_path = REPO_ROOT / "crates" / "selfdef-cli" / "src" / "alerts.rs"
+    api_path = REPO_ROOT / "crates" / "selfdef-api" / "src" / "alerts.rs"
+    for path in (cli_path, api_path):
+        if not path.is_file():
+            continue
+        body = path.read_text()
+        # Each ALERTS entry ends with a `Threshold::<Variant>,` line.
+        # Counting those is a robust proxy for the catalog length.
+        threshold_lines = sum(
+            1 for line in body.splitlines() if "Threshold::" in line and line.rstrip().endswith(",")
+        )
+        assert threshold_lines == yaml_count, (
+            f"{path.relative_to(REPO_ROOT)} ALERTS catalog has "
+            f"{threshold_lines} entries but the YAML rules ship "
+            f"{yaml_count}. Operator-facing surfaces "
+            f"(selfdefctl alerts / /v1/alerts / dashboard) will "
+            f"silently miss the {yaml_count - threshold_lines} new "
+            f"alerts. Add the missing alert(s) to "
+            f"crates/selfdef-{{cli,api}}/src/alerts.rs::ALERTS and "
+            f"update the hardcoded `9` strings in selfdef-api/src/"
+            f"health.rs detail-line formatters in the same commit."
+        )

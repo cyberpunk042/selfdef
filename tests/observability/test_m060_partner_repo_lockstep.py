@@ -22,9 +22,19 @@ const. Opt-in partner-repo tests verify the same canonical value
 appears in the 3 sovereign-os surfaces — same shape as the MS022
 bidirectional lockstep (sovereign-os commit ac6b0ab / selfdef
 commit 625f3d9).
+
+Extension (this commit): the 8-domain M060 wire contract is now
+also locked across both repos. The selfdef m060_doctor DOMAINS
+array + selfdef-api m060_health ARTIFACT_NAMES list + sovereign-os
+m060-smoke DOMAINS tuple + sovereign-os mirror-domains dashboard
+panel description MUST reference the SAME 8 D-NN IDs. Drift on
+any one silently breaks the operator's cross-repo triage path —
+exactly the bug class the entire D-12 + D-16 coverage close
+session was driven by (selfdef 82014d6 + sovereign-os 234a1e0).
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -40,7 +50,42 @@ STALE_AGE_SECS = 300
 SELFDEF_CHAIN_STATES = {"online", "degraded", "stale", "offline"}
 PARTNER_CHAIN_STATES = SELFDEF_CHAIN_STATES | {"unreachable"}
 
+# The canonical 8-domain M060 wire contract. Order matters because
+# the selfdef m060_doctor.rs::DOMAINS const array iteration order is
+# operator-visible (textfile gauge rows + JSON output ordering). Both
+# the producer side (selfdef) and the consumer side (sovereign-os
+# m060-smoke + dashboard) MUST list these 8 in this exact order.
+CANONICAL_DOMAIN_IDS = (
+    "D-02",  # active-profile
+    "D-12",  # rules
+    "D-13",  # grants
+    "D-14",  # capability-tokens
+    "D-15",  # sandboxes
+    "D-16",  # audit-chain
+    "D-17",  # quarantine
+    "D-18",  # trust-scores
+)
+
+# The 8 D-NN-tied published-filenames in the api/m060_health
+# ARTIFACT_NAMES list. Plus the 2 MS007 cross-cutting artifacts
+# (tui + cli) for a total of 10. The api endpoint reports all 10;
+# the m060-doctor verb walks only the 8 D-NN-tied ones (TUI + CLI
+# have their own per-link doctor verbs).
+CANONICAL_D_NN_FILES = (
+    "active-profile.json",
+    "rules.json",
+    "grants.json",
+    "capability-tokens.json",
+    "sandboxes.json",
+    "audit.json",
+    "quarantine.json",
+    "trust-scores.json",
+)
+MS007_CROSS_CUTTING_FILES = ("tui.json", "cli.json")
+CANONICAL_API_ARTIFACTS = set(CANONICAL_D_NN_FILES) | set(MS007_CROSS_CUTTING_FILES)
+
 HEALTH_RS = REPO_ROOT / "crates" / "selfdef-api" / "src" / "m060_health.rs"
+DOCTOR_RS = REPO_ROOT / "crates" / "selfdef-cli" / "src" / "m060_doctor.rs"
 
 
 def _read(path: Path) -> str:
@@ -104,6 +149,69 @@ def test_selfdef_health_rs_stale_check_uses_const():
     assert "STALE_AGE_SECS" in classify_body, (
         "classify_state must use the STALE_AGE_SECS const (no magic "
         "number) — drift catch for the literal-300 anti-pattern"
+    )
+
+
+# --------------------------------------------------------------------
+# 8-domain wire-contract lockstep — closes the silent-coverage-drift
+# bug class that the D-12 rules + D-16 audit-chain coverage close
+# (selfdef 82014d6 + sovereign-os 234a1e0) was driven by.
+# --------------------------------------------------------------------
+
+
+def test_selfdef_doctor_domains_match_canonical_set():
+    """The selfdef-cli m060_doctor DOMAINS array MUST list exactly
+    the canonical 8 D-NN ids in canonical order. Sister regression
+    guard `domains_cover_full_m060_wire_contract` (in-crate Rust
+    test) locks the same invariant at cargo-test time; this lint
+    locks it at the pytest gate too so a fresh-pull CI run catches
+    a drift before the cargo build."""
+    body = _read(DOCTOR_RS)
+    # Extract each Domain { id: "D-NN", ... } occurrence in source order.
+    id_pattern = re.compile(r'Domain\s*\{\s*\n\s*id:\s*"(D-\d{2})"')
+    found_ids = tuple(id_pattern.findall(body))
+    assert found_ids == CANONICAL_DOMAIN_IDS, (
+        f"selfdef-cli m060_doctor DOMAINS drift: expected "
+        f"{CANONICAL_DOMAIN_IDS} (in this exact order), got "
+        f"{found_ids}. The doctor verb's textfile gauges and JSON "
+        f"output are operator-visible in this order; reordering "
+        f"would silently break Grafana legend ordering + the "
+        f"sovereign-os consumer's per-domain timeseries panel."
+    )
+
+
+def test_selfdef_api_artifact_names_cover_8_d_nn_mirrors():
+    """The selfdef-api m060_health ARTIFACT_NAMES list MUST cover
+    all 8 D-NN-tied published filenames AND the 2 MS007 cross-cutting
+    (tui + cli) = 10 total. Drift between this list and the
+    mirror_export_loop's per-domain FILE consts (RULES_FILE,
+    AUDIT_FILE, etc.) silently desyncs the health endpoint's
+    artifact-count from the actual publisher set."""
+    body = _read(HEALTH_RS)
+    # Extract the ARTIFACT_NAMES list literal.
+    m = re.search(
+        r"const ARTIFACT_NAMES:\s*&\[&str\]\s*=\s*&\[([^\]]+)\]",
+        body, re.DOTALL,
+    )
+    assert m is not None, (
+        "m060_health.rs missing ARTIFACT_NAMES list"
+    )
+    found = set(re.findall(r'"([^"]+\.json)"', m.group(1)))
+    missing = CANONICAL_API_ARTIFACTS - found
+    extra = found - CANONICAL_API_ARTIFACTS
+    assert not missing, (
+        f"m060_health.rs ARTIFACT_NAMES missing canonical entries: "
+        f"{sorted(missing)}. The 10-artifact wire contract requires "
+        f"8 D-NN-tied files + 2 MS007 cross-cutting (tui + cli)."
+    )
+    assert not extra, (
+        f"m060_health.rs ARTIFACT_NAMES has unknown entries: "
+        f"{sorted(extra)}. If you added a new mirror artifact, "
+        f"update CANONICAL_API_ARTIFACTS in this lint in the same commit."
+    )
+    assert len(found) == 10, (
+        f"m060_health.rs ARTIFACT_NAMES must have exactly 10 entries "
+        f"(8 D-NN + 2 MS007); got {len(found)}"
     )
 
 
@@ -189,3 +297,67 @@ def test_partner_repo_health_api_states_match():
         f"partner-repo m060-health-api states drift: expected "
         f"{PARTNER_CHAIN_STATES!r}, got {found!r}"
     )
+
+
+def test_partner_repo_smoke_domains_match():
+    """Cross-check sovereign-os m060-smoke DOMAINS tuple — must
+    contain all 8 D-NN IDs from the canonical set. Opt-in via
+    $SOVEREIGN_OS_REPO_ROOT."""
+    partner_env = os.environ.get("SOVEREIGN_OS_REPO_ROOT")
+    if not partner_env:
+        return
+    partner = Path(partner_env)
+    smoke_path = partner / "scripts" / "diagnostics" / "m060-smoke.py"
+    if not smoke_path.is_file():
+        return
+    body = smoke_path.read_text()
+    # Match the DOMAINS list opening, extract all `"D-NN"` ids.
+    m = re.search(r"DOMAINS\s*=\s*\[(.+?)\]\s*\n", body, re.DOTALL)
+    if m is None:
+        return  # not wired yet
+    found_ids = set(re.findall(r'"(D-\d{2})"', m.group(1)))
+    missing = set(CANONICAL_DOMAIN_IDS) - found_ids
+    assert not missing, (
+        f"partner-repo m060-smoke DOMAINS missing canonical D-NN IDs: "
+        f"{sorted(missing)}. The 8-domain M060 wire contract requires "
+        f"all of {sorted(CANONICAL_DOMAIN_IDS)} — drift here means the "
+        f"smoke verb skips a domain the producer publishes."
+    )
+
+
+def test_partner_repo_dashboard_description_lists_8_domains():
+    """Cross-check sovereign-os mirror-domains dashboard per-domain-
+    severity panel description — its operator-visible D-NN enum must
+    list all 8 canonical IDs. Opt-in via $SOVEREIGN_OS_REPO_ROOT."""
+    partner_env = os.environ.get("SOVEREIGN_OS_REPO_ROOT")
+    if not partner_env:
+        return
+    partner = Path(partner_env)
+    dash_path = (
+        partner / "docs" / "observability" / "dashboards"
+        / "sovereign-os-m060-mirror-domains.json"
+    )
+    if not dash_path.is_file():
+        return
+    try:
+        data = json.loads(dash_path.read_text())
+    except json.JSONDecodeError:
+        return
+    panels = data.get("panels", [])
+    # Find the per-domain severity timeseries panel.
+    target = None
+    for panel in panels:
+        title = panel.get("title", "").lower()
+        if "per-domain severity" in title:
+            target = panel
+            break
+    if target is None:
+        return  # not wired yet
+    desc = target.get("description", "")
+    for d_nn in CANONICAL_DOMAIN_IDS:
+        assert d_nn in desc, (
+            f"partner-repo dashboard panel description missing "
+            f"canonical D-NN ID {d_nn!r}. Operator reading the panel "
+            f"hover-text won't know to look for {d_nn!r}. Full panel "
+            f"description: {desc!r}"
+        )

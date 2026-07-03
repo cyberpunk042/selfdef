@@ -9,7 +9,7 @@
 //! Composition (each component contributes one row + its `worst`
 //! state to the aggregate):
 //!
-//! - `alerts`   — `/v1/alerts` worst across the 9 four-watchdog alert series
+//! - `alerts`   — `/v1/alerts` worst across the 15-alert ALERTS catalog
 //! - `network`  — `/v1/network` worst across the 5 components
 //! - `storage`  — `/v1/storage` worst across filesystem mounts
 //! - `raid`     — `/v1/raid` worst across MD arrays (or "ok" if no MD)
@@ -33,7 +33,7 @@ pub(crate) struct HealthComponent {
     /// vocabularies (alerts uses critical/warn/ok; network uses
     /// red/yellow/green; cpu uses mode names).
     pub state: &'static str,
-    /// One-line operator-readable detail (e.g. `"3 of 9 alerts in
+    /// One-line operator-readable detail (e.g. `"3 of 15 alerts in
     /// WARN state"`, `"all 5 components green"`, `"current mode
     /// peak-inference"`).
     pub detail: String,
@@ -92,7 +92,10 @@ pub(crate) async fn show() -> Json<HealthResponse> {
     let gpu = &gpu_resp.0;
     let cpu = &cpu_resp.0;
 
-    // Alerts detail: count by state.
+    // Alerts detail: count by state. Total comes from the live
+    // catalog length so future YAML/catalog growth auto-cascades
+    // through the operator-facing detail string.
+    let alert_total = alerts.alerts.len();
     let mut alert_critical = 0usize;
     let mut alert_warn = 0usize;
     let mut alert_unknown = 0usize;
@@ -106,15 +109,15 @@ pub(crate) async fn show() -> Json<HealthResponse> {
     }
     let alerts_detail = if alert_critical > 0 {
         format!(
-            "{alert_critical} CRITICAL, {alert_warn} WARN ({} of 9 alerts elevated)",
+            "{alert_critical} CRITICAL, {alert_warn} WARN ({} of {alert_total} alerts elevated)",
             alert_critical + alert_warn
         )
     } else if alert_warn > 0 {
-        format!("{alert_warn} WARN of 9 alerts")
+        format!("{alert_warn} WARN of {alert_total} alerts")
     } else if alert_unknown > 0 {
-        format!("{alert_unknown} UNKNOWN of 9 alerts (some series not yet exported)")
+        format!("{alert_unknown} UNKNOWN of {alert_total} alerts (some series not yet exported)")
     } else {
-        "all 9 alerts green".to_string()
+        format!("all {alert_total} alerts green")
     };
 
     let components = vec![

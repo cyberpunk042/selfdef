@@ -2,7 +2,7 @@
 //! 6th panel.
 //!
 //! Reads the daemon's `/metrics` endpoint (Prometheus text exposition
-//! format), parses out the 9 alert-relevant series, applies the same
+//! format), parses out the 15 alert-relevant series, applies the same
 //! threshold predicates as `modules/observability/assets/alerts/
 //! selfdef.yml.template`, and renders a per-alert row to the operator
 //! showing `NAME · MS · series · threshold · current value · STATE`.
@@ -16,7 +16,7 @@
 //!     selfdefctl alerts --quiet && deploy.sh
 //!
 //! Source: MS027 alert rules + dashboard `app.js::refreshAlerts` (the
-//! same 9 series + same predicates, but rendered for the terminal).
+//! same 15 series + same predicates, but rendered for the terminal).
 
 use std::process::Command;
 
@@ -51,6 +51,12 @@ enum Threshold {
     WarnEqualsZero,
     /// Critical when value == -1 (sentinel for "chain broken").
     CriticalEqualsMinusOne,
+    /// Warning when value > the carried threshold. Used for
+    /// ratio-based gauges (e.g., storage 70% used).
+    WarnGreaterThan(f64),
+    /// Critical when value > the carried threshold. Same shape as
+    /// `WarnGreaterThan` but escalated severity (e.g., storage 90%).
+    CriticalGreaterThan(f64),
 }
 
 impl Threshold {
@@ -86,6 +92,20 @@ impl Threshold {
             }
             Threshold::CriticalEqualsMinusOne => {
                 if v == -1.0 {
+                    "critical"
+                } else {
+                    "ok"
+                }
+            }
+            Threshold::WarnGreaterThan(t) => {
+                if v > *t {
+                    "warn"
+                } else {
+                    "ok"
+                }
+            }
+            Threshold::CriticalGreaterThan(t) => {
+                if v > *t {
                     "critical"
                 } else {
                     "ok"
@@ -159,6 +179,49 @@ const ALERTS: &[(&str, &str, &str, &str, Threshold)] = &[
         "== -1",
         Threshold::CriticalEqualsMinusOne,
     ),
+    // ---- 6 newly-covered alerts (matches YAML rules selfdef.yml.template) ----
+    (
+        "StorageMountYellow",
+        "MS011",
+        "selfdef_storage_mount_used_ratio",
+        "> 0.7 sustained 5m",
+        Threshold::WarnGreaterThan(0.7),
+    ),
+    (
+        "StorageMountRed",
+        "MS011",
+        "selfdef_storage_mount_used_ratio",
+        "> 0.9 sustained 1m",
+        Threshold::CriticalGreaterThan(0.9),
+    ),
+    (
+        "M060PublishFailing",
+        "M060",
+        "selfdef_m060_mirror_publish_failed_recent",
+        "> 0 / 5m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "M060PublishStale",
+        "M060",
+        "selfdef_m060_mirror_publish_stale_count",
+        "> 0 (last publish > 10m ago)",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "M060PublishWedged",
+        "M060",
+        "selfdef_m060_mirror_publish_wedged_count",
+        "> 0 (>= 5 failures in 30m)",
+        Threshold::CriticalGreaterThanZero,
+    ),
+    (
+        "WatchdogAlertFinding",
+        "MS019",
+        "selfdef_watchdog_alert_finding_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
 ];
 
 /// Parse Prometheus text exposition into a `(series_name → value)`
@@ -216,7 +279,7 @@ fn worst_state(rows: &[AlertRow]) -> &'static str {
     worst
 }
 
-/// Build the 9 rows from a parsed exposition map.
+/// Build the 15 rows from a parsed exposition map.
 pub(crate) fn classify(series: &std::collections::HashMap<String, f64>) -> Vec<AlertRow> {
     ALERTS
         .iter()
@@ -410,17 +473,17 @@ pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
         println!("{}", serde_json::to_string(&json_out)?);
     } else {
         println!(
-            "{:<32} {:<5} {:<48} {:<18} {:>10}   STATE",
+            "{:<32} {:<5} {:<48} {:<26} {:>10}   STATE",
             "ALERT", "MS", "SERIES", "THRESHOLD", "CURRENT"
         );
-        println!("{}", "─".repeat(132));
+        println!("{}", "─".repeat(140));
         for r in &rows {
             let val = match r.value {
                 Some(v) => format!("{v}"),
                 None => "—".to_string(),
             };
             println!(
-                "{:<32} {:<5} {:<48} {:<18} {:>10}   {}",
+                "{:<32} {:<5} {:<48} {:<26} {:>10}   {}",
                 r.name,
                 r.ms,
                 r.series,
@@ -429,7 +492,7 @@ pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
                 r.state.to_uppercase()
             );
         }
-        println!("{}", "─".repeat(132));
+        println!("{}", "─".repeat(140));
         println!("WORST: {}", worst.to_uppercase());
     }
 
@@ -457,6 +520,7 @@ mod tests {
     #[test]
     fn classify_all_ok_when_series_clean() {
         let mut series = std::collections::HashMap::new();
+        // Original 9 alerts.
         series.insert("selfdef_friction_audit_failing_total".to_string(), 0.0);
         series.insert("selfdef_perimeter_sigkills_total".to_string(), 0.0);
         series.insert("selfdef_perimeter_policy_present".to_string(), 1.0);
@@ -469,8 +533,14 @@ mod tests {
             0.0,
         );
         series.insert("selfdef_scheduler_audit_chain_events".to_string(), 12.0);
+        // 6 newly-added alerts (MS011 storage + M060 publish + MS019 watchdog).
+        series.insert("selfdef_storage_mount_used_ratio".to_string(), 0.42);
+        series.insert("selfdef_m060_mirror_publish_failed_recent".to_string(), 0.0);
+        series.insert("selfdef_m060_mirror_publish_stale_count".to_string(), 0.0);
+        series.insert("selfdef_m060_mirror_publish_wedged_count".to_string(), 0.0);
+        series.insert("selfdef_watchdog_alert_finding_total".to_string(), 0.0);
         let rows = classify(&series);
-        assert_eq!(rows.len(), 9);
+        assert_eq!(rows.len(), 15);
         for r in &rows {
             assert_eq!(r.state, "ok", "{} expected ok", r.name);
         }
@@ -515,9 +585,79 @@ mod tests {
     }
 
     #[test]
+    fn classify_warn_on_storage_yellow_threshold() {
+        // 75% storage used → yellow threshold (> 0.7).
+        let mut series = std::collections::HashMap::new();
+        series.insert("selfdef_storage_mount_used_ratio".to_string(), 0.75);
+        let rows = classify(&series);
+        let row = rows
+            .iter()
+            .find(|r| r.name == "StorageMountYellow")
+            .expect("StorageMountYellow row");
+        assert_eq!(row.state, "warn");
+        // The Red row is on the same series — at 75% it's still ok
+        // (threshold is > 0.9).
+        let red = rows
+            .iter()
+            .find(|r| r.name == "StorageMountRed")
+            .expect("StorageMountRed row");
+        assert_eq!(red.state, "ok");
+    }
+
+    #[test]
+    fn classify_critical_on_storage_red_threshold() {
+        // 95% storage used → red threshold (> 0.9) AND yellow (> 0.7).
+        let mut series = std::collections::HashMap::new();
+        series.insert("selfdef_storage_mount_used_ratio".to_string(), 0.95);
+        let rows = classify(&series);
+        let red = rows
+            .iter()
+            .find(|r| r.name == "StorageMountRed")
+            .expect("StorageMountRed row");
+        assert_eq!(red.state, "critical");
+        // Both fire — yellow also escalated to warn.
+        let yellow = rows
+            .iter()
+            .find(|r| r.name == "StorageMountYellow")
+            .expect("StorageMountYellow row");
+        assert_eq!(yellow.state, "warn");
+        assert_eq!(worst_state(&rows), "critical");
+    }
+
+    #[test]
+    fn classify_critical_on_m060_publish_wedged() {
+        // wedged_count > 0 = critical (>=5 failures in 30m).
+        let mut series = std::collections::HashMap::new();
+        series.insert("selfdef_m060_mirror_publish_wedged_count".to_string(), 7.0);
+        let rows = classify(&series);
+        let row = rows
+            .iter()
+            .find(|r| r.name == "M060PublishWedged")
+            .expect("M060PublishWedged row");
+        assert_eq!(row.state, "critical");
+        assert_eq!(worst_state(&rows), "critical");
+    }
+
+    #[test]
+    fn classify_warn_on_watchdog_alert_finding() {
+        let mut series = std::collections::HashMap::new();
+        series.insert("selfdef_watchdog_alert_finding_total".to_string(), 1.0);
+        let rows = classify(&series);
+        let row = rows
+            .iter()
+            .find(|r| r.name == "WatchdogAlertFinding")
+            .expect("WatchdogAlertFinding row");
+        assert_eq!(row.state, "warn");
+    }
+
+    #[test]
     fn parse_v1_alerts_response_round_trips_canonical_shape() {
         // The exact JSON shape the daemon's GET /v1/alerts handler
-        // serves (crates/selfdef-api/src/alerts.rs::list).
+        // serves (crates/selfdef-api/src/alerts.rs::list). Server may
+        // still emit only the 9 original alerts; the parser tolerates
+        // any subset of the in-CLI ALERTS table (names that match in
+        // the static catalog round-trip; names that don't are rejected
+        // — that's the drift catch).
         let body = r#"{
           "worst": "critical",
           "alerts": [
