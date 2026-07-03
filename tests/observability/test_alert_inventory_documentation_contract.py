@@ -24,7 +24,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -146,21 +145,6 @@ def test_alert_count_in_readme_matches_yaml():
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Known drift: Rust ALERTS catalogs at crates/selfdef-{cli,api}"
-        "/src/alerts.rs ship 9 entries; YAML rules ship 15. The 6 "
-        "missing — SelfdefStorageMount{Yellow,Red} + SelfdefM060Publish"
-        "{Failing,Stale,Wedged} + SelfdefWatchdogAlertFinding — fall "
-        "out of `selfdefctl alerts` + `/v1/alerts` + dashboard 'Alerts "
-        "overview'. Tracked as pm-plan M02 (Close ALERTS catalog "
-        "drift bug). Remove this xfail decorator when the catalogs "
-        "are extended to match the YAML count + the hardcoded `9` "
-        "strings in selfdef-api/src/health.rs detail-line formatters "
-        "are bumped."
-    ),
-    strict=False,
-)
 def test_rust_alerts_catalogs_match_yaml_count():
     """The selfdef-cli `ALERTS` and selfdef-api `ALERTS` const arrays
     drive the operator-facing `selfdefctl alerts` verb + `/v1/alerts`
