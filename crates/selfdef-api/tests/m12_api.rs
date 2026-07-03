@@ -2796,9 +2796,10 @@ async fn hardware_routes_return_200_with_well_formed_bodies() {
 }
 
 #[tokio::test]
-async fn alerts_route_returns_200_with_nine_classified_rows() {
-    // MS027 + /v1/alerts: server-side classification of the 9 four-
-    // watchdog alert series. Both the PWA dashboard and the
+async fn alerts_route_returns_200_with_fifteen_classified_rows() {
+    // MS027 + /v1/alerts: server-side classification of the 15-alert
+    // ALERTS catalog (9 four-watchdog + MS011 storage + M060 publish +
+    // MS019 watchdog-finding). Both the PWA dashboard and the
     // selfdefctl alerts CLI consume this; we verify the shape +
     // canonical ordering (so client code can index by position).
     let (state, _bus, _store, _dir) = build_state().await;
@@ -2820,7 +2821,7 @@ async fn alerts_route_returns_200_with_nine_classified_rows() {
     );
 
     let alerts = v["alerts"].as_array().expect("alerts must be array");
-    assert_eq!(alerts.len(), 9, "expected exactly 9 alert rows");
+    assert_eq!(alerts.len(), 15, "expected exactly 15 alert rows");
 
     let expected_names = [
         "FrictionAuditFailing",
@@ -2832,6 +2833,12 @@ async fn alerts_route_returns_200_with_nine_classified_rows() {
         "GuardianChainBroken",
         "SchedulerSustainedBackpressure",
         "SchedulerChainBroken",
+        "StorageMountYellow",
+        "StorageMountRed",
+        "M060PublishFailing",
+        "M060PublishStale",
+        "M060PublishWedged",
+        "WatchdogAlertFinding",
     ];
     for (i, expected) in expected_names.iter().enumerate() {
         let row = &alerts[i];
