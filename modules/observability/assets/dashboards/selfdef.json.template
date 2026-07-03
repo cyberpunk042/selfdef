@@ -684,6 +684,100 @@
         { "expr": "rate(selfdef_nats_inbound_federated_events_total[5m])", "legendFormat": "federated events (all)" },
         { "expr": "rate(selfdef_nats_inbound_federated_verified_total[5m])", "legendFormat": "signature-verified" }
       ]
+    },
+    {
+      "id": 136,
+      "type": "row",
+      "title": "Meta-observability — bus lag + responder self-protection (F-2026-084/111/114)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 89 }
+    },
+    {
+      "id": 137,
+      "type": "stat",
+      "title": "correlator bus lag — events dropped",
+      "description": "selfdef_correlator_lag_events_total — raw events the correlator subscriber dropped because the bus was over-subscribed. Non-zero is a DETECTION gap: those events were never rule-evaluated and produced no finding at all. Green at 0, red as soon as any event is dropped. Sibling of the ingest-lag + responder-lag panels (SelfdefCorrelatorBusLag alert).",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 90 },
+      "targets": [
+        { "expr": "selfdef_correlator_lag_events_total", "legendFormat": "dropped" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 138,
+      "type": "stat",
+      "title": "responder bus lag — findings dropped",
+      "description": "selfdef_responder_lag_events_total — findings the responder subscriber dropped because the bus was over-subscribed. Non-zero is a RESPONSE gap: no autonomous block/quarantine/notify action fired for those findings. Green at 0, red as soon as any finding is dropped (SelfdefResponderBusLag alert).",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 90 },
+      "targets": [
+        { "expr": "selfdef_responder_lag_events_total", "legendFormat": "dropped" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 139,
+      "type": "stat",
+      "title": "responder rate-cap tripped — flood breaker",
+      "description": "selfdef_responder_ratecap_tripped_total — the GLOBAL destructive-action rate cap ([responder].max_destructive_actions_per_min) engaged and suppressed further destructive actions (routine per-target dedup excluded, F-2026-114). Non-zero means a destructive-action flood was breaker-limited; green at 0, red on any trip (SelfdefResponderCircuitBreakerTripped alert).",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 90 },
+      "targets": [
+        { "expr": "selfdef_responder_ratecap_tripped_total", "legendFormat": "tripped" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 140,
+      "type": "stat",
+      "title": "federated destructive action refused",
+      "description": "selfdef_responder_federated_refused_total — with [responder].act_on_federated = false (fail-closed default), a destructive action was refused for a finding whose trigger arrived from another host via the NATS bridge (F-2026-111). Non-zero is expected/benign under the fail-closed posture but flags federated triggers that WOULD have acted; green at 0, red on any refusal (SelfdefFederatedDestructiveActionRefused alert).",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 90 },
+      "targets": [
+        { "expr": "selfdef_responder_federated_refused_total", "legendFormat": "refused" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
     }
   ]
 }
