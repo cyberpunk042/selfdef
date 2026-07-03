@@ -627,11 +627,7 @@ mod tests {
             let want = expected
                 .get(d.id)
                 .unwrap_or_else(|| panic!("unexpected domain id {}", d.id));
-            assert_eq!(
-                d.resident_default, *want,
-                "{} resident_default drift",
-                d.id
-            );
+            assert_eq!(d.resident_default, *want, "{} resident_default drift", d.id);
         }
     }
 }

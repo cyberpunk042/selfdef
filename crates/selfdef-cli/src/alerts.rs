@@ -535,22 +535,10 @@ mod tests {
         series.insert("selfdef_scheduler_audit_chain_events".to_string(), 12.0);
         // 6 newly-added alerts (MS011 storage + M060 publish + MS019 watchdog).
         series.insert("selfdef_storage_mount_used_ratio".to_string(), 0.42);
-        series.insert(
-            "selfdef_m060_mirror_publish_failed_recent".to_string(),
-            0.0,
-        );
-        series.insert(
-            "selfdef_m060_mirror_publish_stale_count".to_string(),
-            0.0,
-        );
-        series.insert(
-            "selfdef_m060_mirror_publish_wedged_count".to_string(),
-            0.0,
-        );
-        series.insert(
-            "selfdef_watchdog_alert_finding_total".to_string(),
-            0.0,
-        );
+        series.insert("selfdef_m060_mirror_publish_failed_recent".to_string(), 0.0);
+        series.insert("selfdef_m060_mirror_publish_stale_count".to_string(), 0.0);
+        series.insert("selfdef_m060_mirror_publish_wedged_count".to_string(), 0.0);
+        series.insert("selfdef_watchdog_alert_finding_total".to_string(), 0.0);
         let rows = classify(&series);
         assert_eq!(rows.len(), 15);
         for r in &rows {
@@ -640,10 +628,7 @@ mod tests {
     fn classify_critical_on_m060_publish_wedged() {
         // wedged_count > 0 = critical (>=5 failures in 30m).
         let mut series = std::collections::HashMap::new();
-        series.insert(
-            "selfdef_m060_mirror_publish_wedged_count".to_string(),
-            7.0,
-        );
+        series.insert("selfdef_m060_mirror_publish_wedged_count".to_string(), 7.0);
         let rows = classify(&series);
         let row = rows
             .iter()

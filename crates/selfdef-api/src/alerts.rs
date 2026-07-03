@@ -401,10 +401,7 @@ mod tests {
     #[test]
     fn classify_critical_on_m060_publish_wedged() {
         let mut series = HashMap::new();
-        series.insert(
-            "selfdef_m060_mirror_publish_wedged_count".to_string(),
-            7.0,
-        );
+        series.insert("selfdef_m060_mirror_publish_wedged_count".to_string(), 7.0);
         let rows = classify(&series);
         let row = rows
             .iter()
