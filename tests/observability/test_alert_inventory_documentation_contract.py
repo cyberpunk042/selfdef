@@ -182,3 +182,43 @@ def test_rust_alerts_catalogs_match_yaml_count():
             f"update the hardcoded `9` strings in selfdef-api/src/"
             f"health.rs detail-line formatters in the same commit."
         )
+
+
+def test_dashboard_fallback_classifier_matches_yaml_count():
+    """The dashboard's client-side `/metrics` fallback
+    (`dashboard/app.js::fallbackClassifyFromMetrics`) replays the alert
+    classifier for older daemons that don't serve `/v1/alerts`. Its row
+    list MUST stay in lockstep with the YAML rules — otherwise dashboard
+    operators on the fallback path silently miss alert states during an
+    incident (the same triage gap the Rust-catalog guard above prevents,
+    but on the dashboard surface).
+
+    Third drift-face of one invariant: YAML rules ⇔ Rust ALERTS
+    (selfdef-cli + selfdef-api) ⇔ dashboard fallback. All three carry
+    the same alert count."""
+    import re
+
+    app_js = REPO_ROOT / "dashboard" / "app.js"
+    if not app_js.is_file():
+        return
+    body = app_js.read_text()
+    anchor = body.find("fallbackClassifyFromMetrics")
+    assert anchor != -1, (
+        "could not find fallbackClassifyFromMetrics in dashboard/app.js — "
+        "if the fallback was renamed, update this guard in the same commit"
+    )
+    match = re.search(r"const rows = \[(.*?)\];", body[anchor:], re.S)
+    assert match is not None, (
+        "could not find the fallback `const rows = [...]` array after "
+        "fallbackClassifyFromMetrics in dashboard/app.js"
+    )
+    names = re.findall(r'\{\s*name:\s*"([^"]+)"', match.group(1))
+    yaml_count = len(_yaml_alerts())
+    assert len(names) == yaml_count, (
+        f"dashboard/app.js fallback classifier has {len(names)} alert rows "
+        f"but the YAML rules ship {yaml_count}. Dashboard operators on the "
+        f"/metrics fallback path (older daemons without /v1/alerts) will "
+        f"silently miss the {yaml_count - len(names)} newest alert(s). Keep "
+        f"fallbackClassifyFromMetrics in lockstep with "
+        f"crates/selfdef-{{cli,api}}/src/alerts.rs::ALERTS + the YAML rules."
+    )

@@ -772,8 +772,12 @@
   }
 
   /// Client-side fallback: parses /metrics exposition and replays the
-  /// same 9-row classifier the server uses. Kept resilient against
-  /// the /v1/alerts endpoint being unavailable on older daemons.
+  /// same 21-row classifier the server uses. Kept resilient against
+  /// the /v1/alerts endpoint being unavailable on older daemons — the
+  /// row list is kept in lockstep with the Rust ALERTS catalogs
+  /// (selfdef-cli/src/alerts.rs + selfdef-api/src/alerts.rs) and the
+  /// Prometheus YAML rules (modules/observability/assets/alerts/
+  /// selfdef.yml.template).
   async function fallbackClassifyFromMetrics() {
     const url = api("/metrics");
     const res = await fetch(url, { headers: headers(), cache: "no-store" });
@@ -789,6 +793,18 @@
       { name: "GuardianChainBroken",         ms: "MS044", series: "selfdef_guardian_audit_chain_events",              threshold: "== -1",         critical: v => v === -1 },
       { name: "SchedulerSustainedBackpressure", ms: "MS048", series: "selfdef_scheduler_backpressured_decisions_total", threshold: "rate > 0 / 10m", warn:    v => v > 0 },
       { name: "SchedulerChainBroken",        ms: "MS048", series: "selfdef_scheduler_audit_chain_events",             threshold: "== -1",         critical: v => v === -1 },
+      { name: "StorageMountYellow",          ms: "MS011", series: "selfdef_storage_mount_used_ratio",                 threshold: "> 0.7 sustained 5m", warn: v => v > 0.7 },
+      { name: "StorageMountRed",             ms: "MS011", series: "selfdef_storage_mount_used_ratio",                 threshold: "> 0.9 sustained 1m", critical: v => v > 0.9 },
+      { name: "M060PublishFailing",          ms: "M060",  series: "selfdef_m060_mirror_publish_failed_recent",        threshold: "> 0 / 5m",      warn:     v => v > 0 },
+      { name: "M060PublishStale",            ms: "M060",  series: "selfdef_m060_mirror_publish_stale_count",          threshold: "> 0 (last publish > 10m ago)", warn: v => v > 0 },
+      { name: "M060PublishWedged",           ms: "M060",  series: "selfdef_m060_mirror_publish_wedged_count",         threshold: "> 0 (>= 5 failures in 30m)", critical: v => v > 0 },
+      { name: "WatchdogAlertFinding",        ms: "MS019", series: "selfdef_watchdog_alert_finding_total",             threshold: "> 0 / 10m",     warn:     v => v > 0 },
+      { name: "MetricsIngestLag",            ms: "MS027", series: "selfdef_ingest_lag_events_total",                  threshold: "> 0 / 10m",     warn:     v => v > 0 },
+      { name: "CorrelatorBusLag",            ms: "MS003", series: "selfdef_correlator_lag_events_total",              threshold: "> 0 / 10m",     warn:     v => v > 0 },
+      { name: "ResponderBusLag",             ms: "MS003", series: "selfdef_responder_lag_events_total",               threshold: "> 0 / 10m",     warn:     v => v > 0 },
+      { name: "TetragonMapErrors",           ms: "MS016", series: "tetragon_map_errors_total",                       threshold: "> 0 / 10m",     warn:     v => v > 0 },
+      { name: "ResponderCircuitBreakerTripped", ms: "MS003", series: "selfdef_responder_ratecap_tripped_total",      threshold: "> 0 / 10m",     warn:     v => v > 0 },
+      { name: "FederatedDestructiveActionRefused", ms: "MS003", series: "selfdef_responder_federated_refused_total", threshold: "> 0 / 10m",     warn:     v => v > 0 },
     ];
     let worst = "ok";
     const classified = rows.map(r => {
