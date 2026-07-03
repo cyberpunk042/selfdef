@@ -230,9 +230,10 @@ pub fn router(state: ApiState) -> Router {
         // handler still handles the bare `/v1/modules/:name`.
         .route("/v1/modules/:name/check", get(modules::check))
         .route("/v1/modules/:name", get(modules::show))
-        // MS027: server-side classification of the 9 four-watchdog
-        // alert series. PWA dashboard + `selfdefctl alerts` both
-        // consume this typed JSON shape — single source of truth.
+        // MS027: server-side classification of the 21-alert ALERTS
+        // catalog (9 four-watchdog + storage + M060 + watchdog-finding +
+        // 6 meta-observability). PWA dashboard + `selfdefctl alerts`
+        // both consume this typed JSON shape — single source of truth.
         .route("/v1/alerts", get(alerts::list))
         // MS010 / SDD-018: hardware-aware-modules HTTP surface. The
         // probe is cached per-process (OnceLock) — hardware doesn't

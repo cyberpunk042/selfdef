@@ -330,7 +330,7 @@ enum Command {
     /// MS027 alerts CLI parity with the dashboard PWA "Alerts overview"
     /// 6th panel. Reads `/metrics` from the local daemon (UNIX socket
     /// at /run/selfdef.sock by default; SELFDEF_API_URL + token over
-    /// TCP), parses the 15 alert-relevant series, and renders one row
+    /// TCP), parses the 21 alert-relevant series, and renders one row
     /// per alert with NAME · MS · series · threshold · current value
     /// · STATE. Exit code 0 iff every alert is OK or UNKNOWN; 1 if any
     /// is WARN or CRITICAL. Pair with shell gates:
