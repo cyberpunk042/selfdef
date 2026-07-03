@@ -1,4 +1,4 @@
-//! `GET /v1/alerts` — typed JSON view of the 15 alert classifications
+//! `GET /v1/alerts` — typed JSON view of the 21 alert classifications
 //! shipped in `modules/observability/assets/alerts/
 //! selfdef.yml.template`.
 //!
@@ -10,7 +10,7 @@
 //! the client side.
 //!
 //! Source: MS027 alert rules + dashboard `app.js::refreshAlerts` +
-//! `selfdef-cli/src/alerts.rs` (same 15 series, same predicates,
+//! `selfdef-cli/src/alerts.rs` (same 21 series, same predicates,
 //! moved server-side).
 
 use axum::Json;
@@ -214,6 +214,54 @@ const ALERTS: &[(&str, &str, &str, &str, Threshold)] = &[
         "> 0 / 10m",
         Threshold::WarnGreaterThanZero,
     ),
+    // ---- 6 meta-observability alerts (selfdef-meta-observability YAML
+    // group): bus-lag detection/response gaps + Tetragon BPF-map errors +
+    // responder flood-breaker + fail-closed federated refusal. Kept in
+    // lockstep with selfdef-cli/src/alerts.rs so `/v1/alerts` and
+    // `selfdefctl alerts` surface the same 21 rules the YAML ships —
+    // F-2026-084 / F-2026-111 / F-2026-114. ----
+    (
+        "MetricsIngestLag",
+        "MS027",
+        "selfdef_ingest_lag_events_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "CorrelatorBusLag",
+        "MS003",
+        "selfdef_correlator_lag_events_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "ResponderBusLag",
+        "MS003",
+        "selfdef_responder_lag_events_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "TetragonMapErrors",
+        "MS016",
+        "tetragon_map_errors_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "ResponderCircuitBreakerTripped",
+        "MS003",
+        "selfdef_responder_ratecap_tripped_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
+    (
+        "FederatedDestructiveActionRefused",
+        "MS003",
+        "selfdef_responder_federated_refused_total",
+        "> 0 / 10m",
+        Threshold::WarnGreaterThanZero,
+    ),
 ];
 
 /// Parse Prometheus text exposition into `(series → value)` map.
@@ -312,10 +360,10 @@ mod tests {
     }
 
     #[test]
-    fn classify_returns_fifteen_rows_in_canonical_order() {
+    fn classify_returns_twentyone_rows_in_canonical_order() {
         let series = HashMap::new();
         let rows = classify(&series);
-        assert_eq!(rows.len(), 15);
+        assert_eq!(rows.len(), 21);
         let names: Vec<&str> = rows.iter().map(|r| r.name).collect();
         assert_eq!(
             names,
@@ -335,6 +383,12 @@ mod tests {
                 "M060PublishStale",
                 "M060PublishWedged",
                 "WatchdogAlertFinding",
+                "MetricsIngestLag",
+                "CorrelatorBusLag",
+                "ResponderBusLag",
+                "TetragonMapErrors",
+                "ResponderCircuitBreakerTripped",
+                "FederatedDestructiveActionRefused",
             ]
         );
     }

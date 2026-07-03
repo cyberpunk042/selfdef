@@ -9,7 +9,7 @@
 //! Composition (each component contributes one row + its `worst`
 //! state to the aggregate):
 //!
-//! - `alerts`   — `/v1/alerts` worst across the 15-alert ALERTS catalog
+//! - `alerts`   — `/v1/alerts` worst across the 21-alert ALERTS catalog
 //! - `network`  — `/v1/network` worst across the 5 components
 //! - `storage`  — `/v1/storage` worst across filesystem mounts
 //! - `raid`     — `/v1/raid` worst across MD arrays (or "ok" if no MD)
@@ -33,7 +33,7 @@ pub(crate) struct HealthComponent {
     /// vocabularies (alerts uses critical/warn/ok; network uses
     /// red/yellow/green; cpu uses mode names).
     pub state: &'static str,
-    /// One-line operator-readable detail (e.g. `"3 of 15 alerts in
+    /// One-line operator-readable detail (e.g. `"3 of 21 alerts in
     /// WARN state"`, `"all 5 components green"`, `"current mode
     /// peak-inference"`).
     pub detail: String,
