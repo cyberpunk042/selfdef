@@ -35,6 +35,7 @@ mod m060_metrics;
 mod mcp;
 mod models;
 mod modules;
+mod ms003;
 mod nats;
 mod network_boundary;
 mod notify;
@@ -383,6 +384,13 @@ enum Command {
     CommitAuthority {
         #[command(subcommand)]
         action: CommitAuthorityAction,
+    },
+    /// SDD-083 / F-2026-034 selfdef half: verify sovereign-os's ed25519
+    /// mutation-record signatures. Manage trust anchors, verify one
+    /// record, or sweep a whole ledger into Layer-B metrics. Verify-only.
+    Ms003 {
+        #[command(subcommand)]
+        action: Ms003Action,
     },
     /// MS042 / SDD-050 tool-authority operator surface. Offline
     /// discovery of the 11-crate tool-policy pipeline (8 ToolId
@@ -2337,6 +2345,34 @@ enum CommitAuthorityAction {
     Classify {
         /// Path to the JSON envelope file.
         file: std::path::PathBuf,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum Ms003Action {
+    /// Install the operator's exported sovereign-os ed25519 public key
+    /// (unpadded base64url of the raw 32 bytes) as a trust anchor.
+    AnchorAdd {
+        /// The base64url raw 32-byte public key (from `sovereign-osctl ms003 pubkey`).
+        pub_b64u: String,
+    },
+    /// List the keyids of every valid trust anchor in the store.
+    AnchorList,
+    /// Classify one JSON record. Exit 0 iff `verified`; 2 on a security
+    /// event (invalid-signature / unknown-keyid); 1 otherwise.
+    Verify {
+        /// Path to the JSON record file.
+        file: std::path::PathBuf,
+    },
+    /// Classify a whole sovereign-os ledger (JSON array or JSONL): print
+    /// per-status counts, optionally emit Layer-B metrics, exit 2 if any
+    /// record is a security event.
+    Sweep {
+        /// Path to the ledger file.
+        file: std::path::PathBuf,
+        /// Write Layer-B Prometheus gauges (`selfdef_ms003_*`) to this path.
+        #[arg(long)]
+        metrics: Option<std::path::PathBuf>,
     },
 }
 
@@ -4741,6 +4777,19 @@ async fn main() -> Result<()> {
                 }
                 CommitAuthorityAction::Classify { file } => {
                     commit_authority::run_classify(&file).context("commit-authority classify")?
+                }
+            };
+            std::process::exit(exit);
+        }
+        Command::Ms003 { action } => {
+            let exit = match action {
+                Ms003Action::AnchorAdd { pub_b64u } => {
+                    ms003::run_anchor_add(&pub_b64u).context("ms003 anchor-add")?
+                }
+                Ms003Action::AnchorList => ms003::run_anchor_list().context("ms003 anchor-list")?,
+                Ms003Action::Verify { file } => ms003::run_verify(&file).context("ms003 verify")?,
+                Ms003Action::Sweep { file, metrics } => {
+                    ms003::run_sweep(&file, metrics.as_deref()).context("ms003 sweep")?
                 }
             };
             std::process::exit(exit);
