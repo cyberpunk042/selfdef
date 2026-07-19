@@ -55,6 +55,10 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc)]
 
+/// MS003 verifier — verify sovereign-os's ed25519 mutation-record signatures
+/// (F-2026-034 selfdef half; SDD-083). Verify-only, `openssl`-backed.
+pub mod ms003;
+
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
