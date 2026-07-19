@@ -16,6 +16,12 @@ workspace = true
 minisign-verify = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+# MS003 verifier (SDD-083, F-2026-034 selfdef half): record (de)serialization for
+# the canonical-bytes form + private tempfiles for the openssl verify. Both are
+# already in the workspace lockfile — no NEW crate enters the graph, honoring the
+# Option-1 "zero new crypto dependency" choice (verification shells to openssl).
+serde_json = { workspace = true }
+tempfile = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
